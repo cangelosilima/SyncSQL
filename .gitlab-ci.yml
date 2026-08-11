@@ -1,0 +1,64 @@
+# SyncSQL - scheduled extraction of MSSQL / Oracle database objects into git.
+#
+# Required CI/CD variables (Settings > CI/CD > Variables):
+#   GIT_PUSH_TOKEN                        Project/group access token with write
+#                                          access to the target repository
+#                                          (Protected, Masked).
+#   <PREFIX>_DB_USER / <PREFIX>_DB_PASSWORD
+#                                          One pair per server entry in
+#                                          config/servers.yml, where <PREFIX>
+#                                          is that server's
+#                                          credentialsVariablePrefix
+#                                          (Protected, Masked).
+#
+# Trigger a schedule under CI/CD > Schedules pointing at this pipeline; the
+# sync job only runs for schedule (or manually-triggered "web"/API) sources,
+# never on ordinary branch pushes.
+
+stages:
+  - validate
+  - sync
+
+variables:
+  MODULES_CACHE_DIR: "$CI_PROJECT_DIR/.pwsh-modules"
+  CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.yml"
+  GIT_DEPTH: "1"
+
+.pwsh_cache:
+  cache:
+    key: pwsh-deps-v1
+    paths:
+      - .pwsh-modules/
+
+validate-config:
+  extends: .pwsh_cache
+  stage: validate
+  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+    - |
+      pwsh -NoProfile -Command '
+        $ErrorActionPreference = "Stop"
+        $env:PSModulePath = "$env:MODULES_CACHE_DIR/Modules" + [IO.Path]::PathSeparator + $env:PSModulePath
+        Import-Module ./src/modules/SyncSql.Common.psm1 -Force
+        $configPath = if (Test-Path "config/servers.yml") { "config/servers.yml" } else { "config/servers.example.yml" }
+        $config = Import-SyncSqlConfig -Path $configPath
+        Write-Host "OK: $($config.servers.Count) server(s) defined in $configPath"
+      '
+
+sync-database-objects:
+  extends: .pwsh_cache
+  stage: sync
+  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+  timeout: 2h
+  before_script:
+    - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+  script:
+    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR"

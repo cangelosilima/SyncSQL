@@ -1,0 +1,167 @@
+#Requires -Version 7.0
+<#
+.SYNOPSIS
+    Extracts database objects (procedures, views, functions, triggers,
+    tables, schemas, synonyms, linked servers / database links) from a
+    fleet of MSSQL and Oracle servers and publishes them to a git
+    repository, one file per object.
+
+.DESCRIPTION
+    Driven entirely by a YAML config file (see config/servers.example.yml)
+    so the same script works unmodified across environments: which
+    servers/databases/schemas/objects to touch is all regex-filterable
+    configuration, not code. Credentials are never stored in the config;
+    they are read from CI/CD variables named
+    "<credentialsVariablePrefix>_DB_USER" / "..._DB_PASSWORD".
+
+.PARAMETER ConfigPath
+    Path to the YAML config file. Defaults to config/servers.yml next to
+    the repository root.
+
+.PARAMETER StagingRoot
+    Local directory the extraction is written to before being synced into
+    the git checkout. Defaults to a fresh temp directory.
+
+.PARAMETER ModulesCacheDir
+    Directory populated by Bootstrap-Dependencies.ps1 with the SqlServer /
+    powershell-yaml PowerShell modules and the Oracle managed driver.
+
+.PARAMETER ServerNameInclude / ServerNameExclude
+    Optional regex overrides for which configured servers actually run in
+    this invocation. Takes precedence over config.serverSelection. Useful
+    for ad-hoc / single-server pipeline runs.
+
+.PARAMETER PushToken
+    Token used to push to the target git repository. Defaults to the
+    GIT_PUSH_TOKEN environment variable.
+
+.PARAMETER SkipGit
+    Run the extraction and leave results under -StagingRoot without
+    cloning/committing/pushing anything. Useful for local testing.
+#>
+[CmdletBinding()]
+param(
+    [string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config/servers.yml'),
+    [string]$StagingRoot = (Join-Path ([IO.Path]::GetTempPath()) "syncsql-staging-$([Guid]::NewGuid())"),
+    [string]$ModulesCacheDir = (Join-Path (Split-Path $PSScriptRoot -Parent) '.pwsh-modules'),
+    [string[]]$ServerNameInclude,
+    [string[]]$ServerNameExclude,
+    [string]$PushToken = $env:GIT_PUSH_TOKEN,
+    [switch]$SkipGit
+)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+# Modules saved by Bootstrap-Dependencies.ps1 live here; make them importable
+# regardless of which process/job step is currently running.
+$modulesPathEntry = Join-Path $ModulesCacheDir 'Modules'
+if ((Test-Path -LiteralPath $modulesPathEntry) -and ($env:PSModulePath -notlike "*$modulesPathEntry*")) {
+    $env:PSModulePath = "$modulesPathEntry$([IO.Path]::PathSeparator)$env:PSModulePath"
+}
+
+Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Common.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.MsSql.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Oracle.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Git.psm1') -Force
+
+Write-SyncSqlLog "Loading config from $ConfigPath"
+$config = Import-SyncSqlConfig -Path $ConfigPath
+
+$serverSelection = [ordered]@{ include = @('.*'); exclude = @() }
+if ($config.Contains('serverSelection') -and $config.serverSelection) {
+    if ($config.serverSelection.Contains('include') -and $config.serverSelection['include']) { $serverSelection['include'] = @($config.serverSelection['include']) }
+    if ($config.serverSelection.Contains('exclude') -and $config.serverSelection['exclude']) { $serverSelection['exclude'] = @($config.serverSelection['exclude']) }
+}
+if ($ServerNameInclude) { $serverSelection['include'] = $ServerNameInclude }
+if ($ServerNameExclude) { $serverSelection['exclude'] = $ServerNameExclude }
+
+New-Item -ItemType Directory -Path $StagingRoot -Force | Out-Null
+Write-SyncSqlLog "Staging extracted objects under $StagingRoot"
+
+$oracleDriverDll = Find-SyncSqlOracleDriverDll -CacheDir (Join-Path $ModulesCacheDir 'oracle')
+
+$summaryLines = [System.Collections.Generic.List[string]]::new()
+$failedServers = [System.Collections.Generic.List[string]]::new()
+$totalFiles = 0
+
+foreach ($server in $config.servers) {
+    $serverName = $server.name
+
+    if (-not (Test-SyncSqlNameAllowed -Name $serverName -Filter $serverSelection)) {
+        Write-SyncSqlLog "Skipping '$serverName' (excluded by server selection filter)"
+        continue
+    }
+
+    $prefix = $server.credentialsVariablePrefix
+    $userVarName = "${prefix}_DB_USER"
+    $passVarName = "${prefix}_DB_PASSWORD"
+    $username = [Environment]::GetEnvironmentVariable($userVarName)
+    $password = [Environment]::GetEnvironmentVariable($passVarName)
+
+    if ([string]::IsNullOrEmpty($username) -or [string]::IsNullOrEmpty($password)) {
+        Write-SyncSqlLog "Skipping '$serverName': CI/CD variables '$userVarName' / '$passVarName' are not set." -Level ERROR
+        $failedServers.Add($serverName)
+        continue
+    }
+
+    $filters = Get-SyncSqlEffectiveFilters -Defaults $config.defaults -Server $server
+    $allowedObjectTypes = Get-SyncSqlAllowedObjectTypes -Filters $filters
+    if ($allowedObjectTypes.Count -eq 0) {
+        Write-SyncSqlLog "Skipping '$serverName': no objectTypes configured (defaults + server override both empty)." -Level WARN
+        continue
+    }
+
+    try {
+        $fileCount = 0
+        switch ($server.type) {
+            'mssql' {
+                $fileCount = Export-SyncSqlMsSqlServer -Server $server -Username $username -Password $password `
+                    -Filters $filters -AllowedObjectTypes $allowedObjectTypes -StagingRoot $StagingRoot
+            }
+            'oracle' {
+                if (-not $oracleDriverDll) {
+                    throw "Oracle managed driver was not found under '$ModulesCacheDir/oracle'. Run Bootstrap-Dependencies.ps1 first."
+                }
+                $fileCount = Export-SyncSqlOracleServer -Server $server -Username $username -Password $password `
+                    -Filters $filters -AllowedObjectTypes $allowedObjectTypes -StagingRoot $StagingRoot -DriverDllPath $oracleDriverDll
+            }
+        }
+        $totalFiles += $fileCount
+        $summaryLines.Add("- $serverName ($($server.type)): $fileCount object file(s)")
+    }
+    catch {
+        Write-SyncSqlLog "Extraction failed for '$serverName': $($_.Exception.Message)" -Level ERROR
+        $failedServers.Add($serverName)
+        $summaryLines.Add("- $serverName ($($server.type)): FAILED - $($_.Exception.Message)")
+    }
+}
+
+Write-SyncSqlLog "Extraction complete: $totalFiles object file(s) across $($config.servers.Count - $failedServers.Count) server(s); $($failedServers.Count) failure(s)."
+
+if ($SkipGit) {
+    Write-SyncSqlLog "SkipGit set; leaving extracted files at $StagingRoot"
+}
+else {
+    if ([string]::IsNullOrWhiteSpace($PushToken)) {
+        throw "No push token supplied. Set the GIT_PUSH_TOKEN CI/CD variable or pass -PushToken."
+    }
+
+    $gitWorkDir = Join-Path ([IO.Path]::GetTempPath()) "syncsql-repo-$([Guid]::NewGuid())"
+    try {
+        $published = Publish-SyncSqlToGit -GitConfig $config.git -StagingRoot $StagingRoot -Token $PushToken `
+            -WorkDir $gitWorkDir -Summary ($summaryLines -join "`n")
+        if ($published) {
+            Write-SyncSqlLog "Published extracted objects."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $gitWorkDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if ($failedServers.Count -gt 0) {
+    Write-SyncSqlLog "Failed server(s): $($failedServers -join ', ')" -Level ERROR
+    exit 1
+}

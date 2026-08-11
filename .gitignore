@@ -1,0 +1,6 @@
+# PowerShell module / driver cache populated by src/Bootstrap-Dependencies.ps1
+.pwsh-modules/
+
+# Local extraction output when running with -SkipGit
+staging/
+*.staging/
