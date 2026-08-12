@@ -33,7 +33,9 @@
 
 .PARAMETER PushToken
     Token used to push to the target git repository. Defaults to the
-    GIT_PUSH_TOKEN environment variable.
+    CI_JOB_Maintainer_Token environment variable (a Maintainer-role project
+    access token with write_repository scope), falling back to
+    GIT_PUSH_TOKEN if that isn't set.
 
 .PARAMETER SkipGit
     Run the extraction and leave results under -StagingRoot without
@@ -46,12 +48,17 @@ param(
     [string]$ModulesCacheDir = (Join-Path (Split-Path $PSScriptRoot -Parent) '.pwsh-modules'),
     [string[]]$ServerNameInclude,
     [string[]]$ServerNameExclude,
-    [string]$PushToken = $env:GIT_PUSH_TOKEN,
+    [string]$PushToken = $(if ($env:CI_JOB_Maintainer_Token) { $env:CI_JOB_Maintainer_Token } else { $env:GIT_PUSH_TOKEN }),
     [switch]$SkipGit
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# Only auto-clean the staging directory when the caller didn't ask for a
+# specific one - CI pipelines pass an explicit path here so the extracted
+# tree survives as a job artifact for the downstream analyze/pages stages.
+$stagingRootExplicit = $PSBoundParameters.ContainsKey('StagingRoot')
 
 # Modules saved by Bootstrap-Dependencies.ps1 live here; make them importable
 # regardless of which process/job step is currently running.
@@ -144,7 +151,7 @@ if ($SkipGit) {
 }
 else {
     if ([string]::IsNullOrWhiteSpace($PushToken)) {
-        throw "No push token supplied. Set the GIT_PUSH_TOKEN CI/CD variable or pass -PushToken."
+        throw "No push token supplied. Set the CI_JOB_Maintainer_Token CI/CD variable (a Maintainer-role token with write_repository scope) or pass -PushToken."
     }
 
     $gitWorkDir = Join-Path ([IO.Path]::GetTempPath()) "syncsql-repo-$([Guid]::NewGuid())"
@@ -157,7 +164,9 @@ else {
     }
     finally {
         Remove-Item -LiteralPath $gitWorkDir -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not $stagingRootExplicit) {
+            Remove-Item -LiteralPath $StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 

@@ -12,10 +12,13 @@
 # Matching is case-insensitive.
 
 git:
-  # Leave empty to push back into the project running this pipeline
-  # (predefined CI_REPOSITORY_URL / CI_PROJECT_URL variables are used).
+  # Leave empty (the default) to push back into the project running this
+  # pipeline, using the predefined CI_SERVER_* / CI_PROJECT_PATH variables.
+  # This requires the CI_JOB_Maintainer_Token CI/CD variable to hold a
+  # Maintainer-role project access token with write_repository scope (the
+  # built-in CI_JOB_TOKEN cannot push commits).
   # Set to a full https URL to push extracted objects into a different
-  # GitLab project, e.g. "https://gitlab.example.com/dba/db-objects.git".
+  # GitLab project instead, e.g. "https://gitlab.example.com/dba/db-objects.git".
   remoteUrl: ""
   branch: "main"
   # Folder inside the target repository that receives the extracted tree.

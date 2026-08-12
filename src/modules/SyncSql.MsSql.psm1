@@ -206,6 +206,83 @@ ORDER BY sch.name, syn.name;
     }
 }
 
+function Get-SyncSqlMsSqlExtendedProperties {
+    <#
+        Best-effort documentation extraction (MS_Description and friends)
+        from sys.extended_properties at the object and column level
+        (class = 1). Callers should treat failures as non-fatal: some
+        environments restrict access to this catalog view.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    s.name AS SchemaName,
+    o.name AS ObjectName,
+    c.name AS ColumnName,
+    ep.name AS PropertyName,
+    CAST(ep.value AS NVARCHAR(MAX)) AS PropertyValue
+FROM sys.extended_properties ep
+JOIN sys.objects o ON o.object_id = ep.major_id
+JOIN sys.schemas s ON s.schema_id = o.schema_id
+LEFT JOIN sys.columns c ON c.object_id = ep.major_id AND c.column_id = ep.minor_id AND ep.minor_id <> 0
+WHERE ep.class = 1
+ORDER BY s.name, o.name, ep.minor_id, ep.name;
+"@
+    return Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+}
+
+function Get-SyncSqlMsSqlExtendedPropertiesIndex {
+    <#
+        Wraps Get-SyncSqlMsSqlExtendedProperties in a try/catch and returns
+        a lookup ("schema.object" -> formatted comment lines) instead of raw
+        rows, so callers get an empty index rather than an error when the
+        query isn't available (permissions, edition, etc).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $index = @{}
+    try {
+        foreach ($row in (Get-SyncSqlMsSqlExtendedProperties -ConnectionInfo $ConnectionInfo -Database $Database)) {
+            $key = "$($row.SchemaName).$($row.ObjectName)"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $label = if ([string]::IsNullOrWhiteSpace([string]$row.ColumnName)) { '[object]' } else { "[column: $($row.ColumnName)]" }
+            $index[$key].Add("-- $label $($row.PropertyName) = $($row.PropertyValue)")
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Database] sys.extended_properties extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
+
+function Add-SyncSqlExtendedPropertiesBlock {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Definition,
+        [Parameter(Mandatory)]$ExtendedPropertiesIndex,
+        [Parameter(Mandatory)][string]$SchemaName,
+        [Parameter(Mandatory)][string]$ObjectName
+    )
+
+    $key = "$SchemaName.$ObjectName"
+    if (-not $ExtendedPropertiesIndex.ContainsKey($key)) { return $Definition }
+
+    $block = @('', '-- === Extended Properties ===') + $ExtendedPropertiesIndex[$key]
+    return $Definition + "`n" + ($block -join "`n")
+}
+
 function Get-SyncSqlMsSqlLinkedServers {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$ConnectionInfo)
@@ -307,6 +384,11 @@ function Export-SyncSqlMsSqlServer {
             }
         }
 
+        # Optional: sys.extended_properties (MS_Description etc). Never fatal -
+        # Get-SyncSqlMsSqlExtendedPropertiesIndex swallows its own errors and
+        # returns an empty index on failure.
+        $extendedProperties = Get-SyncSqlMsSqlExtendedPropertiesIndex -ConnectionInfo $connectionInfo -Database $database -ServerName $serverName
+
         $needsModules = @('StoredProcedures', 'Views', 'Triggers', 'Functions') | Where-Object { $AllowedObjectTypes -contains $_ }
         if ($needsModules) {
             foreach ($obj in (Get-SyncSqlMsSqlModuleObjects -ConnectionInfo $connectionInfo -Database $database)) {
@@ -315,9 +397,11 @@ function Export-SyncSqlMsSqlServer {
                 if (-not $allowedSchemas.ContainsKey($obj.SchemaName) -or -not $allowedSchemas[$obj.SchemaName]) { continue }
                 if (-not (Test-SyncSqlNameAllowed -Name $obj.ObjectName -Filter $Filters.objectNames)) { continue }
 
+                $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $obj.Definition -ExtendedPropertiesIndex $extendedProperties `
+                    -SchemaName $obj.SchemaName -ObjectName $obj.ObjectName
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $obj.SchemaName -ObjectType $objectType -ObjectName $obj.ObjectName `
-                    -Definition $obj.Definition | Out-Null
+                    -Definition $definition | Out-Null
                 $fileCount++
             }
         }
@@ -327,9 +411,11 @@ function Export-SyncSqlMsSqlServer {
                 if (-not $allowedSchemas.ContainsKey($table.SchemaName) -or -not $allowedSchemas[$table.SchemaName]) { continue }
                 if (-not (Test-SyncSqlNameAllowed -Name $table.TableName -Filter $Filters.objectNames)) { continue }
 
+                $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $table.Definition -ExtendedPropertiesIndex $extendedProperties `
+                    -SchemaName $table.SchemaName -ObjectName $table.TableName
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $table.SchemaName -ObjectType 'Tables' -ObjectName $table.TableName `
-                    -Definition $table.Definition | Out-Null
+                    -Definition $definition | Out-Null
                 $fileCount++
             }
         }
@@ -359,5 +445,8 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlMsSqlTables',
     'Get-SyncSqlMsSqlSynonyms',
     'Get-SyncSqlMsSqlLinkedServers',
+    'Get-SyncSqlMsSqlExtendedProperties',
+    'Get-SyncSqlMsSqlExtendedPropertiesIndex',
+    'Add-SyncSqlExtendedPropertiesBlock',
     'Export-SyncSqlMsSqlServer'
 )
