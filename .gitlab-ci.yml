@@ -1,0 +1,122 @@
+# SyncSQL - scheduled extraction of MSSQL / Oracle database objects into git.
+#
+# Required CI/CD variables (Settings > CI/CD > Variables):
+#   CI_JOB_Maintainer_Token                Project access token with the
+#                                           Maintainer role and
+#                                           write_repository scope, used to
+#                                           push extracted objects back into
+#                                           this project (Protected, Masked).
+#                                           The built-in CI_JOB_TOKEN cannot
+#                                           push, hence a dedicated token.
+#   <PREFIX>_DB_USER / <PREFIX>_DB_PASSWORD
+#                                           One pair per server entry in
+#                                           config/servers.yml, where <PREFIX>
+#                                           is that server's
+#                                           credentialsVariablePrefix
+#                                           (Protected, Masked).
+#
+# Trigger a schedule under CI/CD > Schedules pointing at this pipeline; the
+# sync/analyze/pages jobs only run for schedule (or manually-triggered
+# "web"/API) sources, never on ordinary branch pushes.
+
+stages:
+  - validate
+  - sync
+  - analyze
+  - pages
+
+variables:
+  MODULES_CACHE_DIR: "$CI_PROJECT_DIR/.pwsh-modules"
+  CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.yml"
+  EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
+  CATALOG_DIR: "$CI_PROJECT_DIR/catalog"
+  GIT_DEPTH: "1"
+
+.sync_rules: &sync_rules
+  - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  - if: '$CI_PIPELINE_SOURCE == "web"'
+  - if: '$CI_PIPELINE_SOURCE == "trigger"'
+
+.pwsh_cache:
+  cache:
+    key: pwsh-deps-v1
+    paths:
+      - .pwsh-modules/
+
+validate-config:
+  extends: .pwsh_cache
+  stage: validate
+  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+    - |
+      pwsh -NoProfile -Command '
+        $ErrorActionPreference = "Stop"
+        $env:PSModulePath = "$env:MODULES_CACHE_DIR/Modules" + [IO.Path]::PathSeparator + $env:PSModulePath
+        Import-Module ./src/modules/SyncSql.Common.psm1 -Force
+        $configPath = if (Test-Path "config/servers.yml") { "config/servers.yml" } else { "config/servers.example.yml" }
+        $config = Import-SyncSqlConfig -Path $configPath
+        Write-Host "OK: $($config.servers.Count) server(s) defined in $configPath"
+      '
+
+sync-database-objects:
+  extends: .pwsh_cache
+  stage: sync
+  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  rules: *sync_rules
+  timeout: 2h
+  before_script:
+    - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+  script:
+    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR"
+  artifacts:
+    paths:
+      - extracted-objects/
+    expire_in: 1 day
+
+# Best-effort lineage/documentation analysis over the tree sync-database-objects
+# just produced - see src/Build-Catalog.ps1 for what "best-effort" means here.
+analyze-catalog:
+  stage: analyze
+  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  rules: *sync_rules
+  dependencies:
+    - sync-database-objects
+  script:
+    - pwsh -NoProfile -File src/Build-Catalog.ps1 -ObjectsRoot "$EXTRACTED_OBJECTS_DIR" -OutputPath "$CATALOG_DIR/catalog.json"
+  artifacts:
+    paths:
+      - catalog/
+    expire_in: 1 day
+
+# Builds site/ (React/Vite) with the freshly generated catalog.json and
+# publishes it as a GitLab Pages site. The "pages" job name is what makes
+# GitLab treat this as a Pages deployment; its artifacts must be a directory
+# named exactly "public" at the project root.
+pages:
+  stage: pages
+  image: node:20-alpine
+  rules: *sync_rules
+  dependencies:
+    - analyze-catalog
+  cache:
+    key:
+      files:
+        - site/package-lock.json
+    paths:
+      - site/node_modules/
+  script:
+    - mkdir -p site/public/data
+    - cp "$CATALOG_DIR/catalog.json" site/public/data/catalog.json
+    - cd site
+    - npm ci
+    - npm run build
+    - cd ..
+    - rm -rf public
+    - mv site/dist public
+  artifacts:
+    paths:
+      - public

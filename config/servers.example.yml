@@ -1,0 +1,112 @@
+# SyncSQL server inventory and filtering configuration.
+#
+# Copy this file to config/servers.yml (or point -ConfigPath at your own copy)
+# and adjust it to your environment. Nothing in this file is secret: usernames
+# and passwords are never stored here, only the *name* of the CI/CD variables
+# that hold them (see credentialsVariablePrefix below).
+#
+# Every include/exclude entry is a list of .NET regular expressions.
+#   - include: object passes if it matches ANY pattern (default [".*"] = everything)
+#   - exclude: object is dropped if it matches ANY pattern (default [] = nothing)
+#   - exclude always wins over include.
+# Matching is case-insensitive.
+
+git:
+  # Leave empty (the default) to push back into the project running this
+  # pipeline, using the predefined CI_SERVER_* / CI_PROJECT_PATH variables.
+  # This requires the CI_JOB_Maintainer_Token CI/CD variable to hold a
+  # Maintainer-role project access token with write_repository scope (the
+  # built-in CI_JOB_TOKEN cannot push commits).
+  # Set to a full https URL to push extracted objects into a different
+  # GitLab project instead, e.g. "https://gitlab.example.com/dba/db-objects.git".
+  remoteUrl: ""
+  branch: "main"
+  # Folder inside the target repository that receives the extracted tree.
+  pathPrefix: "objects"
+  commitUserName: "SyncSQL Bot"
+  commitUserEmail: "syncsql-bot@example.com"
+  commitMessage: "chore(sync): update database objects"
+
+# Applied to every server unless a server overrides a given key.
+defaults:
+  databases:
+    include: [".*"]
+    exclude: ["^tempdb$", "^model$", "^msdb$"]
+  schemas:
+    include: [".*"]
+    exclude: ["^INFORMATION_SCHEMA$", "^sys$"]
+  objectNames:
+    include: [".*"]
+    exclude: []
+  # Valid MSSQL values: Schemas, Tables, Views, StoredProcedures, Functions,
+  #                      Triggers, Synonyms, LinkedServers
+  # Valid Oracle values: Schemas, Tables, Views, Procedures, Functions,
+  #                      Packages, PackageBodies, Triggers, Synonyms,
+  #                      DatabaseLinks
+  objectTypes:
+    - Schemas
+    - Tables
+    - Views
+    - StoredProcedures
+    - Functions
+    - Triggers
+    - Synonyms
+    - LinkedServers
+
+# Server-level regex filter: which of the servers listed below actually run
+# in a given pipeline execution. Handy for a "run only server X" schedule
+# without editing the inventory. Can also be overridden per-run with
+# -ServerNameInclude / -ServerNameExclude or the SERVER_NAME_INCLUDE /
+# SERVER_NAME_EXCLUDE CI variables.
+serverSelection:
+  include: [".*"]
+  exclude: []
+
+servers:
+  - name: "SQLPROD01"
+    type: mssql
+    host: "sqlprod01.example.com"
+    port: 1433
+    encrypt: true
+    trustServerCertificate: false
+    # CI/CD variables expected: SQLPROD01_DB_USER, SQLPROD01_DB_PASSWORD
+    credentialsVariablePrefix: "SQLPROD01"
+    databases:
+      include: [".*"]
+      exclude: ["^tempdb$", "^model$", "^msdb$", "^ReportServerTempDB$"]
+
+  - name: "SQLPROD02_FINANCE_ONLY"
+    type: mssql
+    host: "sqlprod02.example.com"
+    port: 1433
+    credentialsVariablePrefix: "SQLPROD02"
+    databases:
+      include: ["^Finance$"]
+    schemas:
+      include: ["^dbo$", "^fin_.*$"]
+    objectTypes: ["Tables", "Views", "StoredProcedures", "Triggers"]
+
+  - name: "ORAPROD01"
+    type: oracle
+    host: "oraprod01.example.com"
+    port: 1521
+    serviceName: "ORCLPDB1"
+    # CI/CD variables expected: ORAPROD01_DB_USER, ORAPROD01_DB_PASSWORD
+    credentialsVariablePrefix: "ORAPROD01"
+    # For Oracle, "schemas" means database users/owners.
+    schemas:
+      include: ["^APP_.*$"]
+      exclude: ["^SYS$", "^SYSTEM$", "^OUTLN$"]
+    objectTypes:
+      - Tables
+      - Views
+      - Procedures
+      - Functions
+      - Packages
+      - PackageBodies
+      - Triggers
+      - Synonyms
+      - DatabaseLinks
+    objectNames:
+      include: [".*"]
+      exclude: ["_BAK$", "^TMP_"]

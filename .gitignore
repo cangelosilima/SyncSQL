@@ -1,0 +1,15 @@
+# PowerShell module / driver cache populated by src/Bootstrap-Dependencies.ps1
+.pwsh-modules/
+
+# Local extraction output when running with -SkipGit
+staging/
+*.staging/
+
+# CI artifact directories created by Export-DatabaseObjects.ps1 / Build-Catalog.ps1
+/extracted-objects/
+/catalog/
+
+# React catalog/lineage site
+site/node_modules/
+site/dist/
+site/*.tsbuildinfo
