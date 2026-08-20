@@ -28,6 +28,25 @@ function Get-SyncSqlTargetRepoUrl {
     return "$($env:CI_SERVER_PROTOCOL)://$($env:CI_SERVER_HOST)/$($env:CI_PROJECT_PATH).git"
 }
 
+function Get-SyncSqlGitDefaults {
+    <#
+        Resolves the git.* config block's optional keys to their defaults
+        in one place, so Publish-SyncSqlToGit and callers that need the
+        same values ahead of time (e.g. Export-DatabaseObjects.ps1 writing
+        them out for the pages CI job to pick up) can't drift.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$GitConfig)
+
+    return [ordered]@{
+        branch           = if ($GitConfig.Contains('branch') -and $GitConfig.branch) { $GitConfig.branch } else { 'main' }
+        pathPrefix       = if ($GitConfig.Contains('pathPrefix') -and $GitConfig.pathPrefix) { $GitConfig.pathPrefix } else { 'objects' }
+        commitUserName   = if ($GitConfig.Contains('commitUserName') -and $GitConfig.commitUserName) { $GitConfig.commitUserName } else { 'SyncSQL Bot' }
+        commitUserEmail  = if ($GitConfig.Contains('commitUserEmail') -and $GitConfig.commitUserEmail) { $GitConfig.commitUserEmail } else { 'syncsql-bot@example.com' }
+        commitMessage    = if ($GitConfig.Contains('commitMessage') -and $GitConfig.commitMessage) { $GitConfig.commitMessage } else { 'chore(sync): update database objects' }
+    }
+}
+
 function New-SyncSqlGitAskPass {
     <#
         Writes a tiny askpass helper and returns its path plus the two env
@@ -82,15 +101,27 @@ function Publish-SyncSqlToGit {
         [Parameter(Mandatory)][string]$StagingRoot,
         [Parameter(Mandatory)][string]$Token,
         [Parameter(Mandatory)][string]$WorkDir,
-        [string]$Summary = ''
+        [string]$Summary = '',
+        # How many commits to clone. Keep this at the default (1) unless a
+        # caller needs real git history in $WorkDir afterwards (e.g. to mine
+        # it for a catalog before committing) - a deep clone is slower and
+        # heavier for the common case, which never looks at history.
+        [int]$CloneDepth = 1,
+        # Invoked as (WorkDir, PathPrefix) after the staged tree has been
+        # copied into $WorkDir/$PathPrefix but before `git add`/commit, so a
+        # caller can add more files (e.g. a generated catalog.json) into the
+        # same commit. Use .GetNewClosure() when building this scriptblock
+        # so it doesn't depend on this function's local scope.
+        [scriptblock]$PostSyncHook
     )
 
+    $defaults = Get-SyncSqlGitDefaults -GitConfig $GitConfig
     $remoteUrl = Get-SyncSqlTargetRepoUrl -ConfigRemoteUrl $GitConfig.remoteUrl
-    $branch = if ($GitConfig.Contains('branch') -and $GitConfig.branch) { $GitConfig.branch } else { 'main' }
-    $pathPrefix = if ($GitConfig.Contains('pathPrefix') -and $GitConfig.pathPrefix) { $GitConfig.pathPrefix } else { 'objects' }
-    $commitUserName = if ($GitConfig.Contains('commitUserName') -and $GitConfig.commitUserName) { $GitConfig.commitUserName } else { 'SyncSQL Bot' }
-    $commitUserEmail = if ($GitConfig.Contains('commitUserEmail') -and $GitConfig.commitUserEmail) { $GitConfig.commitUserEmail } else { 'syncsql-bot@example.com' }
-    $commitMessage = if ($GitConfig.Contains('commitMessage') -and $GitConfig.commitMessage) { $GitConfig.commitMessage } else { 'chore(sync): update database objects' }
+    $branch = $defaults.branch
+    $pathPrefix = $defaults.pathPrefix
+    $commitUserName = $defaults.commitUserName
+    $commitUserEmail = $defaults.commitUserEmail
+    $commitMessage = $defaults.commitMessage
 
     if (Test-Path -LiteralPath $WorkDir) {
         Remove-Item -LiteralPath $WorkDir -Recurse -Force
@@ -106,13 +137,13 @@ function Publish-SyncSqlToGit {
     $env:SYNCSQL_GIT_PASSWORD = $Token
 
     try {
-        Write-SyncSqlLog "Cloning target repository (branch '$branch')"
+        Write-SyncSqlLog "Cloning target repository (branch '$branch', depth $CloneDepth)"
         try {
-            Invoke-SyncSqlGit -Arguments @('clone', '--branch', $branch, '--single-branch', '--depth', '1', $remoteUrl, $WorkDir) | Out-Null
+            Invoke-SyncSqlGit -Arguments @('clone', '--branch', $branch, '--single-branch', '--depth', "$CloneDepth", $remoteUrl, $WorkDir) | Out-Null
         }
         catch {
             Write-SyncSqlLog "Branch '$branch' not found on remote yet; cloning default branch and creating it." -Level WARN
-            Invoke-SyncSqlGit -Arguments @('clone', '--depth', '1', $remoteUrl, $WorkDir) | Out-Null
+            Invoke-SyncSqlGit -Arguments @('clone', '--depth', "$CloneDepth", $remoteUrl, $WorkDir) | Out-Null
             Invoke-SyncSqlGit -Arguments @('checkout', '-B', $branch) -WorkingDirectory $WorkDir | Out-Null
         }
 
@@ -131,6 +162,11 @@ function Publish-SyncSqlToGit {
             Get-ChildItem -LiteralPath $StagingRoot -Force | ForEach-Object {
                 Copy-Item -LiteralPath $_.FullName -Destination $targetDir -Recurse -Force
             }
+        }
+
+        if ($PostSyncHook) {
+            Write-SyncSqlLog "Running post-sync hook before commit"
+            & $PostSyncHook $WorkDir $pathPrefix
         }
 
         Invoke-SyncSqlGit -Arguments @('add', '-A') -WorkingDirectory $WorkDir | Out-Null
@@ -160,6 +196,7 @@ function Publish-SyncSqlToGit {
 
 Export-ModuleMember -Function @(
     'Get-SyncSqlTargetRepoUrl',
+    'Get-SyncSqlGitDefaults',
     'Invoke-SyncSqlGit',
     'Publish-SyncSqlToGit'
 )

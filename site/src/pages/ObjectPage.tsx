@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
 import LineageGraph from '../components/LineageGraph'
+import type { CatalogObjectVersion } from '../types'
 
 export default function ObjectPage() {
   const params = useParams()
@@ -13,6 +14,9 @@ export default function ObjectPage() {
   const node = index?.byId.get(id)
   const outgoing = index?.outgoing.get(id) ?? []
   const incoming = index?.incoming.get(id) ?? []
+
+  const [viewingVersion, setViewingVersion] = useState<CatalogObjectVersion | null>(null)
+  useEffect(() => setViewingVersion(null), [id])
 
   const neighborhoodIds = useMemo(() => {
     if (!node) return []
@@ -66,7 +70,51 @@ export default function ObjectPage() {
       )}
 
       <h2>Definition</h2>
-      <CodeBlock code={node.ddl} />
+      {viewingVersion && (
+        <div className="version-banner">
+          Viewing revision from {new Date(viewingVersion.date).toLocaleString()} ({viewingVersion.sha.slice(0, 7)}):{' '}
+          {viewingVersion.message}
+          <button type="button" className="version-banner-back" onClick={() => setViewingVersion(null)}>
+            Back to latest
+          </button>
+        </div>
+      )}
+      <CodeBlock code={viewingVersion ? (viewingVersion.ddl ?? '-- Not available at this revision.') : node.ddl} />
+
+      {!viewingVersion &&
+        node.sections.map((section) => (
+          <details key={section.title} className="object-section">
+            <summary>{section.title}</summary>
+            <CodeBlock code={section.content} />
+          </details>
+        ))}
+
+      {node.history.length > 0 && (
+        <>
+          <h2>Change history</h2>
+          <p className="muted overview-panel-hint">
+            {node.changeCount} change{node.changeCount === 1 ? '' : 's'} in the mined commit window. Click a revision to
+            view its definition as of that commit.
+          </p>
+          <ul className="history-list">
+            {node.history.map((version) => (
+              <li key={version.sha}>
+                <button
+                  type="button"
+                  className={viewingVersion?.sha === version.sha ? 'history-entry active' : 'history-entry'}
+                  onClick={() => setViewingVersion(version)}
+                  disabled={!version.ddl}
+                  title={version.ddl ? 'View this revision' : 'Content not available for this revision'}
+                >
+                  <span className="history-date">{new Date(version.date).toLocaleDateString()}</span>
+                  <span className="history-message">{version.message}</span>
+                  <span className="history-sha">{version.sha.slice(0, 7)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h2>Lineage</h2>
       <div className="lineage-lists">

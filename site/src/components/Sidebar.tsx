@@ -5,7 +5,11 @@ import { matchesQuery } from '../lib/catalog'
 import type { CatalogNode } from '../types'
 import TypeBadge from './TypeBadge'
 
-export default function Sidebar() {
+interface SidebarProps {
+  onNavigate?: () => void
+}
+
+export default function Sidebar({ onNavigate }: SidebarProps) {
   const { index } = useCatalog()
   const [query, setQuery] = useState('')
 
@@ -22,17 +26,16 @@ export default function Sidebar() {
         databases: server.databases
           .map((db) => ({
             ...db,
-            types: db.types
-              .map((type) => ({
-                ...type,
-                schemas: type.schemas
-                  .map((schema) => ({ ...schema, nodes: schema.nodes.filter((n) => matchesQuery(n, q)) }))
-                  .filter((schema) => schema.nodes.length > 0),
-                looseNodes: type.looseNodes.filter((n) => matchesQuery(n, q)),
+            schemas: db.schemas
+              .map((schema) => ({
+                ...schema,
+                types: schema.types
+                  .map((type) => ({ ...type, nodes: type.nodes.filter((n) => matchesQuery(n, q)) }))
+                  .filter((type) => type.nodes.length > 0),
               }))
-              .filter((type) => type.schemas.length > 0 || type.looseNodes.length > 0),
+              .filter((schema) => schema.types.length > 0),
           }))
-          .filter((db) => db.types.length > 0),
+          .filter((db) => db.schemas.length > 0),
       }))
       .filter((server) => server.databases.length > 0)
   }, [index, query, searching])
@@ -57,19 +60,16 @@ export default function Sidebar() {
             {server.databases.map((db) => (
               <details key={db.name} open={searching}>
                 <summary className="tree-database">{db.name}</summary>
-                {db.types.map((type) => (
-                  <details key={type.name} open={searching}>
-                    <summary className="tree-type">
-                      <TypeBadge type={type.name} />
-                    </summary>
-                    {type.looseNodes.map((node) => (
-                      <ObjectLink key={node.id} node={node} />
-                    ))}
-                    {type.schemas.map((schema) => (
-                      <details key={schema.name} open={searching}>
-                        <summary className="tree-schema">{schema.name}</summary>
-                        {schema.nodes.map((node) => (
-                          <ObjectLink key={node.id} node={node} />
+                {db.schemas.map((schema) => (
+                  <details key={schema.name} open={searching}>
+                    <summary className="tree-schema">{schema.name}</summary>
+                    {schema.types.map((type) => (
+                      <details key={type.name} open={searching}>
+                        <summary className="tree-type">
+                          <TypeBadge type={type.name} />
+                        </summary>
+                        {type.nodes.map((node) => (
+                          <ObjectLink key={node.id} node={node} onNavigate={onNavigate} />
                         ))}
                       </details>
                     ))}
@@ -85,9 +85,9 @@ export default function Sidebar() {
   )
 }
 
-function ObjectLink({ node }: { node: CatalogNode }) {
+function ObjectLink({ node, onNavigate }: { node: CatalogNode; onNavigate?: () => void }) {
   return (
-    <NavLink to={`/object/${node.id}`} className="tree-object">
+    <NavLink to={`/object/${node.id}`} className="tree-object" onClick={onNavigate}>
       {node.name}
     </NavLink>
   )
