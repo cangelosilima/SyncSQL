@@ -34,7 +34,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560 }: Lineage
             background: isFocus ? color : 'var(--surface)',
             color: isFocus ? '#fff' : 'var(--text)',
             border: `2px solid ${color}`,
-            borderRadius: 8,
+            borderRadius: 2,
             padding: 8,
             fontSize: 12,
             width: 200,
@@ -72,11 +72,12 @@ export default function LineageGraph({ nodeIds, focusId, height = 560 }: Lineage
         edges={edges}
         onNodeClick={(_, node) => navigate(`/object/${node.id}`)}
         fitView
+        colorMode="dark"
         proOptions={{ hideAttribution: true }}
       >
         <Background />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable />
+        <MiniMap pannable zoomable maskColor="rgba(0, 0, 0, 0.7)" />
       </ReactFlow>
     </div>
   )

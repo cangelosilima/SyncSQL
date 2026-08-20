@@ -40,6 +40,14 @@
 .PARAMETER SkipGit
     Run the extraction and leave results under -StagingRoot without
     cloning/committing/pushing anything. Useful for local testing.
+
+.PARAMETER DotenvPath
+    Optional path to write a small KEY=VALUE file with the resolved
+    PATH_PREFIX and GIT_BRANCH (config.git.pathPrefix / .branch, after
+    defaulting). Meant to be picked up by GitLab CI as a `dotenv` artifact
+    report so the downstream analyze-catalog job can mine history from the
+    same path/branch this run just pushed to, without hardcoding or
+    duplicating those defaults in .gitlab-ci.yml.
 #>
 [CmdletBinding()]
 param(
@@ -49,7 +57,8 @@ param(
     [string[]]$ServerNameInclude,
     [string[]]$ServerNameExclude,
     [string]$PushToken = $(if ($env:CI_JOB_Maintainer_Token) { $env:CI_JOB_Maintainer_Token } else { $env:GIT_PUSH_TOKEN }),
-    [switch]$SkipGit
+    [switch]$SkipGit,
+    [string]$DotenvPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +83,12 @@ Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Git.psm1') -Force
 
 Write-SyncSqlLog "Loading config from $ConfigPath"
 $config = Import-SyncSqlConfig -Path $ConfigPath
+
+if ($DotenvPath) {
+    $gitDefaults = Get-SyncSqlGitDefaults -GitConfig $config.git
+    "PATH_PREFIX=$($gitDefaults.pathPrefix)`nGIT_BRANCH=$($gitDefaults.branch)`n" | Set-Content -LiteralPath $DotenvPath -NoNewline
+    Write-SyncSqlLog "Wrote $DotenvPath"
+}
 
 $serverSelection = [ordered]@{ include = @('.*'); exclude = @() }
 if ($config.Contains('serverSelection') -and $config.serverSelection) {

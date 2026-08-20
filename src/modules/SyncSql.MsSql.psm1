@@ -283,6 +283,290 @@ function Add-SyncSqlExtendedPropertiesBlock {
     return $Definition + "`n" + ($block -join "`n")
 }
 
+function Add-SyncSqlSectionBlock {
+    <#
+        Generic version of Add-SyncSqlExtendedPropertiesBlock for the other
+        appended sections (Foreign Keys, Check Constraints, Indexes,
+        Statistics, Replication...). Build-Catalog.ps1's section parser
+        splits on the "-- === Title ===" marker, so any title works as long
+        as it's unique within one object's file.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Definition,
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)]$SectionIndex,
+        [Parameter(Mandatory)][string]$Key
+    )
+
+    if (-not $SectionIndex.ContainsKey($Key)) { return $Definition }
+
+    $block = @('', "-- === $Title ===") + $SectionIndex[$Key]
+    return $Definition + "`n" + ($block -join "`n")
+}
+
+function Get-SyncSqlMsSqlForeignKeys {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    sch.name AS SchemaName,
+    t.name   AS TableName,
+    fk.name  AS ForeignKeyName,
+    'ALTER TABLE ' + QUOTENAME(sch.name) + '.' + QUOTENAME(t.name) + ' ADD CONSTRAINT ' + QUOTENAME(fk.name) +
+    ' FOREIGN KEY (' +
+    STUFF((
+        SELECT ', ' + QUOTENAME(c.name)
+        FROM sys.foreign_key_columns fkc
+        JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
+        WHERE fkc.constraint_object_id = fk.object_id
+        ORDER BY fkc.constraint_column_id
+        FOR XML PATH(''), TYPE
+    ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') +
+    ') REFERENCES ' + QUOTENAME(rsch.name) + '.' + QUOTENAME(rt.name) + ' (' +
+    STUFF((
+        SELECT ', ' + QUOTENAME(rc.name)
+        FROM sys.foreign_key_columns fkc2
+        JOIN sys.columns rc ON rc.object_id = fkc2.referenced_object_id AND rc.column_id = fkc2.referenced_column_id
+        WHERE fkc2.constraint_object_id = fk.object_id
+        ORDER BY fkc2.constraint_column_id
+        FOR XML PATH(''), TYPE
+    ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') + ');' AS Definition
+FROM sys.foreign_keys fk
+JOIN sys.tables t ON t.object_id = fk.parent_object_id
+JOIN sys.schemas sch ON sch.schema_id = t.schema_id
+JOIN sys.tables rt ON rt.object_id = fk.referenced_object_id
+JOIN sys.schemas rsch ON rsch.schema_id = rt.schema_id
+ORDER BY sch.name, t.name, fk.name;
+"@
+    return Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+}
+
+function Get-SyncSqlMsSqlCheckConstraints {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    sch.name AS SchemaName,
+    t.name   AS TableName,
+    cc.name  AS CheckName,
+    'ALTER TABLE ' + QUOTENAME(sch.name) + '.' + QUOTENAME(t.name) + ' ADD CONSTRAINT ' + QUOTENAME(cc.name) +
+    ' CHECK ' + cc.definition + ';' AS Definition
+FROM sys.check_constraints cc
+JOIN sys.tables t ON t.object_id = cc.parent_object_id
+JOIN sys.schemas sch ON sch.schema_id = t.schema_id
+ORDER BY sch.name, t.name, cc.name;
+"@
+    return Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+}
+
+function Get-SyncSqlMsSqlIndexes {
+    <#
+        Non-PK, non-unique-constraint indexes (those are already represented
+        via the table's PRIMARY KEY / unique constraint clauses). Only plain
+        rowstore CLUSTERED/NONCLUSTERED indexes get a runnable CREATE INDEX
+        line; anything else (columnstore, XML, spatial, hash) gets an
+        informational comment instead of a guessed-at DDL.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    sch.name AS SchemaName,
+    t.name   AS TableName,
+    i.name   AS IndexName,
+    i.is_unique AS IsUnique,
+    i.type_desc AS TypeDesc,
+    STUFF((
+        SELECT ', ' + QUOTENAME(c.name) + CASE WHEN ic.is_descending_key = 1 THEN ' DESC' ELSE ' ASC' END
+        FROM sys.index_columns ic
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+        WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0
+        ORDER BY ic.key_ordinal
+        FOR XML PATH(''), TYPE
+    ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS KeyColumns,
+    STUFF((
+        SELECT ', ' + QUOTENAME(c.name)
+        FROM sys.index_columns ic
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+        WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 1
+        ORDER BY ic.index_column_id
+        FOR XML PATH(''), TYPE
+    ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS IncludedColumns
+FROM sys.indexes i
+JOIN sys.tables t ON t.object_id = i.object_id
+JOIN sys.schemas sch ON sch.schema_id = t.schema_id
+WHERE i.is_primary_key = 0 AND i.is_unique_constraint = 0 AND i.index_id > 0 AND i.name IS NOT NULL
+ORDER BY sch.name, t.name, i.name;
+"@
+    $rows = Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+    foreach ($row in $rows) {
+        $typeDesc = [string]$row.TypeDesc
+        if ($typeDesc -eq 'CLUSTERED' -or $typeDesc -eq 'NONCLUSTERED') {
+            $prefix = if ($row.IsUnique) { "UNIQUE $typeDesc INDEX" } else { "$typeDesc INDEX" }
+            $line = "CREATE $prefix " + "[$($row.IndexName)] ON [$($row.SchemaName)].[$($row.TableName)] ($($row.KeyColumns))"
+            if (-not [string]::IsNullOrWhiteSpace([string]$row.IncludedColumns)) {
+                $line += " INCLUDE ($($row.IncludedColumns))"
+            }
+            $line += ';'
+        }
+        else {
+            $line = "-- Index [$($row.IndexName)] ($typeDesc) - see sys.indexes for full definition"
+        }
+        [pscustomobject]@{
+            SchemaName = $row.SchemaName
+            TableName  = $row.TableName
+            Definition = $line
+        }
+    }
+}
+
+function Get-SyncSqlMsSqlStatistics {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    sch.name AS SchemaName,
+    t.name   AS TableName,
+    s.name   AS StatName,
+    s.auto_created AS AutoCreated,
+    STUFF((
+        SELECT ', ' + QUOTENAME(c.name)
+        FROM sys.stats_columns sc
+        JOIN sys.columns c ON c.object_id = sc.object_id AND c.column_id = sc.column_id
+        WHERE sc.object_id = s.object_id AND sc.stats_id = s.stats_id
+        ORDER BY sc.stats_column_id
+        FOR XML PATH(''), TYPE
+    ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS Columns
+FROM sys.stats s
+JOIN sys.tables t ON t.object_id = s.object_id
+JOIN sys.schemas sch ON sch.schema_id = t.schema_id
+WHERE s.name IS NOT NULL
+ORDER BY sch.name, t.name, s.name;
+"@
+    $rows = Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+    foreach ($row in $rows) {
+        $line = "CREATE STATISTICS [$($row.StatName)] ON [$($row.SchemaName)].[$($row.TableName)] ($($row.Columns));"
+        if ($row.AutoCreated) { $line += ' -- auto-created' }
+        [pscustomobject]@{
+            SchemaName = $row.SchemaName
+            TableName  = $row.TableName
+            Definition = $line
+        }
+    }
+}
+
+function Get-SyncSqlMsSqlTableSectionIndex {
+    <#
+        Shared runner for the per-table appended sections (foreign keys,
+        check constraints, indexes, statistics): runs $Getter, groups rows
+        by "schema.table" into formatted comment lines, and degrades to an
+        empty index (with a warning) instead of failing the whole database
+        if the underlying query errors.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][scriptblock]$Getter,
+        [Parameter(Mandatory)][string]$SectionName,
+        [Parameter(Mandatory)][string]$ServerName,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $index = @{}
+    try {
+        foreach ($row in (& $Getter)) {
+            $key = "$($row.SchemaName).$($row.TableName)"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add($row.Definition)
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Database] $SectionName extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
+
+function Get-SyncSqlMsSqlReplication {
+    <#
+        Best-effort, informational-only snapshot of transactional/snapshot
+        replication publications configured on this database: publication
+        name and the articles (objects) it replicates. Subscriber
+        enumeration is intentionally left out - subscription table shapes
+        vary enough across SQL Server versions/topologies that guessing at
+        it reliably isn't worth the risk of a confusing wrong answer.
+        Returns nothing (not an error) on a database that isn't a
+        replication Publisher; callers should still wrap this since a
+        Publisher can be locked down enough that even OBJECT_ID() checks on
+        these tables fail under a restricted login.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+IF OBJECT_ID('dbo.syspublications') IS NULL
+BEGIN
+    SELECT CAST(NULL AS sysname) AS PublicationName, CAST(NULL AS NVARCHAR(MAX)) AS Description, CAST(NULL AS NVARCHAR(MAX)) AS Articles WHERE 1 = 0;
+END
+ELSE
+BEGIN
+    SELECT
+        p.name AS PublicationName,
+        CAST(p.description AS NVARCHAR(MAX)) AS Description,
+        STUFF((
+            SELECT ', ' + a.name
+            FROM dbo.sysarticles a
+            WHERE a.pubid = p.pubid
+            ORDER BY a.name
+            FOR XML PATH(''), TYPE
+        ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS Articles
+    FROM dbo.syspublications p
+    ORDER BY p.name;
+END
+"@
+    $rows = Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+    foreach ($row in $rows) {
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines.Add("-- Publication: $($row.PublicationName)")
+        if (-not [string]::IsNullOrWhiteSpace([string]$row.Description)) {
+            $lines.Add("-- Description: $($row.Description)")
+        }
+        $lines.Add('-- Articles (replicated objects):')
+        if ([string]::IsNullOrWhiteSpace([string]$row.Articles)) {
+            $lines.Add('--   (none)')
+        }
+        else {
+            foreach ($article in ($row.Articles -split ', ')) { $lines.Add("--   - $article") }
+        }
+        $lines.Add('-- Subscribers are not enumerated - see Replication Monitor for current subscription state.')
+
+        [pscustomobject]@{
+            PublicationName = $row.PublicationName
+            Definition      = ($lines -join "`n")
+        }
+    }
+}
+
 function Get-SyncSqlMsSqlLinkedServers {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$ConnectionInfo)
@@ -407,12 +691,31 @@ function Export-SyncSqlMsSqlServer {
         }
 
         if ($AllowedObjectTypes -contains 'Tables') {
+            # Each of these degrades to an empty index (with a warning) on its
+            # own if the underlying query fails - one missing section never
+            # blocks the rest of the table's extraction.
+            $foreignKeys = Get-SyncSqlMsSqlTableSectionIndex -ServerName $serverName -Database $database -SectionName 'Foreign key' `
+                -Getter { Get-SyncSqlMsSqlForeignKeys -ConnectionInfo $connectionInfo -Database $database }
+            $checkConstraints = Get-SyncSqlMsSqlTableSectionIndex -ServerName $serverName -Database $database -SectionName 'Check constraint' `
+                -Getter { Get-SyncSqlMsSqlCheckConstraints -ConnectionInfo $connectionInfo -Database $database }
+            $indexes = Get-SyncSqlMsSqlTableSectionIndex -ServerName $serverName -Database $database -SectionName 'Index' `
+                -Getter { Get-SyncSqlMsSqlIndexes -ConnectionInfo $connectionInfo -Database $database }
+            $statistics = Get-SyncSqlMsSqlTableSectionIndex -ServerName $serverName -Database $database -SectionName 'Statistics' `
+                -Getter { Get-SyncSqlMsSqlStatistics -ConnectionInfo $connectionInfo -Database $database }
+
             foreach ($table in (Get-SyncSqlMsSqlTables -ConnectionInfo $connectionInfo -Database $database)) {
                 if (-not $allowedSchemas.ContainsKey($table.SchemaName) -or -not $allowedSchemas[$table.SchemaName]) { continue }
                 if (-not (Test-SyncSqlNameAllowed -Name $table.TableName -Filter $Filters.objectNames)) { continue }
 
-                $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $table.Definition -ExtendedPropertiesIndex $extendedProperties `
+                $key = "$($table.SchemaName).$($table.TableName)"
+                $definition = $table.Definition
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Foreign Keys' -SectionIndex $foreignKeys -Key $key
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Check Constraints' -SectionIndex $checkConstraints -Key $key
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Indexes' -SectionIndex $indexes -Key $key
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Statistics' -SectionIndex $statistics -Key $key
+                $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $definition -ExtendedPropertiesIndex $extendedProperties `
                     -SchemaName $table.SchemaName -ObjectName $table.TableName
+
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $table.SchemaName -ObjectType 'Tables' -ObjectName $table.TableName `
                     -Definition $definition | Out-Null
@@ -429,6 +732,20 @@ function Export-SyncSqlMsSqlServer {
                     -SchemaName $syn.SchemaName -ObjectType 'Synonyms' -ObjectName $syn.SynonymName `
                     -Definition $syn.Definition | Out-Null
                 $fileCount++
+            }
+        }
+
+        if ($AllowedObjectTypes -contains 'Replication') {
+            try {
+                foreach ($pub in (Get-SyncSqlMsSqlReplication -ConnectionInfo $connectionInfo -Database $database)) {
+                    if (-not (Test-SyncSqlNameAllowed -Name $pub.PublicationName -Filter $Filters.objectNames)) { continue }
+                    New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
+                        -ObjectType 'Replication' -ObjectName $pub.PublicationName -Definition $pub.Definition | Out-Null
+                    $fileCount++
+                }
+            }
+            catch {
+                Write-SyncSqlLog "[$serverName/$database] Replication extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
             }
         }
     }
@@ -448,5 +765,12 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlMsSqlExtendedProperties',
     'Get-SyncSqlMsSqlExtendedPropertiesIndex',
     'Add-SyncSqlExtendedPropertiesBlock',
+    'Add-SyncSqlSectionBlock',
+    'Get-SyncSqlMsSqlForeignKeys',
+    'Get-SyncSqlMsSqlCheckConstraints',
+    'Get-SyncSqlMsSqlIndexes',
+    'Get-SyncSqlMsSqlStatistics',
+    'Get-SyncSqlMsSqlTableSectionIndex',
+    'Get-SyncSqlMsSqlReplication',
     'Export-SyncSqlMsSqlServer'
 )

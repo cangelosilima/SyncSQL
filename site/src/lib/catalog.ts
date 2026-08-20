@@ -16,21 +16,23 @@ export interface TreeServer {
 export interface TreeDatabase {
   name: string
   server: string
+  schemas: TreeSchema[]
+}
+
+export interface TreeSchema {
+  /** Display name; NO_SCHEMA_LABEL for schema-less types (Schemas, LinkedServers, Replication, ...). */
+  name: string
+  server: string
+  database: string
   types: TreeType[]
 }
 
 export interface TreeType {
   name: string
-  server: string
-  database: string
-  schemas: TreeSchema[]
-  looseNodes: CatalogNode[]
-}
-
-export interface TreeSchema {
-  name: string
   nodes: CatalogNode[]
 }
+
+export const NO_SCHEMA_LABEL = '(server-level)'
 
 export async function loadCatalog(): Promise<CatalogIndex> {
   const res = await fetch(`${import.meta.env.BASE_URL}data/catalog.json`)
@@ -60,47 +62,42 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
 }
 
 function buildTree(nodes: CatalogNode[]): TreeServer[] {
-  const servers = new Map<string, Map<string, Map<string, { schemas: Map<string, CatalogNode[]>; loose: CatalogNode[] }>>>()
+  const servers = new Map<string, Map<string, Map<string, Map<string, CatalogNode[]>>>>()
 
   for (const node of nodes) {
+    const schemaKey = node.schema ?? NO_SCHEMA_LABEL
+
     if (!servers.has(node.server)) servers.set(node.server, new Map())
     const databases = servers.get(node.server)!
 
     if (!databases.has(node.database)) databases.set(node.database, new Map())
-    const types = databases.get(node.database)!
+    const schemas = databases.get(node.database)!
 
-    if (!types.has(node.type)) types.set(node.type, { schemas: new Map(), loose: [] })
-    const typeBucket = types.get(node.type)!
+    if (!schemas.has(schemaKey)) schemas.set(schemaKey, new Map())
+    const types = schemas.get(schemaKey)!
 
-    if (node.schema) {
-      if (!typeBucket.schemas.has(node.schema)) typeBucket.schemas.set(node.schema, [])
-      typeBucket.schemas.get(node.schema)!.push(node)
-    } else {
-      typeBucket.loose.push(node)
-    }
+    if (!types.has(node.type)) types.set(node.type, [])
+    types.get(node.type)!.push(node)
   }
 
   const result: TreeServer[] = []
   for (const [serverName, databases] of [...servers.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const dbList: TreeDatabase[] = []
-    for (const [dbName, types] of [...databases.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const typeList: TreeType[] = []
-      for (const [typeName, bucket] of [...types.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-        const schemaList: TreeSchema[] = [...bucket.schemas.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([schemaName, schemaNodes]) => ({
-            name: schemaName,
-            nodes: schemaNodes.sort((a, b) => a.name.localeCompare(b.name)),
-          }))
-        typeList.push({
-          name: typeName,
+    for (const [dbName, schemas] of [...databases.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const schemaList: TreeSchema[] = [...schemas.entries()]
+        .sort(([a], [b]) => (a === NO_SCHEMA_LABEL ? 1 : b === NO_SCHEMA_LABEL ? -1 : a.localeCompare(b)))
+        .map(([schemaName, types]) => ({
+          name: schemaName,
           server: serverName,
           database: dbName,
-          schemas: schemaList,
-          looseNodes: bucket.loose.sort((a, b) => a.name.localeCompare(b.name)),
-        })
-      }
-      dbList.push({ name: dbName, server: serverName, types: typeList })
+          types: [...types.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([typeName, typeNodes]) => ({
+              name: typeName,
+              nodes: typeNodes.sort((a, b) => a.name.localeCompare(b.name)),
+            })),
+        }))
+      dbList.push({ name: dbName, server: serverName, schemas: schemaList })
     }
     result.push({ name: serverName, databases: dbList })
   }

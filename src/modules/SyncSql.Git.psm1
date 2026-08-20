@@ -28,6 +28,25 @@ function Get-SyncSqlTargetRepoUrl {
     return "$($env:CI_SERVER_PROTOCOL)://$($env:CI_SERVER_HOST)/$($env:CI_PROJECT_PATH).git"
 }
 
+function Get-SyncSqlGitDefaults {
+    <#
+        Resolves the git.* config block's optional keys to their defaults
+        in one place, so Publish-SyncSqlToGit and callers that need the
+        same values ahead of time (e.g. Export-DatabaseObjects.ps1 writing
+        them out for the analyze-catalog CI job to pick up) can't drift.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$GitConfig)
+
+    return [ordered]@{
+        branch           = if ($GitConfig.Contains('branch') -and $GitConfig.branch) { $GitConfig.branch } else { 'main' }
+        pathPrefix       = if ($GitConfig.Contains('pathPrefix') -and $GitConfig.pathPrefix) { $GitConfig.pathPrefix } else { 'objects' }
+        commitUserName   = if ($GitConfig.Contains('commitUserName') -and $GitConfig.commitUserName) { $GitConfig.commitUserName } else { 'SyncSQL Bot' }
+        commitUserEmail  = if ($GitConfig.Contains('commitUserEmail') -and $GitConfig.commitUserEmail) { $GitConfig.commitUserEmail } else { 'syncsql-bot@example.com' }
+        commitMessage    = if ($GitConfig.Contains('commitMessage') -and $GitConfig.commitMessage) { $GitConfig.commitMessage } else { 'chore(sync): update database objects' }
+    }
+}
+
 function New-SyncSqlGitAskPass {
     <#
         Writes a tiny askpass helper and returns its path plus the two env
@@ -85,12 +104,13 @@ function Publish-SyncSqlToGit {
         [string]$Summary = ''
     )
 
+    $defaults = Get-SyncSqlGitDefaults -GitConfig $GitConfig
     $remoteUrl = Get-SyncSqlTargetRepoUrl -ConfigRemoteUrl $GitConfig.remoteUrl
-    $branch = if ($GitConfig.Contains('branch') -and $GitConfig.branch) { $GitConfig.branch } else { 'main' }
-    $pathPrefix = if ($GitConfig.Contains('pathPrefix') -and $GitConfig.pathPrefix) { $GitConfig.pathPrefix } else { 'objects' }
-    $commitUserName = if ($GitConfig.Contains('commitUserName') -and $GitConfig.commitUserName) { $GitConfig.commitUserName } else { 'SyncSQL Bot' }
-    $commitUserEmail = if ($GitConfig.Contains('commitUserEmail') -and $GitConfig.commitUserEmail) { $GitConfig.commitUserEmail } else { 'syncsql-bot@example.com' }
-    $commitMessage = if ($GitConfig.Contains('commitMessage') -and $GitConfig.commitMessage) { $GitConfig.commitMessage } else { 'chore(sync): update database objects' }
+    $branch = $defaults.branch
+    $pathPrefix = $defaults.pathPrefix
+    $commitUserName = $defaults.commitUserName
+    $commitUserEmail = $defaults.commitUserEmail
+    $commitMessage = $defaults.commitMessage
 
     if (Test-Path -LiteralPath $WorkDir) {
         Remove-Item -LiteralPath $WorkDir -Recurse -Force
@@ -160,6 +180,7 @@ function Publish-SyncSqlToGit {
 
 Export-ModuleMember -Function @(
     'Get-SyncSqlTargetRepoUrl',
+    'Get-SyncSqlGitDefaults',
     'Invoke-SyncSqlGit',
     'Publish-SyncSqlToGit'
 )

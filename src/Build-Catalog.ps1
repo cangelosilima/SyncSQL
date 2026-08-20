@@ -24,16 +24,57 @@
     can also occasionally produce a false-positive edge when an identifier
     happens to collide with an unrelated object name.
 
+    When -RepoRoot is supplied, this also mines git history for the
+    -PathPrefix folder inside that checkout (bounded to -HistoryLimit
+    commits): a global recent-changes timeline, a per-object change count /
+    last-changed date / bounded version history (with DDL content pulled
+    via `git show`, for the point-in-time viewer), and co-change pairs
+    (objects that tend to change in the same commit). Commits touching more
+    than -MaxCoChangeCommitSize files are excluded from co-change pairing -
+    almost always a bulk/initial sync rather than a meaningful "these
+    objects change together" signal. Without -RepoRoot, all of this is
+    simply omitted (empty arrays / zero counts) rather than failing.
+
 .PARAMETER ObjectsRoot
     Root of the extracted tree (Export-DatabaseObjects.ps1's -StagingRoot).
 
 .PARAMETER OutputPath
     File path the catalog JSON is written to.
+
+.PARAMETER RepoRoot
+    Path to a git checkout containing -PathPrefix with the extracted
+    objects' commit history (typically this project's own working copy in
+    CI). Omit to skip history/heatmap/point-in-time mining entirely.
+
+.PARAMETER PathPrefix
+    Folder inside -RepoRoot holding the extracted tree (config.git.pathPrefix,
+    "objects" by default).
+
+.PARAMETER HistoryLimit
+    Maximum number of commits (touching -PathPrefix) to mine.
+
+.PARAMETER MaxVersionsPerObject
+    Maximum number of historical versions kept (and content-fetched) per
+    object, most recent first.
+
+.PARAMETER MaxHistoryContentCalls
+    Hard cap on total `git show` invocations across the whole mining pass,
+    so a large/old repo can't turn this into an unbounded CI job.
+
+.PARAMETER MaxCoChangeCommitSize
+    Commits touching more files than this are excluded from co-change
+    pair counting.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ObjectsRoot,
-    [Parameter(Mandatory)][string]$OutputPath
+    [Parameter(Mandatory)][string]$OutputPath,
+    [string]$RepoRoot,
+    [string]$PathPrefix = 'objects',
+    [int]$HistoryLimit = 250,
+    [int]$MaxVersionsPerObject = 15,
+    [int]$MaxHistoryContentCalls = 1500,
+    [int]$MaxCoChangeCommitSize = 40
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,8 +88,18 @@ if (-not (Test-Path -LiteralPath $ObjectsRoot)) {
 
 function ConvertFrom-SyncSqlObjectFile {
     param([Parameter(Mandatory)][string]$FilePath)
+    return ConvertFrom-SyncSqlObjectFileLines -Lines @(Get-Content -LiteralPath $FilePath)
+}
 
-    $allLines = @(Get-Content -LiteralPath $FilePath)
+function ConvertFrom-SyncSqlObjectFileLines {
+    <#
+        Core parser, reusable both for a file on disk (ConvertFrom-SyncSqlObjectFile)
+        and for `git show <sha>:<path>` output (historical versions) which
+        never touches disk.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines)
+
+    $allLines = @($Lines)
     $i = 0
     while ($i -lt $allLines.Count -and $allLines[$i].StartsWith('-- ')) { $i++ }
     if ($i -lt $allLines.Count -and [string]::IsNullOrEmpty($allLines[$i])) { $i++ }
@@ -60,40 +111,61 @@ function ConvertFrom-SyncSqlObjectFile {
     # wrapped in @().
     $bodyLines = @(if ($i -lt $allLines.Count) { $allLines[$i..($allLines.Count - 1)] } else { @() })
 
-    $markerIndex = -1
+    # Find every "-- === Title ===" marker (Foreign Keys, Check Constraints,
+    # Indexes, Statistics, Extended Properties, ...). The DDL is everything
+    # before the first marker; each marker starts a section running to the
+    # next marker (or end of file).
+    $markerPositions = [System.Collections.Generic.List[object]]::new()
     for ($j = 0; $j -lt $bodyLines.Count; $j++) {
-        if ($bodyLines[$j] -eq '-- === Extended Properties ===') { $markerIndex = $j; break }
+        if ($bodyLines[$j] -match '^-- === (.+) ===$') {
+            $markerPositions.Add([pscustomobject]@{ Index = $j; Title = $Matches[1] })
+        }
     }
 
-    if ($markerIndex -ge 0) {
-        $ddlLines = @(if ($markerIndex -gt 0) { $bodyLines[0..($markerIndex - 1)] } else { @() })
-        $propLines = @(if ($markerIndex + 1 -lt $bodyLines.Count) { $bodyLines[($markerIndex + 1)..($bodyLines.Count - 1)] } else { @() })
+    if ($markerPositions.Count -gt 0) {
+        $firstMarker = $markerPositions[0].Index
+        $ddlLines = @(if ($firstMarker -gt 0) { $bodyLines[0..($firstMarker - 1)] } else { @() })
     }
     else {
         $ddlLines = $bodyLines
-        $propLines = @()
+    }
+
+    $sections = [System.Collections.Generic.List[object]]::new()
+    for ($k = 0; $k -lt $markerPositions.Count; $k++) {
+        $start = $markerPositions[$k].Index + 1
+        $end = if ($k + 1 -lt $markerPositions.Count) { $markerPositions[$k + 1].Index - 1 } else { $bodyLines.Count - 1 }
+        $sectionLines = @(if ($start -le $end) { $bodyLines[$start..$end] } else { @() })
+        $sections.Add([pscustomobject]@{ Title = $markerPositions[$k].Title; Lines = $sectionLines })
     }
 
     $objectDescription = $null
     $columns = [ordered]@{}
-    foreach ($line in $propLines) {
-        # Capture $Matches into a local right after each successful -match:
-        # the property-name check below is itself a -match, which would
-        # otherwise silently clobber $Matches before it's read for real.
-        if ($line -match '^-- \[object\] (\S+) = (.*)$') {
-            $m = $Matches
-            if ($m[1] -match 'Description' -and -not $objectDescription) { $objectDescription = $m[2] }
-        }
-        elseif ($line -match '^-- \[column: (.+?)\] (\S+) = (.*)$') {
-            $m = $Matches
-            if ($m[2] -match 'Description') { $columns[$m[1]] = $m[3] }
+    $extendedProperties = $sections | Where-Object { $_.Title -eq 'Extended Properties' } | Select-Object -First 1
+    if ($extendedProperties) {
+        foreach ($line in $extendedProperties.Lines) {
+            # Capture $Matches into a local right after each successful -match:
+            # the property-name check below is itself a -match, which would
+            # otherwise silently clobber $Matches before it's read for real.
+            if ($line -match '^-- \[object\] (\S+) = (.*)$') {
+                $m = $Matches
+                if ($m[1] -match 'Description' -and -not $objectDescription) { $objectDescription = $m[2] }
+            }
+            elseif ($line -match '^-- \[column: (.+?)\] (\S+) = (.*)$') {
+                $m = $Matches
+                if ($m[2] -match 'Description') { $columns[$m[1]] = $m[3] }
+            }
         }
     }
+
+    $otherSections = @($sections | Where-Object { $_.Title -ne 'Extended Properties' } | ForEach-Object {
+        [ordered]@{ title = $_.Title; content = ($_.Lines -join "`n").Trim() }
+    })
 
     return [pscustomobject]@{
         Ddl          = ($ddlLines -join "`n").Trim()
         Description  = $objectDescription
         Columns      = $columns
+        Sections     = $otherSections
     }
 }
 
@@ -136,6 +208,7 @@ foreach ($file in $files) {
         ddl           = $parsed.Ddl
         description   = $parsed.Description
         columns       = @($parsed.Columns.Keys | ForEach-Object { [ordered]@{ name = $_; description = $parsed.Columns[$_] } })
+        sections      = $parsed.Sections
         sizeBytes     = [Text.Encoding]::UTF8.GetByteCount($parsed.Ddl)
     }
     $nodes.Add($node)
@@ -170,9 +243,14 @@ $qualifiedPattern = [regex]'\[?([A-Za-z_][\w$#]*)\]?\.\[?([A-Za-z_][\w$#]*)\]?'
 $barePattern = [regex]'\b([A-Za-z_][\w$#]{3,})\b'
 
 foreach ($node in $nodes) {
-    if ([string]::IsNullOrWhiteSpace($node.ddl)) { continue }
+    # Scan the DDL plus the (high-confidence, structural) Foreign Keys
+    # section - other appended sections (Check Constraints, Indexes,
+    # Statistics) don't reference other objects and would just add noise.
+    $fkSection = $node.sections | Where-Object { $_.title -eq 'Foreign Keys' } | Select-Object -First 1
+    $scanText = if ($fkSection) { $node.ddl + "`n" + $fkSection.content } else { $node.ddl }
+    if ([string]::IsNullOrWhiteSpace($scanText)) { continue }
 
-    foreach ($match in $qualifiedPattern.Matches($node.ddl)) {
+    foreach ($match in $qualifiedPattern.Matches($scanText)) {
         $schemaLower = $match.Groups[1].Value.ToLowerInvariant()
         $nameLower = $match.Groups[2].Value.ToLowerInvariant()
         $key = "$($node.server)::$($node.database)::$schemaLower.$nameLower"
@@ -182,7 +260,7 @@ foreach ($node in $nodes) {
     }
 
     $seenBareTokens = [System.Collections.Generic.HashSet[string]]::new()
-    foreach ($match in $barePattern.Matches($node.ddl)) {
+    foreach ($match in $barePattern.Matches($scanText)) {
         $tokenLower = $match.Value.ToLowerInvariant()
         if (-not $seenBareTokens.Add($tokenLower)) { continue }
 
@@ -205,14 +283,127 @@ $typeCounts = [ordered]@{}
 foreach ($node in $nodes) {
     if (-not $typeCounts.Contains($node.type)) { $typeCounts[$node.type] = 0 }
     $typeCounts[$node.type]++
+    # Defaults so the JSON shape is stable whether or not history mining
+    # below actually runs.
+    $node['changeCount'] = 0
+    $node['lastChangedAt'] = $null
+    $node['history'] = @()
+}
+
+$recentChanges = @()
+$coChangePairs = @()
+
+if ($RepoRoot) {
+    $gitDir = Join-Path $RepoRoot '.git'
+    if (-not (Test-Path -LiteralPath $gitDir)) {
+        Write-SyncSqlLog "RepoRoot '$RepoRoot' is not a git checkout (no .git) - skipping history mining." -Level WARN
+    }
+    else {
+        Write-SyncSqlLog "Mining up to $HistoryLimit commit(s) of git history under '$PathPrefix' in $RepoRoot"
+        try {
+            $rawLog = & git -C $RepoRoot log -n $HistoryLimit --date=iso-strict --pretty=format:'@@COMMIT@@%H@@%ad@@%s' --name-only -- $PathPrefix 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "git log exited $LASTEXITCODE`: $($rawLog -join ' ')" }
+
+            $commits = [System.Collections.Generic.List[object]]::new()
+            $current = $null
+            foreach ($line in @($rawLog)) {
+                if ($line.StartsWith('@@COMMIT@@')) {
+                    if ($current) { $commits.Add($current) }
+                    $parts = $line.Substring(10) -split '@@', 3
+                    $current = [ordered]@{ sha = $parts[0]; date = $parts[1]; message = $parts[2]; files = [System.Collections.Generic.List[string]]::new() }
+                }
+                elseif ($current -and -not [string]::IsNullOrWhiteSpace($line)) {
+                    $current.files.Add($line.Trim())
+                }
+            }
+            if ($current) { $commits.Add($current) }
+
+            Write-SyncSqlLog "Found $($commits.Count) commit(s) touching '$PathPrefix'"
+
+            $nodesById = @{}
+            foreach ($node in $nodes) { $nodesById[$node.id] = $node }
+
+            $objectHistory = @{}
+            $coChangeCounts = @{}
+            $prefixLen = $PathPrefix.Length + 1
+
+            foreach ($commit in $commits) {
+                $objectIds = @($commit.files | Where-Object { $_.StartsWith("$PathPrefix/") -and $_.EndsWith('.sql') } |
+                    ForEach-Object { $_.Substring($prefixLen) -replace '\.sql$', '' } |
+                    Where-Object { $nodesById.ContainsKey($_) })
+                if ($objectIds.Count -eq 0) { continue }
+
+                $recentChanges += [ordered]@{ sha = $commit.sha; date = $commit.date; message = $commit.message; objectIds = $objectIds }
+
+                foreach ($id in $objectIds) {
+                    $node = $nodesById[$id]
+                    $node['changeCount'] = [int]$node['changeCount'] + 1
+                    if (-not $node['lastChangedAt']) { $node['lastChangedAt'] = $commit.date }
+
+                    if (-not $objectHistory.ContainsKey($id)) { $objectHistory[$id] = [System.Collections.Generic.List[object]]::new() }
+                    if ($objectHistory[$id].Count -lt $MaxVersionsPerObject) {
+                        $objectHistory[$id].Add([ordered]@{ sha = $commit.sha; date = $commit.date; message = $commit.message; ddl = $null })
+                    }
+                }
+
+                if ($objectIds.Count -gt 1 -and $objectIds.Count -le $MaxCoChangeCommitSize) {
+                    $sortedIds = @($objectIds | Sort-Object -Unique)
+                    for ($x = 0; $x -lt $sortedIds.Count; $x++) {
+                        for ($y = $x + 1; $y -lt $sortedIds.Count; $y++) {
+                            $pairKey = "$($sortedIds[$x])|$($sortedIds[$y])"
+                            if (-not $coChangeCounts.ContainsKey($pairKey)) { $coChangeCounts[$pairKey] = 0 }
+                            $coChangeCounts[$pairKey]++
+                        }
+                    }
+                }
+            }
+
+            Write-SyncSqlLog "Fetching historical DDL content (up to $MaxHistoryContentCalls `git show` call(s))"
+            $showCalls = 0
+            foreach ($id in $objectHistory.Keys) {
+                if ($showCalls -ge $MaxHistoryContentCalls) { break }
+                $path = "$PathPrefix/$id.sql"
+                foreach ($version in $objectHistory[$id]) {
+                    if ($showCalls -ge $MaxHistoryContentCalls) { break }
+                    $showCalls++
+                    try {
+                        $content = & git -C $RepoRoot show "$($version.sha):$path" 2>$null
+                        if ($LASTEXITCODE -eq 0 -and $content) {
+                            $parsed = ConvertFrom-SyncSqlObjectFileLines -Lines @($content -split "`n")
+                            $version.ddl = $parsed.Ddl
+                        }
+                    }
+                    catch {
+                        # Leave ddl = $null for this version (e.g. renamed/deleted at that
+                        # revision) - the version still shows up in the timeline.
+                    }
+                }
+                $nodesById[$id]['history'] = @($objectHistory[$id])
+            }
+
+            $coChangePairs = @($coChangeCounts.GetEnumerator() | Sort-Object -Property Value -Descending | Select-Object -First 100 | ForEach-Object {
+                $ids = $_.Key -split '\|', 2
+                [ordered]@{ a = $ids[0]; b = $ids[1]; count = $_.Value }
+            })
+
+            Write-SyncSqlLog "History mining complete: $($recentChanges.Count) relevant commit(s), $($coChangePairs.Count) co-change pair(s), $showCalls historical content fetch(es)"
+        }
+        catch {
+            Write-SyncSqlLog "History mining failed (continuing without it): $($_.Exception.Message)" -Level WARN
+            $recentChanges = @()
+            $coChangePairs = @()
+        }
+    }
 }
 
 $catalog = [ordered]@{
-    generatedAt = (Get-Date).ToUniversalTime().ToString('o')
-    servers     = @($nodes | ForEach-Object { $_.server } | Sort-Object -Unique)
-    typeCounts  = $typeCounts
-    nodes       = $nodes
-    edges       = $edges
+    generatedAt    = (Get-Date).ToUniversalTime().ToString('o')
+    servers        = @($nodes | ForEach-Object { $_.server } | Sort-Object -Unique)
+    typeCounts     = $typeCounts
+    nodes          = $nodes
+    edges          = $edges
+    recentChanges  = $recentChanges
+    coChangePairs  = $coChangePairs
 }
 
 $outputDir = Split-Path -Parent $OutputPath

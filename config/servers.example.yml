@@ -39,7 +39,10 @@ defaults:
     include: [".*"]
     exclude: []
   # Valid MSSQL values: Schemas, Tables, Views, StoredProcedures, Functions,
-  #                      Triggers, Synonyms, LinkedServers
+  #                      Triggers, Synonyms, LinkedServers, Replication
+  #                      (Tables also carry foreign keys, check constraints,
+  #                      indexes and statistics appended to the same file -
+  #                      there's no separate objectTypes entry for those.)
   # Valid Oracle values: Schemas, Tables, Views, Procedures, Functions,
   #                      Packages, PackageBodies, Triggers, Synonyms,
   #                      DatabaseLinks

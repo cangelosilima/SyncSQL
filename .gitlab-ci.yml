@@ -31,6 +31,11 @@ variables:
   EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
   CATALOG_DIR: "$CI_PROJECT_DIR/catalog"
   GIT_DEPTH: "1"
+  # How many commits (touching config.git.pathPrefix) the analyze stage mines
+  # for the change-heatmap / co-change / per-object version history features.
+  # Also used to widen the analyze job's own checkout depth so that history
+  # is actually there to mine.
+  HISTORY_LIMIT: "250"
 
 .sync_rules: &sync_rules
   - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -71,22 +76,43 @@ sync-database-objects:
   before_script:
     - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
   script:
-    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR"
+    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR" -DotenvPath "$CI_PROJECT_DIR/sync.env"
   artifacts:
     paths:
       - extracted-objects/
+    reports:
+      dotenv: sync.env
     expire_in: 1 day
 
-# Best-effort lineage/documentation analysis over the tree sync-database-objects
-# just produced - see src/Build-Catalog.ps1 for what "best-effort" means here.
+# Best-effort lineage/documentation/history analysis over the tree
+# sync-database-objects just produced - see src/Build-Catalog.ps1 for what
+# "best-effort" means here.
 analyze-catalog:
   stage: analyze
   image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
   rules: *sync_rules
+  # Widen this job's own checkout so there's enough history to mine (the
+  # global GIT_DEPTH above stays shallow for the other jobs, which don't
+  # need history).
+  variables:
+    GIT_DEPTH: "$HISTORY_LIMIT"
   dependencies:
     - sync-database-objects
+  before_script:
+    # The base image doesn't guarantee a git CLI (GitLab's own automatic
+    # checkout of this project runs through a separate helper image, not
+    # this one) - install it if it's missing before using it below.
+    - command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git)
+    # sync-database-objects may have just pushed a new commit; this job's
+    # checkout was taken from the pipeline's original commit, so bring the
+    # branch tip back in before mining history from it. PATH_PREFIX/GIT_BRANCH
+    # come from sync-database-objects's dotenv report above (falls back to
+    # the config defaults if that job didn't run/produced nothing, e.g. a
+    # partial rerun).
+    - git fetch origin "${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
+    - git reset --hard "origin/${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
   script:
-    - pwsh -NoProfile -File src/Build-Catalog.ps1 -ObjectsRoot "$EXTRACTED_OBJECTS_DIR" -OutputPath "$CATALOG_DIR/catalog.json"
+    - pwsh -NoProfile -File src/Build-Catalog.ps1 -ObjectsRoot "$EXTRACTED_OBJECTS_DIR" -OutputPath "$CATALOG_DIR/catalog.json" -RepoRoot "$CI_PROJECT_DIR" -PathPrefix "${PATH_PREFIX:-objects}" -HistoryLimit "$HISTORY_LIMIT"
   artifacts:
     paths:
       - catalog/
