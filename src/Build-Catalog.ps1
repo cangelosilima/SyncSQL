@@ -80,7 +80,13 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Common.psm1') -Force
+# No -Force: this script can run nested inside another module's still-executing
+# function (Export-DatabaseObjects.ps1 -> Publish-SyncSqlToGit's -PostSyncHook),
+# and forcing a reimport there has been observed to drop that caller's own
+# resolved reference to this module's exported functions out from under it.
+if (-not (Get-Module -Name SyncSql.Common)) {
+    Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Common.psm1')
+}
 
 if (-not (Test-Path -LiteralPath $ObjectsRoot)) {
     throw "Objects root not found: $ObjectsRoot"

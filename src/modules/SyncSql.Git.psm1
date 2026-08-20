@@ -33,7 +33,7 @@ function Get-SyncSqlGitDefaults {
         Resolves the git.* config block's optional keys to their defaults
         in one place, so Publish-SyncSqlToGit and callers that need the
         same values ahead of time (e.g. Export-DatabaseObjects.ps1 writing
-        them out for the analyze-catalog CI job to pick up) can't drift.
+        them out for the pages CI job to pick up) can't drift.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)]$GitConfig)
@@ -101,7 +101,18 @@ function Publish-SyncSqlToGit {
         [Parameter(Mandatory)][string]$StagingRoot,
         [Parameter(Mandatory)][string]$Token,
         [Parameter(Mandatory)][string]$WorkDir,
-        [string]$Summary = ''
+        [string]$Summary = '',
+        # How many commits to clone. Keep this at the default (1) unless a
+        # caller needs real git history in $WorkDir afterwards (e.g. to mine
+        # it for a catalog before committing) - a deep clone is slower and
+        # heavier for the common case, which never looks at history.
+        [int]$CloneDepth = 1,
+        # Invoked as (WorkDir, PathPrefix) after the staged tree has been
+        # copied into $WorkDir/$PathPrefix but before `git add`/commit, so a
+        # caller can add more files (e.g. a generated catalog.json) into the
+        # same commit. Use .GetNewClosure() when building this scriptblock
+        # so it doesn't depend on this function's local scope.
+        [scriptblock]$PostSyncHook
     )
 
     $defaults = Get-SyncSqlGitDefaults -GitConfig $GitConfig
@@ -126,13 +137,13 @@ function Publish-SyncSqlToGit {
     $env:SYNCSQL_GIT_PASSWORD = $Token
 
     try {
-        Write-SyncSqlLog "Cloning target repository (branch '$branch')"
+        Write-SyncSqlLog "Cloning target repository (branch '$branch', depth $CloneDepth)"
         try {
-            Invoke-SyncSqlGit -Arguments @('clone', '--branch', $branch, '--single-branch', '--depth', '1', $remoteUrl, $WorkDir) | Out-Null
+            Invoke-SyncSqlGit -Arguments @('clone', '--branch', $branch, '--single-branch', '--depth', "$CloneDepth", $remoteUrl, $WorkDir) | Out-Null
         }
         catch {
             Write-SyncSqlLog "Branch '$branch' not found on remote yet; cloning default branch and creating it." -Level WARN
-            Invoke-SyncSqlGit -Arguments @('clone', '--depth', '1', $remoteUrl, $WorkDir) | Out-Null
+            Invoke-SyncSqlGit -Arguments @('clone', '--depth', "$CloneDepth", $remoteUrl, $WorkDir) | Out-Null
             Invoke-SyncSqlGit -Arguments @('checkout', '-B', $branch) -WorkingDirectory $WorkDir | Out-Null
         }
 
@@ -151,6 +162,11 @@ function Publish-SyncSqlToGit {
             Get-ChildItem -LiteralPath $StagingRoot -Force | ForEach-Object {
                 Copy-Item -LiteralPath $_.FullName -Destination $targetDir -Recurse -Force
             }
+        }
+
+        if ($PostSyncHook) {
+            Write-SyncSqlLog "Running post-sync hook before commit"
+            & $PostSyncHook $WorkDir $pathPrefix
         }
 
         Invoke-SyncSqlGit -Arguments @('add', '-A') -WorkingDirectory $WorkDir | Out-Null

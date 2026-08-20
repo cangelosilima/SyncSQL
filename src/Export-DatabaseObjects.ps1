@@ -39,15 +39,25 @@
 
 .PARAMETER SkipGit
     Run the extraction and leave results under -StagingRoot without
-    cloning/committing/pushing anything. Useful for local testing.
+    cloning/committing/pushing anything (and without building a catalog -
+    see -HistoryLimit). Useful for local testing.
 
 .PARAMETER DotenvPath
     Optional path to write a small KEY=VALUE file with the resolved
     PATH_PREFIX and GIT_BRANCH (config.git.pathPrefix / .branch, after
     defaulting). Meant to be picked up by GitLab CI as a `dotenv` artifact
-    report so the downstream analyze-catalog job can mine history from the
-    same path/branch this run just pushed to, without hardcoding or
-    duplicating those defaults in .gitlab-ci.yml.
+    report so a downstream job can act on the same path/branch this run
+    just pushed to, without hardcoding or duplicating those defaults in
+    .gitlab-ci.yml.
+
+.PARAMETER HistoryLimit
+    When publishing to git (i.e. -SkipGit is not set), src/Build-Catalog.ps1
+    is run against the target repo's own checkout before committing, so
+    catalog.json is versioned in the same commit as the extracted objects
+    right alongside them under config.git.pathPrefix - not just a
+    CI artifact. This controls both how many commits are cloned to make
+    that possible and how many of them Build-Catalog.ps1 mines for its
+    change-history/heatmap/point-in-time features.
 #>
 [CmdletBinding()]
 param(
@@ -58,7 +68,8 @@ param(
     [string[]]$ServerNameExclude,
     [string]$PushToken = $(if ($env:CI_JOB_Maintainer_Token) { $env:CI_JOB_Maintainer_Token } else { $env:GIT_PUSH_TOKEN }),
     [switch]$SkipGit,
-    [string]$DotenvPath
+    [string]$DotenvPath,
+    [int]$HistoryLimit = 250
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,7 +77,7 @@ Set-StrictMode -Version Latest
 
 # Only auto-clean the staging directory when the caller didn't ask for a
 # specific one - CI pipelines pass an explicit path here so the extracted
-# tree survives as a job artifact for the downstream analyze/pages stages.
+# tree survives as a job artifact for debugging this run.
 $stagingRootExplicit = $PSBoundParameters.ContainsKey('StagingRoot')
 
 # Modules saved by Bootstrap-Dependencies.ps1 live here; make them importable
@@ -170,11 +181,21 @@ else {
     }
 
     $gitWorkDir = Join-Path ([IO.Path]::GetTempPath()) "syncsql-repo-$([Guid]::NewGuid())"
+    $buildCatalogScript = Join-Path $PSScriptRoot 'Build-Catalog.ps1'
+    $catalogHistoryLimit = $HistoryLimit
+    $catalogHook = {
+        param($WorkDir, $PathPrefix)
+        $catalogOutputPath = Join-Path $WorkDir $PathPrefix 'catalog.json'
+        Write-SyncSqlLog "Building catalog.json ($catalogHistoryLimit-commit history window) -> $catalogOutputPath"
+        & $buildCatalogScript -ObjectsRoot (Join-Path $WorkDir $PathPrefix) -OutputPath $catalogOutputPath `
+            -RepoRoot $WorkDir -PathPrefix $PathPrefix -HistoryLimit $catalogHistoryLimit
+    }.GetNewClosure()
+
     try {
         $published = Publish-SyncSqlToGit -GitConfig $config.git -StagingRoot $StagingRoot -Token $PushToken `
-            -WorkDir $gitWorkDir -Summary ($summaryLines -join "`n")
+            -WorkDir $gitWorkDir -Summary ($summaryLines -join "`n") -CloneDepth $HistoryLimit -PostSyncHook $catalogHook
         if ($published) {
-            Write-SyncSqlLog "Published extracted objects."
+            Write-SyncSqlLog "Published extracted objects and catalog.json."
         }
     }
     finally {

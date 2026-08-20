@@ -37,22 +37,22 @@ Export-DatabaseObjects.ps1                              [CI stage: sync]
         v
 extracted-objects/<server>/<database>/<objectType>/[<schema>/]<object>.sql
         |
-        +-----------------------------------------------+
-        |                                                |
-        v                                                v
-SyncSql.Git.psm1                                Build-Catalog.ps1   [CI stage: analyze]
-  clone this project, replace <pathPrefix>/        walks the extracted tree, infers
-  with the staged tree (dropped objects show        best-effort lineage edges, mines
-  up as deletions), commit, push                     this project's own git history for
-                                                       change frequency / co-change /
-                                                       per-object versions, writes
-                                                       catalog/catalog.json
-                                                                |
-                                                                v
-                                                        site/ (React + Vite)   [CI stage: pages]
-                                                          npm run build with catalog.json
-                                                          copied into public/data/,
-                                                          published as a GitLab Pages site
+        v
+SyncSql.Git.psm1  (still inside the sync stage)
+  clone this project (deep enough to mine, see -HistoryLimit), replace
+  <pathPrefix>/ with the staged tree (dropped objects show up as
+  deletions), THEN run Build-Catalog.ps1 against that same checkout -
+  structure, best-effort lineage, and history/heatmap/point-in-time mined
+  from this project's own git log - writing <pathPrefix>/catalog.json
+  right alongside the objects it describes, so ONE commit carries both and
+  catalog.json is versioned (diffable, browsable at any past commit) the
+  same way the objects themselves are. Commit, push.
+        |
+        v
+site/ (React + Vite)                                    [CI stage: pages]
+  fetches the branch tip (to see the commit sync just pushed), reads
+  <pathPrefix>/catalog.json straight out of that checkout, builds with it
+  copied into public/data/, publishes as a GitLab Pages site
 ```
 
 Every extracted `.sql` file gets a small static header (server / database /
@@ -102,32 +102,31 @@ self-repo target). If you point `git.remoteUrl` at a different project,
 `CI_JOB_Maintainer_Token` needs Maintainer/`write_repository` access there
 instead.
 
-Optional: `HISTORY_LIMIT` (default `250`) controls how many commits the
-`analyze` stage mines for the heatmap / co-change / point-in-time features
-— see "History, heatmap and point-in-time" below.
+Optional: `HISTORY_LIMIT` (default `250`) controls how many commits get
+mined for the heatmap / co-change / point-in-time features baked into
+`catalog.json` — see "History, heatmap and point-in-time" below.
 
 ## Running the pipeline
 
-`.gitlab-ci.yml` defines four jobs across four stages:
+`.gitlab-ci.yml` defines three jobs across three stages:
 
 - **validate-config** (`validate`): runs on merge requests / pushes, just
   checks that `config/servers.yml` (or the example file, if you haven't
   added one yet) parses and satisfies the schema. No database or git
   credentials needed.
-- **sync-database-objects** (`sync`): the actual extraction, and the only
-  job that touches your databases and pushes to git. Produces the
-  `extracted-objects/` artifact consumed by the next stage, plus a
-  `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the analyze stage always
-  mines the same path/branch this run just pushed to.
-- **analyze-catalog** (`analyze`): fetches the branch tip (to see the
-  commit sync-database-objects may have just pushed), then runs
-  `Build-Catalog.ps1` over `extracted-objects/` to produce
-  `catalog/catalog.json` (structure, best-effort lineage graph, and mined
-  git history).
-- **pages** (`pages`): builds `site/` (React/Vite) with that `catalog.json`
-  and publishes it as this project's GitLab Pages site.
+- **sync-database-objects** (`sync`): the actual extraction, the only job
+  that touches your databases, and the one that builds and commits
+  `catalog.json` alongside the extracted objects (see "How it works"
+  above) before pushing. Produces the `extracted-objects/` artifact
+  (handy for debugging a run without needing to dig through git history)
+  and a `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job
+  knows where to find `catalog.json` in the checkout.
+- **pages** (`pages`): fetches the branch tip (to see the commit
+  sync-database-objects just pushed), builds `site/` (React/Vite) with
+  the `catalog.json` it finds there, and publishes it as this project's
+  GitLab Pages site.
 
-The last three only run for `schedule` (and manually-triggered `web`/API)
+The last two only run for `schedule` (and manually-triggered `web`/API)
 pipeline sources — create a schedule under **CI/CD > Schedules** pointing
 at this project. Once it's run once, find the site URL under **Settings >
 Pages**.
@@ -185,10 +184,14 @@ site says as much on its overview page.
 ### History, heatmap and point-in-time
 
 A static Pages site can't run live `git` queries, so `Build-Catalog.ps1`
-mines history *during the analyze CI stage* instead, when it has an actual
-git checkout of this project to work with (`-RepoRoot`, bounded to
-`-HistoryLimit` commits, default 250 — override via the `HISTORY_LIMIT` CI
-variable). That produces:
+mines history *during the sync CI stage* instead, right before committing:
+`Export-DatabaseObjects.ps1` clones the target repo deeply enough
+(`-HistoryLimit` commits, default 250 — override via the `HISTORY_LIMIT`
+CI variable) for `Build-Catalog.ps1` to mine it (`-RepoRoot`), and the
+resulting `catalog.json` is written straight into that same checkout and
+committed alongside the objects it describes - so it's versioned in git
+history too, not just a CI artifact that disappears after the job expires.
+Mining history produces:
 
 - a global commit timeline (the History page and Overview's "latest
   changes"),
@@ -205,8 +208,9 @@ re-running the whole analysis per commit, which doesn't fit a scheduled
 CI job. What you get is real historical DDL per object within the mined
 commit window, plus a commit-level view of what changed together, which
 covers the practical "what changed and when" questions without that cost.
-Running without `-RepoRoot` (e.g. local `-SkipGit` testing) simply omits
-all of this — empty history, zero change counts — rather than failing.
+Running with `-SkipGit` (no git publish, so no repo to mine and nowhere to
+commit `catalog.json` into) simply omits all of this — empty history, zero
+change counts — rather than failing.
 
 To work on the site locally:
 
@@ -217,9 +221,8 @@ npm run dev
 ```
 
 `site/public/data/catalog.json` ships a small demo fixture so `npm run dev`
-has something to render before any pipeline has actually run; the `pages`
-CI job overwrites it with the real, freshly generated catalog on every
-build.
+has something to render before any pipeline has actually run; replace it
+with a real one (see below) to preview actual data.
 
 ## Running the extraction locally
 
@@ -231,10 +234,13 @@ pwsh ./src/Export-DatabaseObjects.ps1 -ConfigPath ./config/servers.yml -SkipGit
 ```
 
 `-SkipGit` leaves the extracted files under a temp staging directory
-(printed in the log) instead of publishing them. Feed that directory into
+(printed in the log) instead of publishing them - so no `catalog.json` is
+built in this mode either (there's no git checkout to write it into or
+mine history from). To build one for local preview, feed that staging
+directory into
 `Build-Catalog.ps1 -ObjectsRoot <dir> -OutputPath ./site/public/data/catalog.json`
-(add `-RepoRoot`/`-PathPrefix` pointed at a real git checkout to include
-history) to preview the real site locally with `npm run dev` inside `site/`.
+(add `-RepoRoot`/`-PathPrefix` pointed at a real git checkout of your
+target repo to include history), then `npm run dev` inside `site/`.
 
 ## Known limitations (v2)
 
