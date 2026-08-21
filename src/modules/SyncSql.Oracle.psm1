@@ -247,6 +247,120 @@ function Get-SyncSqlOracleColumnListIndex {
     return $index
 }
 
+function Get-SyncSqlOracleMetricsSnapshot {
+    <#
+        Volatile, best-effort operational snapshot per table owned by
+        $Owner - the Oracle equivalent of Get-SyncSqlMsSqlMetricsSnapshot,
+        same output shape (keyed "owner.tableName", ready for
+        New-SyncSqlMetricsSnapshotFile), reduced scope to match what's
+        realistically available without diagnostics-pack privileges:
+
+        - Volume: row count and an estimated size from ALL_TAB_STATISTICS
+          (BLOCKS * 8KB, assuming the common 8K block size - a best-effort
+          estimate, not read from DBA_SEGMENTS, to avoid needing elevated
+          privileges).
+        - Index metrics: row count / distinct keys / leaf blocks / last
+          analyzed from ALL_IND_STATISTICS. Oracle has no equivalent of
+          MSSQL's always-on per-index usage counters without enabling the
+          Diagnostics Pack, so seeks/scans/lookups/updates are simply
+          absent here.
+        - "Optimizer statistics": Oracle has no separate named stats-object
+          abstraction like MSSQL's sys.stats - the table stats *are* what
+          the optimizer uses - so this is a single synthetic entry per
+          table (rows/sample size/last analyzed from ALL_TAB_STATISTICS,
+          modification counter from ALL_TAB_MODIFICATIONS when available).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $capturedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $snapshots = @{}
+
+    try {
+        $query = @"
+SELECT TABLE_NAME, NUM_ROWS, BLOCKS, SAMPLE_SIZE, LAST_ANALYZED
+FROM ALL_TAB_STATISTICS
+WHERE OWNER = :owner AND PARTITION_NAME IS NULL AND SUBPARTITION_NAME IS NULL AND OBJECT_TYPE = 'TABLE'
+"@
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $query -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            $rowCount = if ($row['NUM_ROWS'] -is [DBNull]) { $null } else { [int64]$row['NUM_ROWS'] }
+            $blocks = if ($row['BLOCKS'] -is [DBNull]) { $null } else { [int64]$row['BLOCKS'] }
+            $sampleSize = if ($row['SAMPLE_SIZE'] -is [DBNull]) { $null } else { [int64]$row['SAMPLE_SIZE'] }
+            $lastAnalyzed = if ($row['LAST_ANALYZED'] -is [DBNull]) { $null } else { ([datetime]$row['LAST_ANALYZED']).ToUniversalTime().ToString('o') }
+
+            $snapshots[$key] = [ordered]@{
+                capturedAt = $capturedAt
+                rowCount   = $rowCount
+                reservedKB = if ($null -eq $blocks) { $null } else { $blocks * 8 }
+                dataKB     = $null
+                indexKB    = $null
+                indexes    = @()
+                statistics = @(
+                    [ordered]@{
+                        name                = $row['TABLE_NAME']
+                        rows                = $rowCount
+                        rowsSampled         = $sampleSize
+                        steps               = $null
+                        modificationCounter = $null
+                        lastUpdated         = $lastAnalyzed
+                    }
+                )
+            }
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_STATISTICS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+    }
+
+    try {
+        $modQuery = "SELECT TABLE_NAME, INSERTS, UPDATES, DELETES FROM ALL_TAB_MODIFICATIONS WHERE TABLE_OWNER = :owner"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $modQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $snapshots.ContainsKey($key)) { continue }
+            $inserts = if ($row['INSERTS'] -is [DBNull]) { 0 } else { [int64]$row['INSERTS'] }
+            $updates = if ($row['UPDATES'] -is [DBNull]) { 0 } else { [int64]$row['UPDATES'] }
+            $deletes = if ($row['DELETES'] -is [DBNull]) { 0 } else { [int64]$row['DELETES'] }
+            $snapshots[$key]['statistics'][0]['modificationCounter'] = $inserts + $updates + $deletes
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_MODIFICATIONS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+    }
+
+    try {
+        $indexQuery = @"
+SELECT INDEX_NAME, TABLE_NAME, NUM_ROWS, DISTINCT_KEYS, LEAF_BLOCKS, LAST_ANALYZED
+FROM ALL_IND_STATISTICS
+WHERE TABLE_OWNER = :owner AND PARTITION_NAME IS NULL AND SUBPARTITION_NAME IS NULL
+"@
+        $indexesByTable = @{}
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $indexQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $indexesByTable.ContainsKey($key)) { $indexesByTable[$key] = [System.Collections.Generic.List[object]]::new() }
+            $indexesByTable[$key].Add([ordered]@{
+                    name         = $row['INDEX_NAME']
+                    rowCount     = if ($row['NUM_ROWS'] -is [DBNull]) { $null } else { [int64]$row['NUM_ROWS'] }
+                    distinctKeys = if ($row['DISTINCT_KEYS'] -is [DBNull]) { $null } else { [int64]$row['DISTINCT_KEYS'] }
+                    leafBlocks   = if ($row['LEAF_BLOCKS'] -is [DBNull]) { $null } else { [int64]$row['LEAF_BLOCKS'] }
+                    lastAnalyzed = if ($row['LAST_ANALYZED'] -is [DBNull]) { $null } else { ([datetime]$row['LAST_ANALYZED']).ToUniversalTime().ToString('o') }
+                })
+        }
+        foreach ($key in $indexesByTable.Keys) {
+            if ($snapshots.ContainsKey($key)) { $snapshots[$key]['indexes'] = @($indexesByTable[$key]) }
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_IND_STATISTICS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+    }
+
+    return $snapshots
+}
+
 function Export-SyncSqlOracleServer {
     <#
         Orchestrates a full extraction of one Oracle server entry into
@@ -263,7 +377,8 @@ function Export-SyncSqlOracleServer {
         [Parameter(Mandatory)]$Filters,
         [Parameter(Mandatory)][string[]]$AllowedObjectTypes,
         [Parameter(Mandatory)][string]$StagingRoot,
-        [Parameter(Mandatory)][string]$DriverDllPath
+        [Parameter(Mandatory)][string]$DriverDllPath,
+        [string]$MetricsRoot
     )
 
     $serverName  = $Server.name
@@ -304,6 +419,7 @@ function Export-SyncSqlOracleServer {
         # for that owner - both degrade to an empty index on failure.
         $grantsByOwner = @{}
         $columnListByOwner = @{}
+        $metricsByOwner = @{}
 
         foreach ($configType in $script:SyncSqlOracleObjectTypeMap.Keys) {
             if ($AllowedObjectTypes -notcontains $configType) { continue }
@@ -316,6 +432,9 @@ function Export-SyncSqlOracleServer {
                 }
                 if ($oracleType -in @('TABLE', 'VIEW') -and -not $columnListByOwner.ContainsKey($owner)) {
                     $columnListByOwner[$owner] = Get-SyncSqlOracleColumnListIndex -Connection $connection -Owner $owner -ServerName $serverName
+                }
+                if ($MetricsRoot -and $oracleType -eq 'TABLE' -and -not $metricsByOwner.ContainsKey($owner)) {
+                    $metricsByOwner[$owner] = Get-SyncSqlOracleMetricsSnapshot -Connection $connection -Owner $owner -ServerName $serverName
                 }
 
                 $objectNames = Get-SyncSqlOracleObjectList -Connection $connection -Owner $owner -OracleObjectType $oracleType
@@ -339,6 +458,12 @@ function Export-SyncSqlOracleServer {
                     New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $serviceName `
                         -SchemaName $owner -ObjectType $configType -ObjectName $objectName -Definition $definition | Out-Null
                     $fileCount++
+
+                    if ($MetricsRoot -and $oracleType -eq 'TABLE' -and $metricsByOwner.ContainsKey($owner) -and $metricsByOwner[$owner].ContainsKey($key)) {
+                        New-SyncSqlMetricsSnapshotFile -MetricsRoot $MetricsRoot -ServerName $serverName -DatabaseName $serviceName `
+                            -SchemaName $owner -ObjectType $configType -ObjectName $objectName `
+                            -Snapshot $metricsByOwner[$owner][$key] | Out-Null
+                    }
                 }
             }
         }
@@ -381,5 +506,6 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlOracleDatabaseLinks',
     'Get-SyncSqlOracleGrantsIndex',
     'Get-SyncSqlOracleColumnListIndex',
+    'Get-SyncSqlOracleMetricsSnapshot',
     'Export-SyncSqlOracleServer'
 )

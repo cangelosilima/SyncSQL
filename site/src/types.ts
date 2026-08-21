@@ -21,6 +21,44 @@ export interface CatalogSection {
   content: string
 }
 
+export interface CatalogIndexMetric {
+  name: string
+  /** MSSQL: sys.dm_db_index_physical_stats / sys.dm_db_index_usage_stats. Null/absent when not available (e.g. Oracle). */
+  fragmentationPct?: number | null
+  pageCount?: number | null
+  seeks?: number | null
+  scans?: number | null
+  lookups?: number | null
+  updates?: number | null
+  /** Oracle: ALL_IND_STATISTICS. Null/absent when not available (e.g. MSSQL). */
+  rowCount?: number | null
+  distinctKeys?: number | null
+  leafBlocks?: number | null
+  lastAnalyzed?: string | null
+}
+
+/** The statistics actually consulted by the query optimizer for cardinality estimation - not the CREATE STATISTICS object definition. */
+export interface CatalogStatMetric {
+  name: string
+  rows: number | null
+  rowsSampled: number | null
+  /** Histogram step count (MSSQL only; null for Oracle). */
+  steps: number | null
+  modificationCounter: number | null
+  lastUpdated: string | null
+}
+
+/** One run's volatile operational snapshot for a table - row counts, index metrics, optimizer statistics. Never diffed against the object's own DDL; see node.metrics. */
+export interface CatalogMetricSnapshot {
+  capturedAt: string
+  rowCount: number | null
+  reservedKB: number | null
+  dataKB: number | null
+  indexKB: number | null
+  indexes: CatalogIndexMetric[]
+  statistics: CatalogStatMetric[]
+}
+
 export interface CatalogObjectVersion {
   sha: string
   date: string
@@ -46,6 +84,8 @@ export interface CatalogNode {
   changeCount: number
   lastChangedAt: string | null
   history: CatalogObjectVersion[]
+  /** Volatile operational history (volume, index, optimizer statistics) - oldest first, capped by the extraction pipeline's retention window. Empty for non-table objects or when unavailable. */
+  metrics: CatalogMetricSnapshot[]
 }
 
 export interface CatalogEdge {

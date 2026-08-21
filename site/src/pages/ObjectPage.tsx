@@ -4,6 +4,7 @@ import { useCatalog } from '../lib/CatalogContext'
 import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
 import LineageGraph from '../components/LineageGraph'
+import MetricsPanels from '../components/MetricsPanels'
 import { getEdgeColumns } from '../lib/neighborhood'
 import type { CatalogObjectVersion } from '../types'
 
@@ -91,6 +92,17 @@ export default function ObjectPage() {
             <CodeBlock code={section.content} />
           </details>
         ))}
+
+      {node.metrics.length > 0 && (
+        <>
+          <h2>Metrics</h2>
+          <p className="muted overview-panel-hint">
+            Volume, index and optimizer-statistics history mined at extraction time - kept separate from this
+            object&apos;s own version history since it changes on every run.
+          </p>
+          <MetricsPanels metrics={node.metrics} />
+        </>
+      )}
 
       {node.grants.length > 0 && (
         <>

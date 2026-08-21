@@ -64,6 +64,15 @@
 .PARAMETER MaxCoChangeCommitSize
     Commits touching more files than this are excluded from co-change
     pair counting.
+
+.PARAMETER MetricsRoot
+    Root of the accumulating metrics history tree (Update-MetricsHistory.ps1's
+    -HistoryRoot - one JSON array file per table, at the same relative
+    path/id as that table's own extracted file). When supplied, each
+    matching node gets that array attached as node.metrics (volume, index
+    fragmentation/usage, optimizer statistics over time). Omit to skip -
+    node.metrics is simply left empty, same "degrade rather than fail"
+    posture as the rest of this script.
 #>
 [CmdletBinding()]
 param(
@@ -74,7 +83,8 @@ param(
     [int]$HistoryLimit = 250,
     [int]$MaxVersionsPerObject = 15,
     [int]$MaxHistoryContentCalls = 1500,
-    [int]$MaxCoChangeCommitSize = 40
+    [int]$MaxCoChangeCommitSize = 40,
+    [string]$MetricsRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -270,6 +280,7 @@ foreach ($file in $files) {
         grants        = @($parsed.Grants)
         sections      = $parsed.Sections
         sizeBytes     = [Text.Encoding]::UTF8.GetByteCount($parsed.Ddl)
+        metrics       = @()
     }
     $nodes.Add($node)
 
@@ -433,6 +444,21 @@ foreach ($node in $nodes) {
     $node['changeCount'] = 0
     $node['lastChangedAt'] = $null
     $node['history'] = @()
+
+    if ($MetricsRoot) {
+        $metricsPath = Join-Path $MetricsRoot "$($node.id).json"
+        if (Test-Path -LiteralPath $metricsPath) {
+            try {
+                $raw = Get-Content -LiteralPath $metricsPath -Raw
+                if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                    $node['metrics'] = @(ConvertFrom-Json -InputObject $raw)
+                }
+            }
+            catch {
+                Write-SyncSqlLog "Metrics history at '$metricsPath' could not be parsed (leaving node.metrics empty): $($_.Exception.Message)" -Level WARN
+            }
+        }
+    }
 }
 
 $recentChanges = @()

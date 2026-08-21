@@ -1,9 +1,10 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Prepares everything Export-DatabaseObjects.ps1 needs: the SqlServer and
-    powershell-yaml PowerShell modules, and the Oracle.ManagedDataAccess.Core
-    managed ADO.NET driver (no native Oracle client required).
+    Prepares everything Export-DatabaseObjects.ps1 needs: the SqlServer
+    PowerShell module and the Oracle.ManagedDataAccess.Core managed ADO.NET
+    driver (no native Oracle client required). Config parsing uses JSON
+    (built into PowerShell 7+), so no separate module is needed for that.
 
 .DESCRIPTION
     Everything is saved under -ModulesCacheDir rather than "installed", so
@@ -89,7 +90,6 @@ function Install-SyncSqlOracleDriver {
     Write-Host "[bootstrap] Oracle managed driver $Version ready under $oracleDir"
 }
 
-Install-SyncSqlPSGalleryModule -Name 'powershell-yaml'
 Install-SyncSqlPSGalleryModule -Name 'SqlServer'
 Install-SyncSqlOracleDriver -Version $OracleDriverVersion
 

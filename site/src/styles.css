@@ -689,6 +689,130 @@ a {
   white-space: nowrap;
 }
 
+/* Metrics (volume/index/optimizer statistics trend charts) */
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1rem;
+  margin: 0.75rem 0 1.5rem;
+}
+
+.metrics-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 2px;
+  padding: 0.85rem 1rem;
+}
+
+.metrics-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.metrics-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.metrics-stat-row strong {
+  font-size: 1.1rem;
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-chart {
+  width: 100%;
+}
+
+.trend-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.trend-chart-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.trend-chart-line {
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-chart-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.trend-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.trend-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.trend-chart-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.trend-chart-range {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trend-chart-empty {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+}
+
+.metrics-index-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.metrics-index-tab {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+
+.metrics-index-tab.active {
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .center-screen {
   height: 100%;
   display: flex;

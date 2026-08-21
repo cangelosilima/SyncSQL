@@ -35,8 +35,10 @@ function Write-SyncSqlLog {
 
 function Import-SyncSqlConfig {
     <#
-        Loads and lightly validates the YAML inventory/filter config.
-        Requires the `powershell-yaml` module to already be importable.
+        Loads and lightly validates the JSON inventory/filter config.
+        -AsHashtable (PowerShell 7+) gives every object/array in the file
+        the same hashtable-with-.Contains()-and-indexer shape the rest of
+        this codebase expects, no external module required.
     #>
     [CmdletBinding()]
     param(
@@ -47,10 +49,8 @@ function Import-SyncSqlConfig {
         throw "Config file not found: $Path"
     }
 
-    Import-Module powershell-yaml -ErrorAction Stop
-
     $raw = Get-Content -LiteralPath $Path -Raw
-    $config = ConvertFrom-Yaml -Yaml $raw -Ordered
+    $config = ConvertFrom-Json -InputObject $raw -AsHashtable
 
     if (-not $config.servers -or $config.servers.Count -eq 0) {
         throw "Config file '$Path' does not define any servers."
@@ -212,6 +212,54 @@ function New-SyncSqlObjectFile {
     return $filePath
 }
 
+function New-SyncSqlMetricsSnapshotFile {
+    <#
+        Writes one run's volatile operational snapshot (row counts, index
+        fragmentation/usage, optimizer statistics properties - see
+        SyncSql.MsSql.psm1's Get-SyncSqlMsSqlMetricsSnapshot) for a single
+        object to $MetricsRoot, a staging area kept entirely separate from
+        -StagingRoot/the object's own .sql file.
+
+        Deliberately mirrors New-SyncSqlObjectFile's path scheme
+        (server/database/type/[schema/]object) so a metrics snapshot's
+        relative path (minus extension) is exactly the same id
+        Build-Catalog.ps1 assigns the corresponding catalog node - trivial
+        correlation, no separate id-mapping needed. Unlike the object's own
+        file, this is never committed as-is: Update-MetricsHistory.ps1
+        appends it into a growing history array kept outside the
+        git.pathPrefix tree that gets wiped/replaced every run, so the
+        object's own version history stays free of daily-changing noise
+        while the metrics history accumulates on its own.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$MetricsRoot,
+        [Parameter(Mandatory)][string]$ServerName,
+        [Parameter(Mandatory)][string]$DatabaseName,
+        [string]$SchemaName,
+        [Parameter(Mandatory)][string]$ObjectType,
+        [Parameter(Mandatory)][string]$ObjectName,
+        [Parameter(Mandatory)]$Snapshot
+    )
+
+    $segments = @(
+        $MetricsRoot,
+        (ConvertTo-SyncSqlSafeFileName $ServerName),
+        (ConvertTo-SyncSqlSafeFileName $DatabaseName),
+        (ConvertTo-SyncSqlSafeFileName $ObjectType)
+    )
+    if (-not [string]::IsNullOrWhiteSpace($SchemaName)) {
+        $segments += (ConvertTo-SyncSqlSafeFileName $SchemaName)
+    }
+
+    $dir = Join-Path @segments
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+
+    $filePath = Join-Path $dir ("{0}.json" -f (ConvertTo-SyncSqlSafeFileName $ObjectName))
+    $Snapshot | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $filePath -Encoding utf8 -NoNewline
+    return $filePath
+}
+
 function Add-SyncSqlSectionBlock {
     <#
         Appends a "-- === Title ===" marked section to an object's definition
@@ -244,5 +292,6 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlAllowedObjectTypes',
     'ConvertTo-SyncSqlSafeFileName',
     'New-SyncSqlObjectFile',
-    'Add-SyncSqlSectionBlock'
+    'Add-SyncSqlSectionBlock',
+    'New-SyncSqlMetricsSnapshotFile'
 )

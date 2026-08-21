@@ -7,7 +7,7 @@
     repository, one file per object.
 
 .DESCRIPTION
-    Driven entirely by a YAML config file (see config/servers.example.yml)
+    Driven entirely by a JSON config file (see config/servers.example.json)
     so the same script works unmodified across environments: which
     servers/databases/schemas/objects to touch is all regex-filterable
     configuration, not code. Credentials are never stored in the config;
@@ -15,7 +15,7 @@
     "<credentialsVariablePrefix>_DB_USER" / "..._DB_PASSWORD".
 
 .PARAMETER ConfigPath
-    Path to the YAML config file. Defaults to config/servers.yml next to
+    Path to the JSON config file. Defaults to config/servers.json next to
     the repository root.
 
 .PARAMETER StagingRoot
@@ -23,8 +23,8 @@
     the git checkout. Defaults to a fresh temp directory.
 
 .PARAMETER ModulesCacheDir
-    Directory populated by Bootstrap-Dependencies.ps1 with the SqlServer /
-    powershell-yaml PowerShell modules and the Oracle managed driver.
+    Directory populated by Bootstrap-Dependencies.ps1 with the SqlServer
+    PowerShell module and the Oracle managed driver.
 
 .PARAMETER ServerNameInclude / ServerNameExclude
     Optional regex overrides for which configured servers actually run in
@@ -58,10 +58,17 @@
     CI artifact. This controls both how many commits are cloned to make
     that possible and how many of them Build-Catalog.ps1 mines for its
     change-history/heatmap/point-in-time features.
+
+.PARAMETER MetricsHistoryLimit
+    Maximum number of daily metrics snapshots (row counts, index
+    fragmentation/usage, optimizer statistics - see
+    src/Update-MetricsHistory.ps1) retained per table. This data changes
+    every run by nature, so it is deliberately kept out of each object's
+    own versioned file - see "Volatile metrics" in the README.
 #>
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config/servers.yml'),
+    [string]$ConfigPath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config/servers.json'),
     [string]$StagingRoot = (Join-Path ([IO.Path]::GetTempPath()) "syncsql-staging-$([Guid]::NewGuid())"),
     [string]$ModulesCacheDir = (Join-Path (Split-Path $PSScriptRoot -Parent) '.pwsh-modules'),
     [string[]]$ServerNameInclude,
@@ -69,7 +76,8 @@ param(
     [string]$PushToken = $(if ($env:CI_JOB_Maintainer_Token) { $env:CI_JOB_Maintainer_Token } else { $env:GIT_PUSH_TOKEN }),
     [switch]$SkipGit,
     [string]$DotenvPath,
-    [int]$HistoryLimit = 250
+    [int]$HistoryLimit = 250,
+    [int]$MetricsHistoryLimit = 90
 )
 
 $ErrorActionPreference = 'Stop'
@@ -112,6 +120,14 @@ if ($ServerNameExclude) { $serverSelection['exclude'] = $ServerNameExclude }
 New-Item -ItemType Directory -Path $StagingRoot -Force | Out-Null
 Write-SyncSqlLog "Staging extracted objects under $StagingRoot"
 
+# Separate from $StagingRoot on purpose: this only ever holds *this run's*
+# volatile metrics snapshots (row counts, index fragmentation/usage,
+# optimizer statistics), never committed as-is. Update-MetricsHistory.ps1
+# folds it into an accumulating history tree outside git.pathPrefix - see
+# the -MetricsHistoryLimit hook below.
+$metricsRoot = Join-Path ([IO.Path]::GetTempPath()) "syncsql-metrics-$([Guid]::NewGuid())"
+New-Item -ItemType Directory -Path $metricsRoot -Force | Out-Null
+
 $oracleDriverDll = Find-SyncSqlOracleDriverDll -CacheDir (Join-Path $ModulesCacheDir 'oracle')
 
 $summaryLines = [System.Collections.Generic.List[string]]::new()
@@ -150,14 +166,15 @@ foreach ($server in $config.servers) {
         switch ($server.type) {
             'mssql' {
                 $fileCount = Export-SyncSqlMsSqlServer -Server $server -Username $username -Password $password `
-                    -Filters $filters -AllowedObjectTypes $allowedObjectTypes -StagingRoot $StagingRoot
+                    -Filters $filters -AllowedObjectTypes $allowedObjectTypes -StagingRoot $StagingRoot -MetricsRoot $metricsRoot
             }
             'oracle' {
                 if (-not $oracleDriverDll) {
                     throw "Oracle managed driver was not found under '$ModulesCacheDir/oracle'. Run Bootstrap-Dependencies.ps1 first."
                 }
                 $fileCount = Export-SyncSqlOracleServer -Server $server -Username $username -Password $password `
-                    -Filters $filters -AllowedObjectTypes $allowedObjectTypes -StagingRoot $StagingRoot -DriverDllPath $oracleDriverDll
+                    -Filters $filters -AllowedObjectTypes $allowedObjectTypes -StagingRoot $StagingRoot -DriverDllPath $oracleDriverDll `
+                    -MetricsRoot $metricsRoot
             }
         }
         $totalFiles += $fileCount
@@ -174,6 +191,7 @@ Write-SyncSqlLog "Extraction complete: $totalFiles object file(s) across $($conf
 
 if ($SkipGit) {
     Write-SyncSqlLog "SkipGit set; leaving extracted files at $StagingRoot"
+    Write-SyncSqlLog "SkipGit set; leaving this run's metrics snapshots at $metricsRoot (no history tree to accumulate them into without a git checkout)"
 }
 else {
     if ([string]::IsNullOrWhiteSpace($PushToken)) {
@@ -182,24 +200,37 @@ else {
 
     $gitWorkDir = Join-Path ([IO.Path]::GetTempPath()) "syncsql-repo-$([Guid]::NewGuid())"
     $buildCatalogScript = Join-Path $PSScriptRoot 'Build-Catalog.ps1'
+    $updateMetricsScript = Join-Path $PSScriptRoot 'Update-MetricsHistory.ps1'
     $catalogHistoryLimit = $HistoryLimit
+    $metricsHistoryLimitCopy = $MetricsHistoryLimit
+    $metricsRootCopy = $metricsRoot
+    $metricsDirName = 'metrics'
     $catalogHook = {
         param($WorkDir, $PathPrefix)
+
+        # Kept outside $PathPrefix on purpose - Publish-SyncSqlToGit only
+        # wipes/replaces $PathPrefix, so this tree accumulates across runs
+        # instead of being reset to just this run's snapshot every time.
+        $metricsHistoryRoot = Join-Path $WorkDir $metricsDirName
+        Write-SyncSqlLog "Updating metrics history ($metricsHistoryLimitCopy-snapshot retention) -> $metricsHistoryRoot"
+        & $updateMetricsScript -SnapshotRoot $metricsRootCopy -HistoryRoot $metricsHistoryRoot -HistoryLimit $metricsHistoryLimitCopy
+
         $catalogOutputPath = Join-Path $WorkDir $PathPrefix 'catalog.json'
         Write-SyncSqlLog "Building catalog.json ($catalogHistoryLimit-commit history window) -> $catalogOutputPath"
         & $buildCatalogScript -ObjectsRoot (Join-Path $WorkDir $PathPrefix) -OutputPath $catalogOutputPath `
-            -RepoRoot $WorkDir -PathPrefix $PathPrefix -HistoryLimit $catalogHistoryLimit
+            -RepoRoot $WorkDir -PathPrefix $PathPrefix -HistoryLimit $catalogHistoryLimit -MetricsRoot $metricsHistoryRoot
     }.GetNewClosure()
 
     try {
         $published = Publish-SyncSqlToGit -GitConfig $config.git -StagingRoot $StagingRoot -Token $PushToken `
             -WorkDir $gitWorkDir -Summary ($summaryLines -join "`n") -CloneDepth $HistoryLimit -PostSyncHook $catalogHook
         if ($published) {
-            Write-SyncSqlLog "Published extracted objects and catalog.json."
+            Write-SyncSqlLog "Published extracted objects, metrics history and catalog.json."
         }
     }
     finally {
         Remove-Item -LiteralPath $gitWorkDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $metricsRoot -Recurse -Force -ErrorAction SilentlyContinue
         if (-not $stagingRootExplicit) {
             Remove-Item -LiteralPath $StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
         }

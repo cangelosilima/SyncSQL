@@ -1,13 +1,16 @@
 # SyncSQL
 
 Scheduled extraction of database objects (stored procedures, views,
-functions, triggers, tables — with foreign keys, check constraints,
-indexes and statistics attached — schemas, synonyms, linked servers /
-database links, and best-effort replication topology) from a fleet of
-**MSSQL** and **Oracle** servers into this repository — one file per
-object, one commit per run, diffable like any other source code —
-followed by a structure/lineage/history analysis published as a browsable
-**React site on GitLab Pages**.
+functions, triggers, tables — with foreign keys, check constraints and
+indexes attached — schemas, synonyms, linked servers / database links, and
+best-effort replication topology) from a fleet of **MSSQL** and **Oracle**
+servers into this repository — one file per object, one commit per run,
+diffable like any other source code — followed by a structure/lineage/
+history analysis published as a browsable **React site on GitLab Pages**.
+Volatile, daily-changing operational data (row counts, index
+fragmentation/usage, the statistics the query optimizer actually uses) is
+tracked separately as a graphable time series rather than bloating that
+version history — see "Volatile metrics" below.
 
 Built as a GitLab CI scheduled pipeline driven entirely by PowerShell
 (pwsh) for the extraction itself, so the same script runs unmodified on any
@@ -17,22 +20,27 @@ OS-specific tooling and no native Oracle client install required.
 ## How it works
 
 ```
-config/servers.yml  --defines-->  which servers/databases/schemas/objects
+config/servers.json --defines-->  which servers/databases/schemas/objects
         |
         v
-Bootstrap-Dependencies.ps1   (SqlServer + powershell-yaml modules,
-                               Oracle.ManagedDataAccess.Core driver)
+Bootstrap-Dependencies.ps1   (SqlServer module, Oracle.ManagedDataAccess.Core
+                               driver - config parsing is plain JSON, built
+                               into PowerShell 7+, no extra module needed)
         |
         v
 Export-DatabaseObjects.ps1                              [CI stage: sync]
         |
         +--> SyncSql.MsSql.psm1    (Invoke-Sqlcmd against sys.sql_modules,
-        |                           sys.tables + FKs/checks/indexes/stats,
+        |                           sys.tables + FKs/checks/indexes, grants,
         |                           sys.servers, sys.synonyms, replication
         |                           publications, optionally
-        |                           sys.extended_properties)
+        |                           sys.extended_properties - PLUS a
+        |                           volatile metrics snapshot per table,
+        |                           written to a separate -MetricsRoot,
+        |                           never into the object's own file)
         +--> SyncSql.Oracle.psm1   (DBMS_METADATA.GET_DDL via the managed
-        |                           ADO.NET driver, no Instant Client)
+        |                           ADO.NET driver, no Instant Client -
+        |                           same -MetricsRoot snapshot, reduced scope)
         |
         v
 extracted-objects/<server>/<database>/<objectType>/[<schema>/]<object>.sql
@@ -41,18 +49,25 @@ extracted-objects/<server>/<database>/<objectType>/[<schema>/]<object>.sql
 SyncSql.Git.psm1  (still inside the sync stage)
   clone this project (deep enough to mine, see -HistoryLimit), replace
   <pathPrefix>/ with the staged tree (dropped objects show up as
-  deletions), THEN run Build-Catalog.ps1 against that same checkout -
-  structure, best-effort lineage, and history/heatmap/point-in-time mined
-  from this project's own git log - writing <pathPrefix>/catalog.json
-  right alongside the objects it describes, so ONE commit carries both and
-  catalog.json is versioned (diffable, browsable at any past commit) the
-  same way the objects themselves are. Commit, push.
+  deletions), THEN inside that same checkout:
+    1. Update-MetricsHistory.ps1 folds this run's metrics snapshots into
+       <repo>/metrics/ - a tree OUTSIDE <pathPrefix>, so it accumulates
+       across runs (growing history, -MetricsHistoryLimit retention)
+       instead of being wiped/replaced like the object tree is.
+    2. Build-Catalog.ps1 builds structure, best-effort lineage,
+       history/heatmap/point-in-time mined from this project's own git
+       log, AND reads that same metrics/ tree to attach it per node -
+       writing <pathPrefix>/catalog.json right alongside the objects it
+       describes.
+  ONE commit carries the extracted objects, catalog.json and the updated
+  metrics/ tree together. Commit, push.
         |
         v
 site/ (React + Vite)                                    [CI stage: pages]
   fetches the branch tip (to see the commit sync just pushed), reads
-  <pathPrefix>/catalog.json straight out of that checkout, builds with it
-  copied into public/data/, publishes as a GitLab Pages site
+  <pathPrefix>/catalog.json straight out of that checkout (metrics history
+  is already folded in, node.metrics), builds with it copied into
+  public/data/, publishes as a GitLab Pages site
 ```
 
 Every extracted `.sql` file gets a small static header (server / database /
@@ -61,10 +76,10 @@ pipeline with no underlying database changes produces **zero diff**.
 
 ## Configuration
 
-Copy `config/servers.example.yml` to `config/servers.yml` and edit it.
+Copy `config/servers.example.json` to `config/servers.json` and edit it.
 Nothing in that file is secret: it lists server hostnames and the regex
-filters that decide what gets extracted. See the comments in the example
-file for the full schema; in short:
+filters that decide what gets extracted. See the field descriptions below
+for the full schema; in short:
 
 - `git`: where extracted objects get pushed. Left blank (the default),
   they're pushed back into **this same project** using the predefined
@@ -95,7 +110,7 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 | Variable                            | Purpose                                                                                                    |
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. |
-| `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.yml`                                                          |
+| `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`                                                          |
 
 This is only needed if `git.remoteUrl` is left blank (the default,
 self-repo target). If you point `git.remoteUrl` at a different project,
@@ -111,7 +126,7 @@ mined for the heatmap / co-change / point-in-time features baked into
 `.gitlab-ci.yml` defines three jobs across three stages:
 
 - **validate-config** (`validate`): runs on merge requests / pushes, just
-  checks that `config/servers.yml` (or the example file, if you haven't
+  checks that `config/servers.json` (or the example file, if you haven't
   added one yet) parses and satisfies the schema. No database or git
   credentials needed.
 - **sync-database-objects** (`sync`): the actual extraction, the only job
@@ -149,11 +164,12 @@ see "Theme" below):
 - **Object detail** — qualified name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), the DDL, structured panels for any Foreign Keys
-  / Check Constraints / Indexes / Statistics sections, an **Access** panel
-  (see "Grant mapping" below), a change-history list with a point-in-time
-  viewer, and "depends on" / "used by" lineage lists annotated with
-  best-effort column tags (expandable past the first few) with an embedded
-  neighborhood graph.
+  / Check Constraints / Indexes sections, a **Metrics** panel of volume/
+  index/optimizer-statistics trend graphs for tables (see "Volatile
+  metrics" below), an **Access** panel (see "Grant mapping" below), a
+  change-history list with a point-in-time viewer, and "depends on" / "used
+  by" lineage lists annotated with best-effort column tags (expandable past
+  the first few) with an embedded neighborhood graph.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
   `@xyflow/react` + `dagre` auto-layout, with two modes (tabs):
   - **Browse** — the object filter bar drives which objects are shown.
@@ -243,6 +259,64 @@ in a table and in the graph. Both degrade to "no grants" rather than
 failing extraction when the underlying permissions view isn't accessible to
 the connecting account.
 
+### Volatile metrics
+
+Row counts, index fragmentation/usage, and the statistics the query
+optimizer actually consults for cardinality estimation all change on every
+run by nature - embedding them in an object's own extracted `.sql` file
+would turn "zero diff when nothing changed" into "diff every single run"
+for every table, which defeats the point of versioning the objects at all.
+So this data is tracked as its own accumulating time series instead,
+entirely separate from the object's version history:
+
+- `Get-SyncSqlMsSqlMetricsSnapshot` / `Get-SyncSqlOracleMetricsSnapshot`
+  capture one snapshot per table per run, written to a `-MetricsRoot`
+  staging area that is never mixed into the object's own `.sql` file:
+  - **Volume**: row count and reserved/data/index size in KB (MSSQL:
+    `sys.dm_db_partition_stats` + `sys.allocation_units`, the same
+    aggregation `sp_spaceused` uses; Oracle: `ALL_TAB_STATISTICS`, size
+    estimated as `BLOCKS * 8KB` rather than read from `DBA_SEGMENTS`, to
+    avoid needing elevated privileges).
+  - **Index metrics**: MSSQL gets fragmentation % and page count
+    (`sys.dm_db_index_physical_stats`, cheap `'LIMITED'` mode) plus
+    always-on usage counters - seeks/scans/lookups/updates
+    (`sys.dm_db_index_usage_stats`, which itself resets on service
+    restart, so this is inherently a point-in-time reading, not a durable
+    fact). Oracle gets row count/distinct keys/leaf blocks
+    (`ALL_IND_STATISTICS`) - it has no equivalent of MSSQL's always-on
+    per-index usage counters without enabling the Diagnostics Pack, so
+    seeks/scans/lookups/updates are simply absent for Oracle indexes.
+  - **Optimizer statistics** - the actual histogram/density summary the
+    query optimizer uses, not the `CREATE STATISTICS` object definition:
+    rows, rows sampled, histogram step count, modification counter (rows
+    changed since the last refresh) and last-updated time (MSSQL:
+    `sys.dm_db_stats_properties`; Oracle has no separate named
+    stats-object abstraction - the table stats *are* what the optimizer
+    uses, so this is a single synthetic entry per table, with the
+    modification counter summed from `ALL_TAB_MODIFICATIONS` when
+    available).
+- `Update-MetricsHistory.ps1` runs inside the same git checkout
+  `Build-Catalog.ps1` uses, but writes to `<repo>/metrics/` - a tree kept
+  entirely outside `config.git.pathPrefix`, so `Publish-SyncSqlToGit`'s
+  wipe-and-replace of the object tree never touches it. Each run appends
+  this run's snapshot to the existing history array per table and trims it
+  to `-MetricsHistoryLimit` (default 90, override via the
+  `METRICS_HISTORY_LIMIT` CI variable) - so the object's own file stays
+  diff-free while `metrics/` accumulates real history.
+- `Build-Catalog.ps1` reads that same `metrics/` tree and attaches it as
+  `node.metrics` in `catalog.json`, so the site never needs a second fetch.
+
+Every object's detail page shows this as a **Metrics** panel (row count,
+size, index fragmentation/usage, and optimizer-statistics graphs, plus the
+latest snapshot's statistics table) whenever a table has history to show;
+it's simply absent for objects with none. Every one of these queries
+degrades independently (with a warning) rather than failing extraction, the
+same posture as every other optional extraction step in this project.
+
+Tables dropped from the source database keep their existing metrics history
+file rather than being cleaned up - a minor storage cost, not a correctness
+issue.
+
 ### Column dependency tracking
 
 Tables and views get a full structural column list (name + data type),
@@ -310,26 +384,34 @@ with a real one (see below) to preview actual data.
 pwsh ./src/Bootstrap-Dependencies.ps1
 $env:SQLPROD01_DB_USER = '...'
 $env:SQLPROD01_DB_PASSWORD = '...'
-pwsh ./src/Export-DatabaseObjects.ps1 -ConfigPath ./config/servers.yml -SkipGit
+pwsh ./src/Export-DatabaseObjects.ps1 -ConfigPath ./config/servers.json -SkipGit
 ```
 
 `-SkipGit` leaves the extracted files under a temp staging directory
 (printed in the log) instead of publishing them - so no `catalog.json` is
 built in this mode either (there's no git checkout to write it into or
-mine history from). To build one for local preview, feed that staging
+mine history from), and this run's metrics snapshots (also printed in the
+log) are left in place rather than being folded into a `metrics/` history
+tree. To build a `catalog.json` for local preview, feed the object staging
 directory into
 `Build-Catalog.ps1 -ObjectsRoot <dir> -OutputPath ./site/public/data/catalog.json`
 (add `-RepoRoot`/`-PathPrefix` pointed at a real git checkout of your
-target repo to include history), then `npm run dev` inside `site/`.
+target repo to include history; add `-MetricsRoot <metrics-staging-dir>`
+to include that one run's metrics snapshot - real trend graphs need
+several runs' worth of history accumulated in a real `metrics/` tree, so
+a single local run only shows a single data point per chart), then
+`npm run dev` inside `site/`.
 
 ## Known limitations (v2)
 
 - MSSQL table DDL (columns, identity, defaults, primary key) is
   reconstructed from catalog views since SQL Server doesn't store table
   definitions as text the way it does for procedures/views. Foreign keys,
-  check constraints, non-PK indexes and statistics are captured too, but
-  as separate appended sections rather than folded into the `CREATE TABLE`
-  statement itself.
+  check constraints and non-PK indexes are captured too, but as separate
+  appended sections rather than folded into the `CREATE TABLE` statement
+  itself. (Statistics *objects* - `CREATE STATISTICS` definitions - are no
+  longer extracted as DDL at all; see "Volatile metrics" above for what
+  replaced them and why.)
 - MSSQL server-scoped DDL triggers are not extracted, only database-level
   DML/DDL triggers (covered by `sys.sql_modules`).
 - `sys.extended_properties` extraction (MSSQL) covers object- and
@@ -361,8 +443,16 @@ target repo to include history), then `npm run dev` inside `site/`.
   (`HISTORY_LIMIT`, default 250 commits) and only reconstruct individual
   objects' DDL, not a full historical catalog snapshot — see "History,
   heatmap and point-in-time" above.
+- Volatile metrics only cover **Tables** (not Views, which have no physical
+  storage/indexes of their own to measure) and only retain the last
+  `METRICS_HISTORY_LIMIT` snapshots (default 90) per table. Oracle's
+  version is reduced-scope versus MSSQL's - no index fragmentation or
+  usage counters (needs the Diagnostics Pack), and size is an 8KB-block
+  estimate rather than exact segment bytes. A table dropped from the
+  source database keeps its existing metrics history rather than being
+  cleaned up. See "Volatile metrics" above.
 
 Every optional/best-effort extraction step (extended properties, grants,
-full column lists, FKs, checks, indexes, statistics, replication) degrades
-independently: a failure on one is logged as a warning and the rest of
-that database's extraction proceeds normally.
+full column lists, volatile metrics, FKs, checks, indexes, replication)
+degrades independently: a failure on one is logged as a warning and the
+rest of that database's extraction proceeds normally.

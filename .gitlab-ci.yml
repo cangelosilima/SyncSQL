@@ -10,7 +10,7 @@
 #                                           push, hence a dedicated token.
 #   <PREFIX>_DB_USER / <PREFIX>_DB_PASSWORD
 #                                           One pair per server entry in
-#                                           config/servers.yml, where <PREFIX>
+#                                           config/servers.json, where <PREFIX>
 #                                           is that server's
 #                                           credentialsVariablePrefix
 #                                           (Protected, Masked).
@@ -26,7 +26,7 @@ stages:
 
 variables:
   MODULES_CACHE_DIR: "$CI_PROJECT_DIR/.pwsh-modules"
-  CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.yml"
+  CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.json"
   EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
   GIT_DEPTH: "1"
   # How many commits (touching config.git.pathPrefix) get mined for the
@@ -37,6 +37,12 @@ variables:
   # extracted objects themselves, so it's versioned right along with them
   # rather than living only as a separate CI artifact.
   HISTORY_LIMIT: "250"
+  # How many daily volume/index/optimizer-statistics snapshots are kept per
+  # table (metrics/ tree, outside git.pathPrefix - see Update-MetricsHistory.ps1
+  # and README's "Volatile metrics"). This data changes every run by
+  # nature, so it's tracked separately from each object's own version
+  # history rather than bloating it.
+  METRICS_HISTORY_LIMIT: "90"
 
 .sync_rules: &sync_rules
   - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -63,7 +69,7 @@ validate-config:
         $ErrorActionPreference = "Stop"
         $env:PSModulePath = "$env:MODULES_CACHE_DIR/Modules" + [IO.Path]::PathSeparator + $env:PSModulePath
         Import-Module ./src/modules/SyncSql.Common.psm1 -Force
-        $configPath = if (Test-Path "config/servers.yml") { "config/servers.yml" } else { "config/servers.example.yml" }
+        $configPath = if (Test-Path "config/servers.json") { "config/servers.json" } else { "config/servers.example.json" }
         $config = Import-SyncSqlConfig -Path $configPath
         Write-Host "OK: $($config.servers.Count) server(s) defined in $configPath"
       '
@@ -82,7 +88,7 @@ sync-database-objects:
   before_script:
     - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
   script:
-    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR" -DotenvPath "$CI_PROJECT_DIR/sync.env" -HistoryLimit "$HISTORY_LIMIT"
+    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR" -DotenvPath "$CI_PROJECT_DIR/sync.env" -HistoryLimit "$HISTORY_LIMIT" -MetricsHistoryLimit "$METRICS_HISTORY_LIMIT"
   artifacts:
     paths:
       - extracted-objects/

@@ -1,0 +1,94 @@
+{
+  "git": {
+    "remoteUrl": "",
+    "branch": "main",
+    "pathPrefix": "objects",
+    "commitUserName": "SyncSQL Bot",
+    "commitUserEmail": "syncsql-bot@example.com",
+    "commitMessage": "chore(sync): update database objects"
+  },
+  "defaults": {
+    "databases": {
+      "include": [".*"],
+      "exclude": ["^tempdb$", "^model$", "^msdb$"]
+    },
+    "schemas": {
+      "include": [".*"],
+      "exclude": ["^INFORMATION_SCHEMA$", "^sys$"]
+    },
+    "objectNames": {
+      "include": [".*"],
+      "exclude": []
+    },
+    "objectTypes": [
+      "Schemas",
+      "Tables",
+      "Views",
+      "StoredProcedures",
+      "Functions",
+      "Triggers",
+      "Synonyms",
+      "LinkedServers"
+    ]
+  },
+  "serverSelection": {
+    "include": [".*"],
+    "exclude": []
+  },
+  "servers": [
+    {
+      "name": "SQLPROD01",
+      "type": "mssql",
+      "host": "sqlprod01.example.com",
+      "port": 1433,
+      "encrypt": true,
+      "trustServerCertificate": false,
+      "credentialsVariablePrefix": "SQLPROD01",
+      "databases": {
+        "include": [".*"],
+        "exclude": ["^tempdb$", "^model$", "^msdb$", "^ReportServerTempDB$"]
+      }
+    },
+    {
+      "name": "SQLPROD02_FINANCE_ONLY",
+      "type": "mssql",
+      "host": "sqlprod02.example.com",
+      "port": 1433,
+      "credentialsVariablePrefix": "SQLPROD02",
+      "databases": {
+        "include": ["^Finance$"]
+      },
+      "schemas": {
+        "include": ["^dbo$", "^fin_.*$"]
+      },
+      "objectTypes": ["Tables", "Views", "StoredProcedures", "Triggers"]
+    },
+    {
+      "name": "ORAPROD01",
+      "type": "oracle",
+      "host": "oraprod01.example.com",
+      "port": 1521,
+      "serviceName": "ORCLPDB1",
+      "credentialsVariablePrefix": "ORAPROD01",
+      "schemas": {
+        "include": ["^APP_.*$"],
+        "exclude": ["^SYS$", "^SYSTEM$", "^OUTLN$"]
+      },
+      "objectTypes": [
+        "Tables",
+        "Views",
+        "Procedures",
+        "Functions",
+        "Packages",
+        "PackageBodies",
+        "Triggers",
+        "Synonyms",
+        "DatabaseLinks"
+      ],
+      "objectNames": {
+        "include": [".*"],
+        "exclude": ["_BAK$", "^TMP_"]
+      }
+    }
+  ]
+}
