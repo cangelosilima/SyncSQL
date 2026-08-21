@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Appends this run's freshly-captured metrics snapshots (row counts,
@@ -59,7 +59,7 @@ New-Item -ItemType Directory -Path $HistoryRoot -Force | Out-Null
 
 $updated = 0
 foreach ($file in $files) {
-    $relative = [IO.Path]::GetRelativePath($SnapshotRoot, $file.FullName)
+    $relative = Get-SyncSqlRelativePath -Root $SnapshotRoot -FullPath $file.FullName
     $historyPath = Join-Path $HistoryRoot $relative
 
     $existing = @()
@@ -91,7 +91,14 @@ foreach ($file in $files) {
 
     $historyDir = Split-Path -Parent $historyPath
     New-Item -ItemType Directory -Path $historyDir -Force | Out-Null
-    $combined | ConvertTo-Json -Depth 10 -Compress -AsArray | Set-Content -LiteralPath $historyPath -Encoding utf8 -NoNewline
+
+    # ConvertTo-Json collapses a 0- or 1-element array back to a scalar/empty
+    # object unless told otherwise, and -AsArray (the fix) is PS6.2+ only -
+    # so build the JSON array manually, which is array-shaped regardless of
+    # $combined.Count on every PowerShell version.
+    $elements = @($combined | ForEach-Object { $_ | ConvertTo-Json -Depth 10 -Compress })
+    $json = '[' + ($elements -join ',') + ']'
+    Set-SyncSqlUtf8NoBomContent -Path $historyPath -Content $json
     $updated++
 }
 

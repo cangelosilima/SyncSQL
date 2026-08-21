@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Walks a tree produced by Export-DatabaseObjects.ps1 and builds a
@@ -233,7 +233,7 @@ $bareIndexDb = @{}      # "server::database::name"        -> [nodeId, ...]
 $bareIndexServer = @{}  # "server::name"                  -> [nodeId, ...]
 
 foreach ($file in $files) {
-    $relative = [IO.Path]::GetRelativePath($ObjectsRoot, $file.FullName) -replace '\\', '/'
+    $relative = Get-SyncSqlRelativePath -Root $ObjectsRoot -FullPath $file.FullName
     $segments = $relative -split '/'
     if ($segments.Count -lt 4) {
         Write-SyncSqlLog "Skipping unexpected path shape: $relative" -Level WARN
@@ -579,6 +579,7 @@ $catalog = [ordered]@{
 
 $outputDir = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-$catalog | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $OutputPath -Encoding utf8
+$catalogJson = $catalog | ConvertTo-Json -Depth 10 -Compress
+Set-SyncSqlUtf8NoBomContent -Path $OutputPath -Content $catalogJson
 
 Write-SyncSqlLog "Wrote catalog to $OutputPath"

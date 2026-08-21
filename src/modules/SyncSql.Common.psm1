@@ -1,8 +1,16 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
     SyncSql.Common.psm1
     Shared helpers: config loading, regex include/exclude filtering,
     filesystem-safe naming, static (non-timestamped) file headers, logging.
+
+    Targets Windows PowerShell 5.1 (.NET Framework) as the floor, so it
+    deliberately avoids PowerShell 6/7-only surface: no ??/?:/??=
+    operators, no ConvertFrom-Json -AsHashtable, no ConvertTo-Json
+    -AsArray, no [IO.Path]::GetRelativePath (added in .NET Core, absent
+    from .NET Framework), no Join-Path calls with more than one ChildPath
+    segment (-AdditionalChildPath is PS6+). Everything still runs fine on
+    PowerShell 7 too - this is a floor, not a ceiling.
 #>
 
 Set-StrictMode -Version Latest
@@ -33,12 +41,48 @@ function Write-SyncSqlLog {
     }
 }
 
+function ConvertTo-SyncSqlOrderedHashtable {
+    <#
+        Recursively converts the PSCustomObject/array tree ConvertFrom-Json
+        produces into ordered hashtables/arrays instead - the PS5.1-safe
+        equivalent of ConvertFrom-Json -AsHashtable (a PowerShell 6+ only
+        switch). Gives every level of the config the same
+        .Contains()/indexer shape the rest of this codebase expects, on
+        every supported PowerShell version.
+    #>
+    [CmdletBinding()]
+    param([Parameter(ValueFromPipeline)]$InputObject)
+
+    process {
+        if ($null -eq $InputObject) { return $null }
+
+        if ($InputObject -is [string]) { return $InputObject }
+
+        if ($InputObject -is [System.Collections.IEnumerable]) {
+            $list = [System.Collections.Generic.List[object]]::new()
+            foreach ($item in $InputObject) { $list.Add((ConvertTo-SyncSqlOrderedHashtable -InputObject $item)) }
+            return $list.ToArray()
+        }
+
+        if ($InputObject -is [System.Management.Automation.PSCustomObject]) {
+            $hash = [ordered]@{}
+            foreach ($prop in $InputObject.PSObject.Properties) {
+                $hash[$prop.Name] = ConvertTo-SyncSqlOrderedHashtable -InputObject $prop.Value
+            }
+            return $hash
+        }
+
+        return $InputObject
+    }
+}
+
 function Import-SyncSqlConfig {
     <#
         Loads and lightly validates the JSON inventory/filter config.
-        -AsHashtable (PowerShell 7+) gives every object/array in the file
-        the same hashtable-with-.Contains()-and-indexer shape the rest of
-        this codebase expects, no external module required.
+        ConvertTo-SyncSqlOrderedHashtable gives every object/array in the
+        file the same hashtable-with-.Contains()-and-indexer shape the
+        rest of this codebase expects, no external module required and no
+        PowerShell-6+-only -AsHashtable switch.
     #>
     [CmdletBinding()]
     param(
@@ -50,7 +94,7 @@ function Import-SyncSqlConfig {
     }
 
     $raw = Get-Content -LiteralPath $Path -Raw
-    $config = ConvertFrom-Json -InputObject $raw -AsHashtable
+    $config = ConvertTo-SyncSqlOrderedHashtable -InputObject (ConvertFrom-Json -InputObject $raw)
 
     if (-not $config.servers -or $config.servers.Count -eq 0) {
         throw "Config file '$Path' does not define any servers."
@@ -148,6 +192,56 @@ function Get-SyncSqlAllowedObjectTypes {
     return @()
 }
 
+function Get-SyncSqlRelativePath {
+    <#
+        PS5.1-safe replacement for [IO.Path]::GetRelativePath (added in
+        .NET Core; not present in the .NET Framework Windows PowerShell
+        5.1 runs on). $FullPath is expected to live under $Root; the
+        result uses forward slashes regardless of platform, matching what
+        the rest of this codebase (node ids, JSON paths) expects.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$FullPath
+    )
+
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $targetFull = [IO.Path]::GetFullPath($FullPath)
+
+    if ($targetFull.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $targetFull.Substring($rootFull.Length).TrimStart('\', '/')
+    }
+    else {
+        $relative = $targetFull
+    }
+
+    return ($relative -replace '\\', '/')
+}
+
+function Set-SyncSqlUtf8NoBomContent {
+    <#
+        Writes $Content to $Path as UTF-8 without a byte-order mark.
+        Set-Content/Out-File's -Encoding utf8 always *adds* a BOM on
+        Windows PowerShell 5.1 (.NET Framework) - PS6+'s "utf8NoBOM"
+        encoding name doesn't exist there - so every extracted/generated
+        file would gain a 3-byte BOM prefix the moment this project runs
+        under 5.1, showing up as a spurious full-file diff on the very
+        next run for every single object. Writing via .NET's UTF8Encoding
+        with encoderShouldEmitUTF8Identifier=$false sidesteps that on
+        every supported PowerShell version.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Content
+    )
+
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function ConvertTo-SyncSqlSafeFileName {
     [CmdletBinding()]
     [OutputType([string])]
@@ -189,7 +283,10 @@ function New-SyncSqlObjectFile {
         $segments += (ConvertTo-SyncSqlSafeFileName $SchemaName)
     }
 
-    $dir = Join-Path @segments
+    # [IO.Path]::Combine(string[]) rather than Join-Path @segments: PS5.1's
+    # Join-Path only accepts a single -Path/-ChildPath pair (-AdditionalChildPath
+    # was added in PS6+), so splatting more than two segments into it fails.
+    $dir = [IO.Path]::Combine($segments)
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
     $fileName = "{0}.{1}" -f (ConvertTo-SyncSqlSafeFileName $ObjectName), $Extension
@@ -205,10 +302,10 @@ function New-SyncSqlObjectFile {
     ) -join "`n"
     $header += "`n`n"
 
-    $body = ($Definition ?? '').Trim()
+    $body = if ($null -eq $Definition) { '' } else { $Definition.Trim() }
     $content = $header + $body + "`n"
 
-    Set-Content -LiteralPath $filePath -Value $content -NoNewline -Encoding utf8
+    Set-SyncSqlUtf8NoBomContent -Path $filePath -Content $content
     return $filePath
 }
 
@@ -252,11 +349,15 @@ function New-SyncSqlMetricsSnapshotFile {
         $segments += (ConvertTo-SyncSqlSafeFileName $SchemaName)
     }
 
-    $dir = Join-Path @segments
+    # See New-SyncSqlObjectFile's comment: PS5.1's Join-Path can't take more
+    # than one ChildPath segment, so multi-segment paths go through
+    # [IO.Path]::Combine instead.
+    $dir = [IO.Path]::Combine($segments)
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
     $filePath = Join-Path $dir ("{0}.json" -f (ConvertTo-SyncSqlSafeFileName $ObjectName))
-    $Snapshot | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $filePath -Encoding utf8 -NoNewline
+    $json = $Snapshot | ConvertTo-Json -Depth 10 -Compress
+    Set-SyncSqlUtf8NoBomContent -Path $filePath -Content $json
     return $filePath
 }
 
@@ -286,10 +387,13 @@ function Add-SyncSqlSectionBlock {
 
 Export-ModuleMember -Function @(
     'Write-SyncSqlLog',
+    'ConvertTo-SyncSqlOrderedHashtable',
     'Import-SyncSqlConfig',
     'Test-SyncSqlNameAllowed',
     'Get-SyncSqlEffectiveFilters',
     'Get-SyncSqlAllowedObjectTypes',
+    'Get-SyncSqlRelativePath',
+    'Set-SyncSqlUtf8NoBomContent',
     'ConvertTo-SyncSqlSafeFileName',
     'New-SyncSqlObjectFile',
     'Add-SyncSqlSectionBlock',

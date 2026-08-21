@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Extracts database objects (procedures, views, functions, triggers,
@@ -215,7 +215,9 @@ else {
         Write-SyncSqlLog "Updating metrics history ($metricsHistoryLimitCopy-snapshot retention) -> $metricsHistoryRoot"
         & $updateMetricsScript -SnapshotRoot $metricsRootCopy -HistoryRoot $metricsHistoryRoot -HistoryLimit $metricsHistoryLimitCopy
 
-        $catalogOutputPath = Join-Path $WorkDir $PathPrefix 'catalog.json'
+        # [IO.Path]::Combine rather than Join-Path with 3 segments: PS5.1's
+        # Join-Path only takes a single -Path/-ChildPath pair.
+        $catalogOutputPath = [IO.Path]::Combine($WorkDir, $PathPrefix, 'catalog.json')
         Write-SyncSqlLog "Building catalog.json ($catalogHistoryLimit-commit history window) -> $catalogOutputPath"
         & $buildCatalogScript -ObjectsRoot (Join-Path $WorkDir $PathPrefix) -OutputPath $catalogOutputPath `
             -RepoRoot $WorkDir -PathPrefix $PathPrefix -HistoryLimit $catalogHistoryLimit -MetricsRoot $metricsHistoryRoot

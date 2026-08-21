@@ -1,10 +1,12 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
     SyncSql.Oracle.psm1
-    Oracle extraction backend. Uses the Oracle.ManagedDataAccess.Core
-    NuGet package (pure managed ADO.NET driver, no Oracle Instant Client
-    required) loaded via Add-Type, and DBMS_METADATA.GET_DDL for
-    ready-to-diff object DDL text.
+    Oracle extraction backend. Uses the Oracle.ManagedDataAccess NuGet
+    package (pure managed ADO.NET driver, no Oracle Instant Client
+    required - the classic .NET Framework build, since this project
+    targets Windows PowerShell 5.1; see Bootstrap-Dependencies.ps1) loaded
+    via Add-Type, and DBMS_METADATA.GET_DDL for ready-to-diff object DDL
+    text.
 #>
 
 Set-StrictMode -Version Latest
@@ -34,6 +36,15 @@ $script:SyncSqlOracleDdlTypeMap = @{
 }
 
 function Find-SyncSqlOracleDriverDll {
+    <#
+        Searches -CacheDir for the ODP.NET managed driver DLL. Prefers a
+        .NET-Framework-targeted build (net4x TFM folders, or the classic
+        Oracle.ManagedDataAccess package's non-standard "managed/common"
+        layout) since Windows PowerShell 5.1 runs on .NET Framework, not
+        .NET Core/Standard - falls back to the first candidate found when
+        there's only one, since that package often ships a single "common"
+        build rather than several per-TFM folders.
+    #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$CacheDir)
 
@@ -42,7 +53,7 @@ function Find-SyncSqlOracleDriverDll {
     $candidates = Get-ChildItem -LiteralPath $CacheDir -Recurse -Filter 'Oracle.ManagedDataAccess.dll' -ErrorAction SilentlyContinue
     if (-not $candidates) { return $null }
 
-    $preferred = $candidates | Where-Object { $_.FullName -match 'netstandard2\.1' } | Select-Object -First 1
+    $preferred = $candidates | Where-Object { $_.FullName -match 'net4|managed[\\/]common' } | Select-Object -First 1
     if ($preferred) { return $preferred.FullName }
 
     return ($candidates | Select-Object -First 1).FullName

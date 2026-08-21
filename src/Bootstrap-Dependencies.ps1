@@ -1,10 +1,18 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Prepares everything Export-DatabaseObjects.ps1 needs: the SqlServer
-    PowerShell module and the Oracle.ManagedDataAccess.Core managed ADO.NET
-    driver (no native Oracle client required). Config parsing uses JSON
-    (built into PowerShell 7+), so no separate module is needed for that.
+    PowerShell module and the Oracle.ManagedDataAccess managed ADO.NET
+    driver (no native Oracle client required). Config parsing uses plain
+    JSON (built into PowerShell itself), so no separate module is needed
+    for that.
+
+    Targets Windows PowerShell 5.1 (.NET Framework), so this downloads the
+    classic Oracle.ManagedDataAccess NuGet package rather than
+    Oracle.ManagedDataAccess.Core - the ".Core" package targets
+    netstandard2.1/.NET Core and will not load correctly on .NET
+    Framework. If this project ever needs to run under PowerShell 6/7
+    (.NET Core) again, that line is the one to flip back.
 
 .DESCRIPTION
     Everything is saved under -ModulesCacheDir rather than "installed", so
@@ -54,7 +62,12 @@ function Get-SyncSqlLatestNuGetVersion {
     param([Parameter(Mandatory)][string]$PackageId)
 
     $indexUrl = "https://api.nuget.org/v3-flatcontainer/$($PackageId.ToLowerInvariant())/index.json"
-    $index = Invoke-RestMethod -Uri $indexUrl
+    # -UseBasicParsing: on a fresh Windows PowerShell 5.1 host that has
+    # never launched Internet Explorer, Invoke-RestMethod/-WebRequest try
+    # to use the IE engine to parse the response and fail outright unless
+    # told to skip it. A no-op on PowerShell 6+ (basic parsing is the only
+    # behavior there), so safe to always pass.
+    $index = Invoke-RestMethod -Uri $indexUrl -UseBasicParsing
     return ($index.versions | Select-Object -Last 1)
 }
 
@@ -67,7 +80,9 @@ function Install-SyncSqlOracleDriver {
         return
     }
 
-    $packageId = 'Oracle.ManagedDataAccess.Core'
+    # Classic (.NET Framework) package - see the .SYNOPSIS note above for
+    # why this isn't Oracle.ManagedDataAccess.Core.
+    $packageId = 'Oracle.ManagedDataAccess'
     if ([string]::IsNullOrWhiteSpace($Version)) {
         Write-Host "[bootstrap] Resolving latest $packageId version from NuGet"
         $Version = Get-SyncSqlLatestNuGetVersion -PackageId $packageId
@@ -79,7 +94,7 @@ function Install-SyncSqlOracleDriver {
     $downloadUrl = "https://api.nuget.org/v3-flatcontainer/$idLower/$verLower/$idLower.$verLower.nupkg"
 
     $tempZip = Join-Path ([IO.Path]::GetTempPath()) "$idLower.$verLower.zip"
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing
 
     if (Test-Path -LiteralPath $oracleDir) { Remove-Item -LiteralPath $oracleDir -Recurse -Force }
     New-Item -ItemType Directory -Path $oracleDir -Force | Out-Null

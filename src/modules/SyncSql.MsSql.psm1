@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
     SyncSql.MsSql.psm1
     Microsoft SQL Server extraction backend. Relies on the `SqlServer`

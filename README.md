@@ -12,10 +12,11 @@ fragmentation/usage, the statistics the query optimizer actually uses) is
 tracked separately as a graphable time series rather than bloating that
 version history — see "Volatile metrics" below.
 
-Built as a GitLab CI scheduled pipeline driven entirely by PowerShell
-(pwsh) for the extraction itself, so the same script runs unmodified on any
-runner that can pull the `mcr.microsoft.com/powershell` image, with no
-OS-specific tooling and no native Oracle client install required.
+Built as a GitLab CI scheduled pipeline driven entirely by **Windows
+PowerShell 5.1** for the extraction itself (see "Windows PowerShell 5.1"
+below for why that's a real runtime requirement, not just a version
+number) - no native Oracle client install required, just Git for Windows
+and the modules `Bootstrap-Dependencies.ps1` fetches on its own.
 
 ## How it works
 
@@ -23,9 +24,10 @@ OS-specific tooling and no native Oracle client install required.
 config/servers.json --defines-->  which servers/databases/schemas/objects
         |
         v
-Bootstrap-Dependencies.ps1   (SqlServer module, Oracle.ManagedDataAccess.Core
-                               driver - config parsing is plain JSON, built
-                               into PowerShell 7+, no extra module needed)
+Bootstrap-Dependencies.ps1   (SqlServer module, Oracle.ManagedDataAccess
+                               driver - the classic .NET Framework build,
+                               see "Windows PowerShell 5.1" below - config
+                               parsing is plain JSON, no extra module needed)
         |
         v
 Export-DatabaseObjects.ps1                              [CI stage: sync]
@@ -73,6 +75,55 @@ site/ (React + Vite)                                    [CI stage: pages]
 Every extracted `.sql` file gets a small static header (server / database /
 type / object name) and nothing else — no timestamps — so re-running the
 pipeline with no underlying database changes produces **zero diff**.
+
+## Windows PowerShell 5.1
+
+Every `src/*.ps1`/`*.psm1` file declares `#Requires -Version 5.1`, and the
+code is genuinely written to that floor rather than just having the number
+changed — it deliberately avoids PowerShell 6/7-only surface, and one
+dependency (the Oracle driver) is a real, non-optional runtime requirement
+tied to running on actual Windows PowerShell:
+
+- No `??`/`?:`/`??=` operators, no `ConvertFrom-Json -AsHashtable`
+  (replaced by `ConvertTo-SyncSqlOrderedHashtable`, a recursive
+  PSCustomObject-to-ordered-hashtable walk), no `ConvertTo-Json -AsArray`
+  (replaced by manually wrapping in `[...]`, since a 0- or 1-element array
+  otherwise collapses back to a scalar/empty object), no
+  `[IO.Path]::GetRelativePath` (.NET Core only - replaced by
+  `Get-SyncSqlRelativePath`), no `Join-Path` calls with more than one
+  `ChildPath` segment (`-AdditionalChildPath` is PS6+ only - replaced by
+  `[IO.Path]::Combine(string[])`).
+- `Set-Content`/`Out-File -Encoding utf8` **adds a byte-order mark** on
+  Windows PowerShell (the BOM-less `utf8NoBOM` encoding name doesn't exist
+  before PS6). Left unfixed, every extracted `.sql`/metrics/`catalog.json`
+  file would gain a 3-byte BOM prefix under 5.1, showing up as a spurious
+  full-file diff on every object on the very next run - directly defeating
+  the "zero diff" design goal above. `Set-SyncSqlUtf8NoBomContent` (writes
+  via `[System.Text.UTF8Encoding]::new($false)` + `File.WriteAllText`)
+  is used everywhere instead.
+- `Bootstrap-Dependencies.ps1` downloads the **classic**
+  `Oracle.ManagedDataAccess` NuGet package (.NET Framework build), not
+  `Oracle.ManagedDataAccess.Core` (targets netstandard2.1/.NET Core). This
+  is the one piece that isn't just "also works on 5.1" - a .NET Framework
+  assembly cannot be loaded by PowerShell 7/Core at all, especially not on
+  Linux, where .NET Framework doesn't exist. So Oracle extraction
+  genuinely requires running on a real Windows PowerShell 5.1 host, not
+  merely a `pwsh` process that happens to satisfy the `#Requires` floor.
+  `Invoke-WebRequest`/`Invoke-RestMethod` there also pass
+  `-UseBasicParsing`, a no-op on newer PowerShell but required on a fresh
+  Windows host that has never launched Internet Explorer.
+- `SyncSql.Git.psm1`'s askpass helper no longer reads the `$IsWindows`
+  automatic variable directly (it doesn't exist before PowerShell 6 - under
+  `Set-StrictMode -Version Latest`, referencing it on 5.1 throws). It
+  short-circuits on `$PSVersionTable.PSVersion.Major -lt 6` instead, which
+  is always true on 5.1 (Windows PowerShell only ever runs on Windows).
+
+Because of the Oracle driver requirement, `validate-config` and
+`sync-database-objects` in `.gitlab-ci.yml` need an actual Windows GitLab
+Runner (`tags: [windows]` there is a placeholder - point it at your real
+runner) with Git for Windows installed, invoking `powershell.exe` rather
+than `pwsh`. The `pages` job is unaffected (plain Node, no PowerShell) and
+stays on Linux.
 
 ## Configuration
 
@@ -380,11 +431,15 @@ with a real one (see below) to preview actual data.
 
 ## Running the extraction locally
 
-```pwsh
-pwsh ./src/Bootstrap-Dependencies.ps1
+Run this from a **Windows PowerShell 5.1** prompt (`powershell.exe`, not
+`pwsh`/PowerShell 7 - see "Windows PowerShell 5.1" below for why that
+matters here, not just as a version-number formality):
+
+```powershell
+.\src\Bootstrap-Dependencies.ps1
 $env:SQLPROD01_DB_USER = '...'
 $env:SQLPROD01_DB_PASSWORD = '...'
-pwsh ./src/Export-DatabaseObjects.ps1 -ConfigPath ./config/servers.json -SkipGit
+.\src\Export-DatabaseObjects.ps1 -ConfigPath .\config\servers.json -SkipGit
 ```
 
 `-SkipGit` leaves the extracted files under a temp staging directory
@@ -404,6 +459,11 @@ a single local run only shows a single data point per chart), then
 
 ## Known limitations (v2)
 
+- The extraction pipeline requires a real Windows PowerShell 5.1 host (see
+  "Windows PowerShell 5.1" above) - it will not run under PowerShell 6/7
+  ("pwsh") because of the classic (.NET Framework) Oracle driver package,
+  even though the `#Requires -Version 5.1` floor is technically satisfied
+  by both.
 - MSSQL table DDL (columns, identity, defaults, primary key) is
   reconstructed from catalog views since SQL Server doesn't store table
   definitions as text the way it does for procedures/views. Foreign keys,
