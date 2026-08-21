@@ -45,7 +45,11 @@ public sealed class CatalogBuilder(
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation("Inferring lineage edges");
-        (List<CatalogEdge> edges, Dictionary<string, LineageAnalysisResult> analysisByNodeId) = InferLineage(nodes, nodeIndex);
+        (List<CatalogEdge> edges, Dictionary<string, LineageAnalysisResult> analysisByNodeId, List<CatalogOrphanedReference> orphanedReferences) = InferLineage(nodes, nodeIndex);
+        if (orphanedReferences.Count > 0)
+        {
+            logger.LogWarning("Found {Count} orphaned reference(s) - an object's DDL refers to something that no longer exists in scope", orphanedReferences.Count);
+        }
 
         logger.LogInformation("Detecting column-level references for inferred edges");
         TagColumnReferences(edges, nodesById, analysisByNodeId, nodeIndex);
@@ -106,6 +110,7 @@ public sealed class CatalogBuilder(
             Edges = edges,
             RecentChanges = recentChanges,
             CoChangePairs = coChangePairs,
+            OrphanedReferences = orphanedReferences,
         };
     }
 
@@ -150,11 +155,13 @@ public sealed class CatalogBuilder(
         };
     }
 
-    private (List<CatalogEdge> Edges, Dictionary<string, LineageAnalysisResult> AnalysisByNodeId) InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex)
+    private (List<CatalogEdge> Edges, Dictionary<string, LineageAnalysisResult> AnalysisByNodeId, List<CatalogOrphanedReference> OrphanedReferences) InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex)
     {
         HashSet<string> edgeKeys = [];
         List<CatalogEdge> edges = [];
         Dictionary<string, LineageAnalysisResult> analysisByNodeId = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> orphanKeys = [];
+        List<CatalogOrphanedReference> orphanedReferences = [];
 
         foreach (CatalogNode node in nodes)
         {
@@ -178,8 +185,17 @@ public sealed class CatalogBuilder(
 
             foreach (ObjectRef reference in analysis.ObjectRefs)
             {
-                string? targetId = nodeIndex.Resolve(node, reference);
-                if (targetId is null || targetId == node.Id)
+                ReferenceResolution resolution = nodeIndex.Resolve(node, reference);
+                if (resolution.Kind == ReferenceResolutionKind.NotFound)
+                {
+                    if (orphanKeys.Add($"{node.Id}|{reference.Schema}|{reference.Name}"))
+                    {
+                        orphanedReferences.Add(new CatalogOrphanedReference { From = node.Id, Schema = reference.Schema, Name = reference.Name });
+                    }
+                    continue;
+                }
+
+                if (resolution is not { Kind: ReferenceResolutionKind.Resolved, NodeId: { } targetId } || targetId == node.Id)
                 {
                     continue;
                 }
@@ -191,7 +207,13 @@ public sealed class CatalogBuilder(
             }
         }
 
-        return (edges, analysisByNodeId);
+        orphanedReferences.Sort((a, b) =>
+        {
+            int byFrom = string.Compare(a.From, b.From, StringComparison.OrdinalIgnoreCase);
+            return byFrom != 0 ? byFrom : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        });
+
+        return (edges, analysisByNodeId, orphanedReferences);
     }
 
     private static void TagColumnReferences(
@@ -217,7 +239,7 @@ public sealed class CatalogBuilder(
             HashSet<string> matchingAliases = new(StringComparer.OrdinalIgnoreCase);
             foreach ((string alias, ObjectRef aliasTarget) in analysis.Aliases)
             {
-                if (nodeIndex.Resolve(fromNode, aliasTarget) == toNode.Id)
+                if (nodeIndex.Resolve(fromNode, aliasTarget) is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } aliasTargetId } && aliasTargetId == toNode.Id)
                 {
                     matchingAliases.Add(alias);
                 }

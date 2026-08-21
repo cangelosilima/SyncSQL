@@ -132,6 +132,15 @@ for MSSQL objects, a vendored ANTLR PL/SQL grammar for Oracle objects -
 not text/regex matching, so string literals, comments, and quoted
 identifiers are never mistaken for object references.
 
+Every reference that resolves nowhere in scope (same server+database, or
+bare on the same server) - typically because the target was renamed or
+dropped and this object's DDL was never updated - is collected as an
+**orphaned reference** and written to `catalog.json`'s `orphanedReferences`
+array (`from`/`schema`/`name`) instead of silently dropped, with a summary
+count logged as a warning. A reference that's merely *ambiguous* (more than
+one same-named object in scope) is not flagged this way - see
+`NodeIndex.Resolve` in `SyncSql.Catalog` for the distinction.
+
 Exit code `0` on success, `1` if `--objects-root` doesn't exist.
 
 ### `syncsql metrics update`

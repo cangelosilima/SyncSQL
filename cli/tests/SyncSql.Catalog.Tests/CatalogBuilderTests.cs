@@ -137,10 +137,11 @@ public sealed class CatalogBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildAsync_UnresolvableReference_ProducesNoEdge()
+    public async Task BuildAsync_UnresolvableReference_ProducesNoEdgeButFlagsOrphanedReference()
     {
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM dbo.NoSuchTable;");
+        string procId = NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder");
         _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "NoSuchTable")],
@@ -152,6 +153,69 @@ public sealed class CatalogBuilderTests : IDisposable
         Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
 
         Assert.Empty(catalog.Edges);
+        CatalogOrphanedReference orphan = Assert.Single(catalog.OrphanedReferences);
+        Assert.Equal(procId, orphan.From);
+        Assert.Equal("dbo", orphan.Schema);
+        Assert.Equal("NoSuchTable", orphan.Name);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DuplicateUnresolvableReferences_ProduceOnlyOneOrphanedEntry()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM dbo.NoSuchTable; SELECT 2 FROM dbo.NoSuchTable;");
+        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "NoSuchTable"), new ObjectRef("dbo", "NoSuchTable")],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        Assert.Single(catalog.OrphanedReferences);
+    }
+
+    [Fact]
+    public async Task BuildAsync_AmbiguousBareReference_IsNotFlaggedAsOrphaned()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
+        WriteObjectFile("SQLPROD01", "AppDb", "Tables", "sales", "Orders", "CREATE TABLE sales.Orders (Id INT);");
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM Orders;");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef(null, "Orders")],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        Assert.Empty(catalog.Edges);
+        Assert.Empty(catalog.OrphanedReferences);
+    }
+
+    [Fact]
+    public async Task BuildAsync_MultipleOrphanedReferences_AreSortedByFromThenName()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "Zeta", "CREATE PROCEDURE dbo.Zeta AS SELECT 1 FROM dbo.Missing;");
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "Alpha", "CREATE PROCEDURE dbo.Alpha AS SELECT 1 FROM dbo.Missing;");
+        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Missing")],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        Assert.Equal(2, catalog.OrphanedReferences.Count);
+        Assert.Equal(NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "Alpha"), catalog.OrphanedReferences[0].From);
+        Assert.Equal(NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "Zeta"), catalog.OrphanedReferences[1].From);
     }
 
     [Fact]

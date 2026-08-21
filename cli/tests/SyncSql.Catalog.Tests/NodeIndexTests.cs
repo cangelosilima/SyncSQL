@@ -25,21 +25,23 @@ public class NodeIndexTests
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
         NodeIndex index = new([orders, caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef("dbo", "Orders"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders"));
 
-        Assert.Equal(orders.Id, resolved);
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(orders.Id, resolution.NodeId);
     }
 
     [Fact]
-    public void Resolve_SchemaQualified_UnknownSchema_ReturnsNullRatherThanGuessing()
+    public void Resolve_SchemaQualified_UnknownSchema_IsNotFoundRatherThanGuessing()
     {
         CatalogNode orders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
         NodeIndex index = new([orders, caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef("sales", "Orders"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("sales", "Orders"));
 
-        Assert.Null(resolved);
+        Assert.Equal(ReferenceResolutionKind.NotFound, resolution.Kind);
+        Assert.Null(resolution.NodeId);
     }
 
     [Fact]
@@ -49,22 +51,24 @@ public class NodeIndexTests
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
         NodeIndex index = new([orders, caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef(null, "Orders"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(null, "Orders"));
 
-        Assert.Equal(orders.Id, resolved);
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(orders.Id, resolution.NodeId);
     }
 
     [Fact]
-    public void Resolve_BareName_AmbiguousAcrossSchemasInDatabase_ReturnsNull()
+    public void Resolve_BareName_AmbiguousAcrossSchemasInDatabase_IsAmbiguousNotNotFound()
     {
         CatalogNode dboOrders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
         CatalogNode salesOrders = Node("SQLPROD01", "AppDb", "sales", "Orders");
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
         NodeIndex index = new([dboOrders, salesOrders, caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef(null, "Orders"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(null, "Orders"));
 
-        Assert.Null(resolved);
+        Assert.Equal(ReferenceResolutionKind.Ambiguous, resolution.Kind);
+        Assert.Null(resolution.NodeId);
     }
 
     [Fact]
@@ -74,32 +78,35 @@ public class NodeIndexTests
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "SyncOrders", type: "StoredProcedures");
         NodeIndex index = new([remoteOrders, caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef(null, "Orders"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(null, "Orders"));
 
-        Assert.Equal(remoteOrders.Id, resolved);
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(remoteOrders.Id, resolution.NodeId);
     }
 
     [Fact]
-    public void Resolve_BareName_AmbiguousOnServer_ReturnsNull()
+    public void Resolve_BareName_AmbiguousOnServer_IsAmbiguousNotNotFound()
     {
         CatalogNode appOrders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
         CatalogNode reportingOrders = Node("SQLPROD01", "ReportingDb", "dbo", "Orders");
         CatalogNode caller = Node("SQLPROD01", "OtherDb", "dbo", "SyncOrders", type: "StoredProcedures");
         NodeIndex index = new([appOrders, reportingOrders, caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef(null, "Orders"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(null, "Orders"));
 
-        Assert.Null(resolved);
+        Assert.Equal(ReferenceResolutionKind.Ambiguous, resolution.Kind);
+        Assert.Null(resolution.NodeId);
     }
 
     [Fact]
-    public void Resolve_UnknownReference_ReturnsNull()
+    public void Resolve_UnknownReference_IsNotFound()
     {
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
         NodeIndex index = new([caller]);
 
-        string? resolved = index.Resolve(caller, new ObjectRef(null, "NoSuchTable"));
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(null, "NoSuchTable"));
 
-        Assert.Null(resolved);
+        Assert.Equal(ReferenceResolutionKind.NotFound, resolution.Kind);
+        Assert.Null(resolution.NodeId);
     }
 }

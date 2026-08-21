@@ -2,6 +2,29 @@
 
 namespace SyncSql.Catalog;
 
+/// <summary>Why a <see cref="NodeIndex.Resolve"/> lookup did or didn't produce a node id.</summary>
+internal enum ReferenceResolutionKind
+{
+    /// <summary>Exactly one node matched - see <see cref="ReferenceResolution.NodeId"/>.</summary>
+    Resolved,
+
+    /// <summary>No node anywhere in scope has this name - a candidate orphaned/dangling reference.</summary>
+    NotFound,
+
+    /// <summary>More than one node in scope shares this bare name - genuinely ambiguous, not "missing".</summary>
+    Ambiguous,
+}
+
+/// <summary>The outcome of one <see cref="NodeIndex.Resolve"/> lookup.</summary>
+internal readonly record struct ReferenceResolution(ReferenceResolutionKind Kind, string? NodeId)
+{
+    public static ReferenceResolution Found(string nodeId) => new(ReferenceResolutionKind.Resolved, nodeId);
+
+    public static readonly ReferenceResolution NotFound = new(ReferenceResolutionKind.NotFound, null);
+
+    public static readonly ReferenceResolution Ambiguous = new(ReferenceResolutionKind.Ambiguous, null);
+}
+
 /// <summary>
 /// Resolves a (possibly schema-qualified) <see cref="ObjectRef"/> found in one node's DDL to the node
 /// id it refers to, scoped to that node's own server+database (or server, for a bare cross-linked-
@@ -43,30 +66,46 @@ internal sealed class NodeIndex
     /// unknown schema is left unresolved rather than falling back to a bare-name guess - if the DDL was
     /// specific, an ambiguous bare match would be a worse guess, not a better one. A bare reference only
     /// resolves when exactly one object with that name exists in scope (database first, then server,
-    /// for cross-linked-server/DB-link bare references).
+    /// for cross-linked-server/DB-link bare references); more than one is reported as
+    /// <see cref="ReferenceResolutionKind.Ambiguous"/> rather than silently guessed at, and is distinct
+    /// from <see cref="ReferenceResolutionKind.NotFound"/> (no candidate at all) precisely so callers can
+    /// tell "this looks like a dropped/renamed object" apart from "this name is inherently ambiguous
+    /// here" - see <see cref="CatalogBuilder"/>'s orphaned-reference detection.
     /// </summary>
-    public string? Resolve(CatalogNode fromNode, ObjectRef reference)
+    public ReferenceResolution Resolve(CatalogNode fromNode, ObjectRef reference)
     {
         if (string.IsNullOrWhiteSpace(reference.Name))
         {
-            return null;
+            return ReferenceResolution.NotFound;
         }
 
         if (!string.IsNullOrWhiteSpace(reference.Schema))
         {
-            return _qualified.TryGetValue($"{fromNode.Server}::{fromNode.Database}::{reference.Schema}.{reference.Name}", out string? id) ? id : null;
+            return _qualified.TryGetValue($"{fromNode.Server}::{fromNode.Database}::{reference.Schema}.{reference.Name}", out string? qualifiedId)
+                ? ReferenceResolution.Found(qualifiedId)
+                : ReferenceResolution.NotFound;
         }
 
-        if (_bareInDatabase.TryGetValue($"{fromNode.Server}::{fromNode.Database}::{reference.Name}", out List<string>? inDatabase) && inDatabase.Count == 1)
+        if (_bareInDatabase.TryGetValue($"{fromNode.Server}::{fromNode.Database}::{reference.Name}", out List<string>? inDatabase))
         {
-            return inDatabase[0];
+            return inDatabase.Count switch
+            {
+                1 => ReferenceResolution.Found(inDatabase[0]),
+                > 1 => ReferenceResolution.Ambiguous,
+                _ => ReferenceResolution.NotFound,
+            };
         }
 
-        if (_bareOnServer.TryGetValue($"{fromNode.Server}::{reference.Name}", out List<string>? onServer) && onServer.Count == 1)
+        if (_bareOnServer.TryGetValue($"{fromNode.Server}::{reference.Name}", out List<string>? onServer))
         {
-            return onServer[0];
+            return onServer.Count switch
+            {
+                1 => ReferenceResolution.Found(onServer[0]),
+                > 1 => ReferenceResolution.Ambiguous,
+                _ => ReferenceResolution.NotFound,
+            };
         }
 
-        return null;
+        return ReferenceResolution.NotFound;
     }
 }

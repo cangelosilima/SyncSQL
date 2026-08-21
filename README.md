@@ -399,6 +399,28 @@ This shows up as column tags next to each entry in an object's "depends
 on"/"used by" lists, and as highlighted, labeled edges in the Lineage
 graph.
 
+### Orphaned reference detection
+
+Cheap to compute once lineage inference has run: every reference that
+resolves nowhere in the current catalog's scope (same server+database, or
+bare on the same server) is collected as an **orphaned reference** rather
+than just silently producing no edge. In practice this is almost always a
+real bug worth flagging - the referenced table/view/procedure was renamed
+or dropped and the object still calling it was never updated - though it
+can occasionally be a false positive: dynamic SQL, a genuinely external
+object (a linked-server target, a system object) that was never in scope
+to begin with, or a name built at runtime.
+
+A reference that's merely *ambiguous* - more than one same-named object in
+scope - is deliberately **not** flagged this way; that's a different
+situation (the target clearly exists, it just can't be resolved uniquely
+from a bare name) and conflating the two would bury real orphaned
+references in noise from otherwise-benign naming collisions.
+
+`syncsql catalog build` writes these to `catalog.json`'s
+`orphanedReferences` array (`from`/`schema`/`name`) and logs a summary
+count as a warning.
+
 ### History, heatmap and point-in-time
 
 A static Pages site can't run live `git` queries, so the catalog builder

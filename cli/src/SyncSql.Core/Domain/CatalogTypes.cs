@@ -126,6 +126,26 @@ public sealed record CoChangePair
     public required int Count { get; init; }
 }
 
+/// <summary>
+/// A reference one object's DDL makes to another object that doesn't exist anywhere in the current
+/// catalog's scope (same server+database, or bare on the same server) - most often because the target
+/// was renamed or dropped and this object's DDL was never updated to match. Not raised for a reference
+/// that's merely ambiguous (multiple same-named objects in scope) - that's a different, non-"missing"
+/// situation - nor for anything outside lineage inference's own scope (dynamic SQL, a genuinely external/
+/// unextracted object, a linked-server target).
+/// </summary>
+public sealed record CatalogOrphanedReference
+{
+    [JsonPropertyName("from")]
+    public required string From { get; init; }
+
+    [JsonPropertyName("schema")]
+    public string? Schema { get; init; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+}
+
 /// <summary>The full catalog.json document consumed by site/.</summary>
 public sealed record Catalog
 {
@@ -149,4 +169,7 @@ public sealed record Catalog
 
     [JsonPropertyName("coChangePairs")]
     public IReadOnlyList<CoChangePair> CoChangePairs { get; init; } = [];
+
+    [JsonPropertyName("orphanedReferences")]
+    public IReadOnlyList<CatalogOrphanedReference> OrphanedReferences { get; init; } = [];
 }
