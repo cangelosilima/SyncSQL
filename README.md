@@ -134,8 +134,9 @@ Pages**.
 ## The catalog / lineage site
 
 `site/` is a React + TypeScript + Vite app (source checked into this repo,
-built fresh by the `pages` job on every scheduled run), styled as a dense,
-dark data-terminal:
+built fresh by the `pages` job on every scheduled run), styled as a dense
+data-terminal with a light/dark toggle (top right; light is the default -
+see "Theme" below):
 
 - **Overview** — object counts, the 10 most recently changed objects, the
   most-referenced tables (direct incoming edges and indirect/transitive
@@ -149,19 +150,30 @@ dark data-terminal:
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), the DDL, structured panels for any Foreign Keys
   / Check Constraints / Indexes / Statistics sections, an **Access** panel
-  (see "Grant mapping" below), "depends on" / "used by" lineage lists
-  annotated with best-effort column tags with an embedded neighborhood
-  graph, and a change-history list with a point-in-time viewer (see below).
+  (see "Grant mapping" below), a change-history list with a point-in-time
+  viewer, and "depends on" / "used by" lineage lists annotated with
+  best-effort column tags (expandable past the first few) with an embedded
+  neighborhood graph.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
-  `@xyflow/react` + `dagre` auto-layout. Clicking a node drills the graph
-  into that object's own neighborhood in place (with a breadcrumb trail, a
-  Back button, and an adjustable 1/2/3-hop radius) rather than leaving the
-  page; double-click opens that object's full detail page. Edges carrying a
-  known column-level reference (see "Column dependency tracking" below) are
-  highlighted and labeled with the referenced column names.
-- **Access** (`/#/access`) — search by grantee (user, role or group) to see
-  every object they have a GRANT or DENY permission on, down to the column
-  when the grant was scoped that way (see "Grant mapping" below).
+  `@xyflow/react` + `dagre` auto-layout, with two modes (tabs):
+  - **Browse** — the object filter bar drives which objects are shown.
+    Clicking a node drills the graph into that object's own neighborhood in
+    place (breadcrumb trail, Back button, adjustable 1/2/3-hop radius)
+    rather than leaving the page; double-click opens that object's full
+    detail page. An object page's "Open in full lineage explorer" link
+    lands here with an actual filter token seeded for that object, so
+    clearing the drill-down focus narrows back to it instead of dumping out
+    to the whole catalog.
+  - **Access** — search by grantee (user, role or group) to see every
+    object they have a GRANT or DENY permission on, down to the column when
+    scoped that way (see "Grant mapping" below); matches are listed in a
+    table and rendered in the same graph, so you can drill from "what can
+    this principal touch" straight into how those objects relate.
+
+  Edges carrying a known column-level reference (see "Column dependency
+  tracking" below) are highlighted, labeled with up to 3 referenced column
+  names, and clickable — click one to open a detail panel with the full
+  column list for that edge.
 - **History** — a global commit timeline of everything the pipeline has
   changed, expandable per commit.
 
@@ -189,9 +201,18 @@ site says as much on its overview page.
 Earlier versions of the site had an always-open (later toggleable) tree
 sidebar (Server → Database → Schema → Type → Object) alongside Explorer.
 It has been removed: Explorer's filter bar plus sortable columns cover the
-same browsing need with less UI, and every other page (Lineage, Access,
-Overview, History) links directly to object detail pages rather than
-requiring the tree.
+same browsing need with less UI, and every other page (Lineage, Overview,
+History) links directly to object detail pages rather than requiring the
+tree.
+
+### Theme
+
+A light/dark toggle lives in the top right of every page (`lib/ThemeContext.tsx`),
+persisted to `localStorage`. Light is the default. DDL/code blocks are the
+one deliberate exception — always rendered dark (matching their
+`highlight.js` syntax theme) regardless of which site theme is active, so
+SQL stays legible with one consistent look. The Lineage graph (`@xyflow/react`)
+follows the site theme too, defaulting to light along with everything else.
 
 ### Grant mapping
 
@@ -209,11 +230,13 @@ than the whole object.
 - Oracle: `ALL_TAB_PRIVS` (object-level) and `ALL_COL_PRIVS`
   (column-level) for every object owned by each extracted schema.
 
-Every object's detail page has an **Access** panel listing its own grants;
-the **Access** page (`/#/access`) flips the query around - search by
-grantee to see every object (and, when scoped, column) that principal can
-touch. Both degrade to "no grants" rather than failing extraction when the
-underlying permissions view isn't accessible to the connecting account.
+Every object's detail page has an **Access** panel (below the DDL and its
+appended sections, above Change history) listing its own grants; the
+Lineage page's **Access** tab flips the query around - search by grantee to
+see every object (and, when scoped, column) that principal can touch, both
+in a table and in the graph. Both degrade to "no grants" rather than
+failing extraction when the underlying permissions view isn't accessible to
+the connecting account.
 
 ### Column dependency tracking
 

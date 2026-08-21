@@ -1,11 +1,25 @@
 /*
-  Fixed dark "trading floor" theme by design, not adaptive to OS light/dark
-  preference - a dense internal data tool reads better with one deliberate,
-  consistent identity than with a lighter variant bolted on. Red is reserved
-  for interactive/brand chrome; per-type colors (lib/typeColors.ts) carry the
-  actual information coding and are left alone.
+  Light/dark are both first-class - toggled via lib/ThemeContext.tsx, which
+  stamps data-theme="light"|"dark" on <html> (persisted to localStorage,
+  default "light"). Red is reserved for interactive/brand chrome; per-type
+  colors (lib/typeColors.ts) carry the actual information coding and are
+  left alone in both themes. Code/DDL blocks (.code-block) are the one
+  deliberate exception - always dark regardless of site theme, since that's
+  where the syntax highlighting theme lives.
 */
 :root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-alt: #ececef;
+  --text: #16161a;
+  --text-muted: #64646f;
+  --border: #dcdce1;
+  --accent: #e2001a;
+  --accent-contrast: #ffffff;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
   --bg: #0a0a0c;
   --surface: #131316;
   --surface-alt: #1a1a1f;
@@ -88,6 +102,28 @@ a {
 .topbar nav a:hover {
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+
+.theme-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .body {
@@ -258,11 +294,13 @@ a {
 }
 
 .code-block {
+  /* Always dark, independent of the site theme toggle - fixed colors, not
+     theme variables, to match the github-dark.css highlight.js theme. */
   background: #000000;
   color: #e6edf3;
   padding: 1rem;
   border-radius: 2px;
-  border: 1px solid var(--border);
+  border: 1px solid #26262c;
   overflow-x: auto;
   font-size: 0.82rem;
   line-height: 1.5;
@@ -350,11 +388,59 @@ a {
 }
 
 .lineage-graph {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: 2px;
   overflow: hidden;
   margin-top: 0.5rem;
   background: var(--surface);
+}
+
+.lineage-edge-panel {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 2.2rem 0.6rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 0.8rem;
+}
+
+.lineage-edge-panel-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.lineage-edge-panel-arrow {
+  color: var(--accent);
+}
+
+.lineage-edge-panel-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.2rem;
+}
+
+.lineage-edge-panel-close:hover {
+  color: var(--accent);
 }
 
 .lineage-empty,
@@ -386,6 +472,38 @@ a {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+}
+
+/* Lineage mode tabs (Browse / Access) */
+
+.lineage-mode-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.lineage-mode-tab {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+}
+
+.lineage-mode-tab:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.lineage-mode-tab.active {
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Lineage in-graph navigation (focus stack / breadcrumbs) */
@@ -507,6 +625,13 @@ a {
 
 .column-tag--more {
   border-style: dashed;
+  background: none;
+  cursor: pointer;
+}
+
+.column-tag--more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .column-tag--deny {

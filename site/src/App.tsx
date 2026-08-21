@@ -1,10 +1,10 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { CatalogProvider, useCatalog } from './lib/CatalogContext'
+import { useTheme } from './lib/ThemeContext'
 import Home from './pages/Home'
 import ObjectPage from './pages/ObjectPage'
 import LineagePage from './pages/LineagePage'
 import Explorer from './pages/Explorer'
-import Access from './pages/Access'
 import History from './pages/History'
 
 export default function App() {
@@ -47,9 +47,9 @@ function Shell() {
           </NavLink>
           <NavLink to="/explorer">Explorer</NavLink>
           <NavLink to="/lineage">Lineage</NavLink>
-          <NavLink to="/access">Access</NavLink>
           <NavLink to="/history">History</NavLink>
         </nav>
+        <ThemeToggle />
       </header>
       <div className="body">
         <main className="content">
@@ -58,11 +58,19 @@ function Shell() {
             <Route path="/explorer" element={<Explorer />} />
             <Route path="/object/*" element={<ObjectPage />} />
             <Route path="/lineage" element={<LineagePage />} />
-            <Route path="/access" element={<Access />} />
             <Route path="/history" element={<History />} />
           </Routes>
         </main>
       </div>
     </div>
+  )
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+  return (
+    <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
+      {theme === 'light' ? '☾ Dark' : '☀ Light'}
+    </button>
   )
 }

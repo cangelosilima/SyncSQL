@@ -72,43 +72,6 @@ export default function ObjectPage() {
         </>
       )}
 
-      {node.grants.length > 0 && (
-        <>
-          <div className="lineage-graph-header">
-            <h2>Access</h2>
-            <Link to="/access">Search access by grantee &rarr;</Link>
-          </div>
-          <table className="columns-table">
-            <thead>
-              <tr>
-                <th>Grantee</th>
-                <th>Type</th>
-                <th>Permission</th>
-                <th>State</th>
-                <th>Column</th>
-              </tr>
-            </thead>
-            <tbody>
-              {node.grants.map((grant, i) => (
-                <tr key={`${grant.grantee}-${grant.permission}-${grant.column ?? ''}-${i}`}>
-                  <td>
-                    <Link to={`/access?grantee=${encodeURIComponent(grant.grantee)}`}>{grant.grantee}</Link>
-                  </td>
-                  <td>{grant.granteeType ?? <span className="muted">-</span>}</td>
-                  <td>{grant.permission}</td>
-                  <td>
-                    <span className={grant.state === 'DENY' ? 'grant-state grant-state--deny' : 'grant-state grant-state--grant'}>
-                      {grant.state}
-                    </span>
-                  </td>
-                  <td>{grant.column ?? <span className="muted">(whole object)</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
       <h2>Definition</h2>
       {viewingVersion && (
         <div className="version-banner">
@@ -128,6 +91,43 @@ export default function ObjectPage() {
             <CodeBlock code={section.content} />
           </details>
         ))}
+
+      {node.grants.length > 0 && (
+        <>
+          <div className="lineage-graph-header">
+            <h2>Access</h2>
+            <Link to="/lineage?tab=access">Search access by grantee &rarr;</Link>
+          </div>
+          <table className="columns-table">
+            <thead>
+              <tr>
+                <th>Grantee</th>
+                <th>Type</th>
+                <th>Permission</th>
+                <th>State</th>
+                <th>Column</th>
+              </tr>
+            </thead>
+            <tbody>
+              {node.grants.map((grant, i) => (
+                <tr key={`${grant.grantee}-${grant.permission}-${grant.column ?? ''}-${i}`}>
+                  <td>
+                    <Link to={`/lineage?tab=access&grantee=${encodeURIComponent(grant.grantee)}`}>{grant.grantee}</Link>
+                  </td>
+                  <td>{grant.granteeType ?? <span className="muted">-</span>}</td>
+                  <td>{grant.permission}</td>
+                  <td>
+                    <span className={grant.state === 'DENY' ? 'grant-state grant-state--deny' : 'grant-state grant-state--grant'}>
+                      {grant.state}
+                    </span>
+                  </td>
+                  <td>{grant.column ?? <span className="muted">(whole object)</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {node.history.length > 0 && (
         <>
@@ -206,7 +206,8 @@ function RelatedList({ rootId, ids, direction }: { rootId: string; ids: string[]
 }
 
 function ColumnTags({ columns, cap = 6 }: { columns: string[]; cap?: number }) {
-  const shown = columns.slice(0, cap)
+  const [expanded, setExpanded] = useState(false)
+  const shown = expanded ? columns : columns.slice(0, cap)
   const overflow = columns.length - shown.length
   return (
     <span className="column-tags">
@@ -215,7 +216,16 @@ function ColumnTags({ columns, cap = 6 }: { columns: string[]; cap?: number }) {
           {col}
         </span>
       ))}
-      {overflow > 0 && <span className="column-tag column-tag--more">+{overflow}</span>}
+      {overflow > 0 && (
+        <button type="button" className="column-tag column-tag--more" onClick={() => setExpanded(true)}>
+          +{overflow} more
+        </button>
+      )}
+      {expanded && columns.length > cap && (
+        <button type="button" className="column-tag column-tag--more" onClick={() => setExpanded(false)}>
+          show less
+        </button>
+      )}
     </span>
   )
 }
