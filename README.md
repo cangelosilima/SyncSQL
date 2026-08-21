@@ -84,10 +84,14 @@ outside `SyncSql.Cli` depends only inward on `SyncSql.Core`.
 
 ```
 syncsql validate-config --config <path>
-syncsql sync --config <path> [--staging-root] [--skip-git]
+syncsql sync --config <path> [--staging-root] [--metrics-snapshot-root] [--skip-git]
              [--server-include/--server-exclude]
              [--history-limit] [--metrics-history-limit]
              [--push-token] [--dotenv-path]
+syncsql git publish --config <path> --staging-root <path>
+                     [--metrics-snapshot-root] [--history-limit]
+                     [--metrics-history-limit] [--push-token]
+                     [--summary] [--dotenv-path]
 syncsql catalog build --objects-root <path> --output <path>
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
@@ -97,10 +101,15 @@ syncsql metrics update --snapshot-root <path> --history-root <path>
 ```
 
 `sync` is the umbrella command (extract → catalog → metrics → git publish)
-that CI runs; `catalog build` and `metrics update` are the same
-responsibilities split out as composable, independently usable verbs -
-handy for local preview or rebuilding `catalog.json` against a different
-history window without re-extracting. Install it as a
+that a single-job pipeline runs; `git publish` is the same clone/fold-
+metrics/rebuild-catalog/commit/push sequence with no extraction of its
+own, for publishing a tree that one or more `sync --skip-git` runs already
+populated - e.g. one CI job per server extracting in parallel, feeding a
+single `git publish` job (see "Running the pipeline" below). `catalog
+build` and `metrics update` are the same responsibilities split out
+further still as composable, independently usable verbs - handy for local
+preview or rebuilding `catalog.json` against a different history window
+without re-extracting. Install it as a
 [dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools)
 from the project's Nexus feed, or run it straight from source with
 `dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
@@ -143,7 +152,7 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. |
 | `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`                                                          |
-| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used to install the published `syncsql` tool (validate-config/sync-database-objects) and, on the default branch, to publish new versions of it. |
+| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used to install the published `syncsql` tool (validate-config/extract-server/sync-database-objects) and, on the default branch, to publish new versions of it. |
 | `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by the `cli-publish` job (see `cli/.gitlab-ci.yml`). |
 
 `CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank
@@ -168,24 +177,40 @@ mined for the heatmap / co-change / point-in-time features baked into
   checks that `config/servers.json` (or the example file, if you haven't
   added one yet) parses and satisfies the schema. No database or git
   credentials needed.
-- **sync-database-objects** (`sync`): the actual extraction, the only job
-  that touches your databases, and the one that builds and commits
-  `catalog.json` alongside the extracted objects (see "How it works"
-  above) before pushing. Produces the `extracted-objects/` artifact
-  (handy for debugging a run without needing to dig through git history)
-  and a `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job
-  knows where to find `catalog.json` in the checkout.
+- **extract-server** (`extract`): the only jobs that touch your databases -
+  one job **per server**, run in parallel via a GitLab
+  `parallel: matrix:`. Each instance runs `syncsql sync --skip-git
+  --server-include "^<server>$"`, writing to the same
+  `extracted-objects/`/`metrics-snapshot/` artifact paths every instance
+  shares (safe - extraction always writes under `<server>/...` first, so
+  different servers' output never collides), which GitLab then merges
+  together for the job below.
+- **sync-database-objects** (`sync`): publishes the merged output of every
+  extract-server instance in one commit - `syncsql git publish` clones,
+  replaces `config.git.pathPrefix` with the merged tree, folds this run's
+  metrics into the accumulating history, rebuilds `catalog.json` (see "How
+  it works" above), and pushes. No extraction of its own. Produces a
+  `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job knows
+  where to find `catalog.json` in the checkout.
 - **pages** (`pages`): fetches the branch tip (to see the commit
   sync-database-objects just pushed), builds `site/` (React/Vite) with
   the `catalog.json` it finds there, and publishes it as this project's
   GitLab Pages site.
 
-Both `validate-config` and `sync-database-objects` run on a portable Linux
-image (`mcr.microsoft.com/dotnet/sdk:10.0`), installing the `syncsql` tool
-from Nexus - no Windows runner needed. `sync`/`pages` only run for
-`schedule` (and manually-triggered `web`/API) pipeline sources — create a
-schedule under **CI/CD > Schedules** pointing at this project. Once it's
-run once, find the site URL under **Settings > Pages**.
+`extract-server`'s matrix lists server names literally in `.gitlab-ci.yml`
+and has to be kept in sync by hand with `config/servers.json` - a server
+present in the config but missing from the matrix silently isn't extracted
+by this pipeline. For a small fleet where that upkeep isn't worth the
+parallelism, `.gitlab-ci.yml` documents the one-line swap back to a single
+sequential `syncsql sync` job (drop `extract-server`, give
+`sync-database-objects` a `sync` script instead of `git publish`).
+
+All three run on a portable Linux image (`mcr.microsoft.com/dotnet/sdk:10.0`),
+installing the `syncsql` tool from Nexus - no Windows runner needed.
+`extract`/`sync`/`pages` only run for `schedule` (and manually-triggered
+`web`/API) pipeline sources — create a schedule under **CI/CD >
+Schedules** pointing at this project. Once it's run once, find the site
+URL under **Settings > Pages**.
 
 ## The catalog / lineage site
 

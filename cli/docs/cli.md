@@ -88,6 +88,7 @@ syncsql sync --config ./config/servers.json
 |----------------------------|-----------------------------------|-------------|
 | `--config`                 | *(required)*                      | Path to `config/servers.json`. |
 | `--staging-root`           | a fresh temp directory            | Local directory the extraction is written to before being synced into the git checkout. |
+| `--metrics-snapshot-root`  | a fresh temp directory            | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - never committed as-is, only folded into history at publish time). Set this alongside `--staging-root` when a downstream job needs to collect both - see `syncsql git publish` below for the parallel-per-server-extraction use case this exists for. |
 | `--skip-git`               | off                                | Extract only; leave results under `--staging-root` without cloning/committing/pushing. No `catalog.json` is built in this mode (there is no git checkout to write it into or mine history from). |
 | `--server-include`         | `config.serverSelection.include`  | Regex a server name must match to run. Repeatable. Overrides the config value entirely when passed. |
 | `--server-exclude`         | `config.serverSelection.exclude`  | Regex that excludes a server. Repeatable. Overrides the config value entirely when passed. |
@@ -102,6 +103,45 @@ any server failed (extraction error or missing credentials) or, when
 publishing, no push token was available. A partial failure does not stop
 the run - other servers still extract, and (unless every server failed)
 the successful ones still get published.
+
+### `syncsql git publish`
+
+Publishes an already-populated extracted-objects tree - clone, replace
+`config.git.pathPrefix`, fold metrics, rebuild `catalog.json`, commit,
+push - with **no extraction of its own**. Pairs with one or more
+`sync --skip-git` runs that populated `--staging-root` (and, optionally,
+`--metrics-snapshot-root`) beforehand: run each server's extraction as an
+independent parallel CI job writing to the same staging/metrics roots
+(safe - extraction always writes under `<server>/...` first, so different
+servers never collide), then run `git publish` once against the merged
+result. This is what turns "extract every server" from one long
+sequential job into N short parallel ones feeding a single, fast publish
+step - see the root `.gitlab-ci.yml`'s `extract-server`/
+`sync-database-objects` jobs for the reference setup.
+
+```bash
+syncsql git publish \
+  --config ./config/servers.json \
+  --staging-root ./extracted-objects \
+  --metrics-snapshot-root ./metrics-snapshot \
+  --push-token "$CI_JOB_Maintainer_Token"
+```
+
+| Option                     | Default                          | Description |
+|----------------------------|-----------------------------------|-------------|
+| `--config`                 | *(required)*                      | Path to `config/servers.json`. |
+| `--staging-root`           | *(required)*                      | Pre-populated extracted-objects tree to publish. |
+| `--metrics-snapshot-root`  | *(none)*                          | This run's metrics snapshots. Omit to publish without folding in new metrics - `catalog.json` is still built from whatever metrics history the target repo's own `metrics/` tree already has. |
+| `--history-limit`          | `250`                             | How many commits to clone (so `catalog.json` can be rebuilt from real history in the same push) and mine for the catalog's change heatmap/co-change/point-in-time features. |
+| `--metrics-history-limit`  | `90`                              | Maximum number of daily metrics snapshots retained per table. |
+| `--push-token`             | `CI_JOB_Maintainer_Token`, then `GIT_PUSH_TOKEN` env var | Token used to push to the target git repository. |
+| `--summary`                | *(none)*                          | Extra text appended to the commit message, e.g. a per-server extraction summary collected from the upstream extraction jobs. |
+| `--dotenv-path`            | *(none)*                          | Same as `sync`'s `--dotenv-path`. |
+
+`sync` (without `--skip-git`) and `git publish` share the exact same
+clone/fold-metrics/rebuild-catalog/commit/push implementation - the only
+difference is whether extraction happens first. Exit code `0` on success
+(including "nothing to publish"), `1` if no push token was available.
 
 ### `syncsql catalog build`
 
@@ -215,7 +255,7 @@ process listing, `git remote -v`, or shell history.
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. |
-| `1`  | A handled failure: invalid config, a missing `--objects-root`, one or more servers failed to extract or had missing credentials, or (for `sync`, when publishing) no push token was available. |
+| `1`  | A handled failure: invalid config, a missing `--objects-root`, one or more servers failed to extract or had missing credentials, or (for `sync`/`git publish`, when publishing) no push token was available. |
 | other | An unhandled exception - treat as a bug; the exception message and stack trace are printed. |
 
 ## Running locally

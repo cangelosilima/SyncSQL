@@ -1,5 +1,4 @@
 ﻿using System.CommandLine;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SyncSql.Cli.Composition;
@@ -7,7 +6,6 @@ using SyncSql.Cli.Sync;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;
 using SyncSql.Core.Domain;
-using SyncSql.Core.Json;
 
 namespace SyncSql.Cli.Commands;
 
@@ -24,6 +22,10 @@ internal static class SyncCommand
         Option<string?> stagingRootOption = new("--staging-root")
         {
             Description = "Local directory the extraction is written to before being synced into the git checkout. Defaults to a fresh temp directory.",
+        };
+        Option<string?> metricsSnapshotRootOption = new("--metrics-snapshot-root")
+        {
+            Description = "Local directory this run's volatile metrics snapshots are written to (separate from --staging-root - never committed as-is, only folded into history at publish time). Defaults to a fresh temp directory. Set this (alongside --staging-root) when a downstream job needs to collect both, e.g. one server's extraction running as its own parallel CI job feeding a later `git publish` step.",
         };
         Option<bool> skipGitOption = new("--skip-git")
         {
@@ -54,6 +56,7 @@ internal static class SyncCommand
         {
             configOption,
             stagingRootOption,
+            metricsSnapshotRootOption,
             skipGitOption,
             serverIncludeOption,
             serverExcludeOption,
@@ -97,7 +100,9 @@ internal static class SyncCommand
             // Separate from stagingRoot on purpose: this only ever holds *this run's* volatile metrics
             // snapshots, never committed as-is - the post-sync hook below folds it into an accumulating
             // history tree outside config.git.pathPrefix.
-            string metricsRoot = Path.Combine(Path.GetTempPath(), $"syncsql-metrics-{Guid.NewGuid()}");
+            string? explicitMetricsRoot = parseResult.GetValue(metricsSnapshotRootOption);
+            bool metricsRootExplicit = explicitMetricsRoot is not null;
+            string metricsRoot = explicitMetricsRoot ?? Path.Combine(Path.GetTempPath(), $"syncsql-metrics-{Guid.NewGuid()}");
             Directory.CreateDirectory(metricsRoot);
 
             string[] includeOverride = parseResult.GetValue(serverIncludeOption) ?? [];
@@ -166,6 +171,7 @@ internal static class SyncCommand
                 totalFiles, config.Servers.Count - failedServers.Count, failedServers.Count);
 
             bool skipGit = parseResult.GetValue(skipGitOption);
+            int publishExitCode = 0;
             if (skipGit)
             {
                 logger.LogInformation("--skip-git set; leaving extracted files at {StagingRoot}", stagingRoot);
@@ -176,72 +182,20 @@ internal static class SyncCommand
                 string? pushToken = parseResult.GetValue(pushTokenOption)
                     ?? Environment.GetEnvironmentVariable("CI_JOB_Maintainer_Token")
                     ?? Environment.GetEnvironmentVariable("GIT_PUSH_TOKEN");
-                if (string.IsNullOrWhiteSpace(pushToken))
-                {
-                    logger.LogError("No push token supplied. Set the CI_JOB_Maintainer_Token CI/CD variable (a Maintainer-role token with write_repository scope) or pass --push-token.");
-                    return 1;
-                }
 
-                string gitWorkDir = Path.Combine(Path.GetTempPath(), $"syncsql-repo-{Guid.NewGuid()}");
-                int historyLimit = parseResult.GetValue(historyLimitOption);
-                int metricsHistoryLimit = parseResult.GetValue(metricsHistoryLimitOption);
-                IGitRepository gitRepository = services.GetRequiredService<IGitRepository>();
-                IMetricsHistoryStore metricsHistoryStore = services.GetRequiredService<IMetricsHistoryStore>();
-                ICatalogBuilder catalogBuilder = services.GetRequiredService<ICatalogBuilder>();
-
-                async Task PostSyncHookAsync(string workDir, string pathPrefix, CancellationToken ct)
-                {
-                    // Kept outside pathPrefix on purpose - PublishAsync only wipes/replaces pathPrefix, so
-                    // this tree accumulates across runs instead of being reset to just this run's snapshot.
-                    string metricsHistoryRoot = Path.Combine(workDir, "metrics");
-                    logger.LogInformation("Updating metrics history ({Limit}-snapshot retention) -> {Path}", metricsHistoryLimit, metricsHistoryRoot);
-                    await metricsHistoryStore.UpdateAsync(new MetricsHistoryUpdateRequest
-                    {
-                        SnapshotRoot = metricsRoot,
-                        HistoryRoot = metricsHistoryRoot,
-                        HistoryLimit = metricsHistoryLimit,
-                    }, ct);
-
-                    string catalogOutputPath = Path.Combine(workDir, pathPrefix, "catalog.json");
-                    logger.LogInformation("Building catalog.json ({Limit}-commit history window) -> {Path}", historyLimit, catalogOutputPath);
-                    Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(new CatalogBuildRequest
-                    {
-                        ObjectsRoot = Path.Combine(workDir, pathPrefix),
-                        RepoRoot = workDir,
-                        PathPrefix = pathPrefix,
-                        HistoryLimit = historyLimit,
-                        MetricsRoot = metricsHistoryRoot,
-                    }, ct);
-                    await File.WriteAllTextAsync(catalogOutputPath, JsonSerializer.Serialize(catalog, SyncSqlJsonOptions.Default), ct);
-                }
-
-                try
-                {
-                    GitPublishResult publishResult = await gitRepository.PublishAsync(new GitPublishRequest
-                    {
-                        GitConfig = config.Git.Resolved(),
-                        StagingRoot = stagingRoot,
-                        Token = pushToken,
-                        WorkDir = gitWorkDir,
-                        Summary = string.Join('\n', summaryLines),
-                        CloneDepth = historyLimit,
-                        PostSyncHookAsync = PostSyncHookAsync,
-                    }, cancellationToken);
-
-                    if (publishResult.Published)
-                    {
-                        logger.LogInformation("Published extracted objects, metrics history and catalog.json.");
-                    }
-                }
-                finally
-                {
-                    TryDeleteDirectory(gitWorkDir);
-                    TryDeleteDirectory(metricsRoot);
-                    if (!stagingRootExplicit)
-                    {
-                        TryDeleteDirectory(stagingRoot);
-                    }
-                }
+                publishExitCode = await GitPublishOrchestrator.PublishAsync(
+                    services,
+                    config,
+                    stagingRoot,
+                    stagingRootExplicit,
+                    metricsRoot,
+                    metricsRootExplicit,
+                    pushToken,
+                    parseResult.GetValue(historyLimitOption),
+                    parseResult.GetValue(metricsHistoryLimitOption),
+                    string.Join('\n', summaryLines),
+                    logger,
+                    cancellationToken);
             }
 
             if (failedServers.Count > 0)
@@ -250,26 +204,9 @@ internal static class SyncCommand
                 return 1;
             }
 
-            return 0;
+            return publishExitCode;
         });
 
         return command;
-    }
-
-    private static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
     }
 }
