@@ -45,6 +45,10 @@ internal static class SyncCommand
         {
             Description = "Token used to push to the target git repository. Defaults to CI_JOB_Maintainer_Token, falling back to GIT_PUSH_TOKEN.",
         };
+        Option<FileInfo?> dotenvPathOption = new("--dotenv-path")
+        {
+            Description = "Optional path to write a small KEY=VALUE file with the resolved PATH_PREFIX and GIT_BRANCH (config.git.pathPrefix/.branch, after defaulting). Meant to be picked up by CI as a dotenv artifact report so a downstream job can act on the same path/branch this run publishes to.",
+        };
 
         Command command = new("sync", "Extract, catalog, and publish - the end-to-end pipeline.")
         {
@@ -56,6 +60,7 @@ internal static class SyncCommand
             historyLimitOption,
             metricsHistoryLimitOption,
             pushTokenOption,
+            dotenvPathOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -73,6 +78,14 @@ internal static class SyncCommand
             {
                 logger.LogError("{Message}", ex.Message);
                 return 1;
+            }
+
+            FileInfo? dotenvFile = parseResult.GetValue(dotenvPathOption);
+            if (dotenvFile is not null)
+            {
+                ResolvedGitConfig gitDefaults = config.Git.Resolved();
+                await File.WriteAllTextAsync(dotenvFile.FullName, $"PATH_PREFIX={gitDefaults.PathPrefix}\nGIT_BRANCH={gitDefaults.Branch}\n", cancellationToken);
+                logger.LogInformation("Wrote {Path}", dotenvFile.FullName);
             }
 
             string? explicitStagingRoot = parseResult.GetValue(stagingRootOption);

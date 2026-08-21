@@ -94,6 +94,7 @@ syncsql sync --config ./config/servers.json
 | `--history-limit`          | `250`                             | How many commits to clone (so `catalog.json` can be rebuilt from real history in the same push) and mine for the catalog's change heatmap/co-change/point-in-time features. |
 | `--metrics-history-limit`  | `90`                              | Maximum number of daily metrics snapshots retained per table. |
 | `--push-token`             | `CI_JOB_Maintainer_Token`, then `GIT_PUSH_TOKEN` env var | Token used to push to the target git repository. Required unless `--skip-git` is set. |
+| `--dotenv-path`            | *(none)*                          | Optional path to write a small `KEY=VALUE` file with the resolved `PATH_PREFIX`/`GIT_BRANCH` (`config.git.pathPrefix`/`.branch`, after defaulting). Meant to be picked up by CI as a `dotenv` artifact report so a downstream job (e.g. one that builds the catalog/lineage site) knows where this run published to without hardcoding it. |
 
 Exit code `0` if every selected server extracted successfully (and, if
 publishing, the push succeeded or there was nothing to publish); `1` if
