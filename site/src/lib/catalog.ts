@@ -5,6 +5,8 @@ export interface CatalogIndex {
   byId: Map<string, CatalogNode>
   outgoing: Map<string, string[]>
   incoming: Map<string, string[]>
+  /** "from|to" -> the target's columns detected as referenced by the source (see CatalogEdge.columns). */
+  edgeColumns: Map<string, string[]>
   tree: TreeServer[]
 }
 
@@ -49,16 +51,18 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
 
   const outgoing = new Map<string, string[]>()
   const incoming = new Map<string, string[]>()
+  const edgeColumns = new Map<string, string[]>()
   for (const edge of catalog.edges) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, [])
     outgoing.get(edge.from)!.push(edge.to)
     if (!incoming.has(edge.to)) incoming.set(edge.to, [])
     incoming.get(edge.to)!.push(edge.from)
+    if (edge.columns && edge.columns.length > 0) edgeColumns.set(`${edge.from}|${edge.to}`, edge.columns)
   }
 
   const tree = buildTree(catalog.nodes)
 
-  return { catalog, byId, outgoing, incoming, tree }
+  return { catalog, byId, outgoing, incoming, edgeColumns, tree }
 }
 
 function buildTree(nodes: CatalogNode[]): TreeServer[] {
@@ -102,16 +106,4 @@ function buildTree(nodes: CatalogNode[]): TreeServer[] {
     result.push({ name: serverName, databases: dbList })
   }
   return result
-}
-
-export function matchesQuery(node: CatalogNode, query: string): boolean {
-  if (!query) return true
-  const needle = query.toLowerCase()
-  return (
-    node.name.toLowerCase().includes(needle) ||
-    node.qualifiedName.toLowerCase().includes(needle) ||
-    node.database.toLowerCase().includes(needle) ||
-    node.server.toLowerCase().includes(needle) ||
-    (node.description ?? '').toLowerCase().includes(needle)
-  )
 }

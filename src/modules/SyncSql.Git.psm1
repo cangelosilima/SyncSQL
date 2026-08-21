@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
     SyncSql.Git.psm1
     Clones (or creates) the target repository, replaces the configured
@@ -65,7 +65,11 @@ case "$1" in
 esac
 '@
     Set-Content -LiteralPath $scriptPath -Value $content -NoNewline:$false -Encoding ascii
-    if (-not $IsWindows) {
+    # $IsWindows doesn't exist before PowerShell 6 - Windows PowerShell 5.1
+    # only ever runs on Windows, so treat "PS5.x" as "definitely Windows"
+    # rather than reading an automatic variable that isn't there yet.
+    $onWindows = $PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows
+    if (-not $onWindows) {
         & chmod 700 $scriptPath
     }
     return $scriptPath

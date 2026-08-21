@@ -4,6 +4,8 @@ import { useCatalog } from '../lib/CatalogContext'
 import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
 import LineageGraph from '../components/LineageGraph'
+import MetricsPanels from '../components/MetricsPanels'
+import { getEdgeColumns } from '../lib/neighborhood'
 import type { CatalogObjectVersion } from '../types'
 
 export default function ObjectPage() {
@@ -54,6 +56,7 @@ export default function ObjectPage() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Type</th>
                 <th>Description</th>
               </tr>
             </thead>
@@ -61,6 +64,7 @@ export default function ObjectPage() {
               {node.columns.map((col) => (
                 <tr key={col.name}>
                   <td>{col.name}</td>
+                  <td className="mono-cell">{col.dataType ?? <span className="muted">-</span>}</td>
                   <td>{col.description ?? <span className="muted">-</span>}</td>
                 </tr>
               ))}
@@ -88,6 +92,54 @@ export default function ObjectPage() {
             <CodeBlock code={section.content} />
           </details>
         ))}
+
+      {node.metrics.length > 0 && (
+        <>
+          <h2>Metrics</h2>
+          <p className="muted overview-panel-hint">
+            Volume, index and optimizer-statistics history mined at extraction time - kept separate from this
+            object&apos;s own version history since it changes on every run.
+          </p>
+          <MetricsPanels metrics={node.metrics} />
+        </>
+      )}
+
+      {node.grants.length > 0 && (
+        <>
+          <div className="lineage-graph-header">
+            <h2>Access</h2>
+            <Link to="/lineage?tab=access">Search access by grantee &rarr;</Link>
+          </div>
+          <table className="columns-table">
+            <thead>
+              <tr>
+                <th>Grantee</th>
+                <th>Type</th>
+                <th>Permission</th>
+                <th>State</th>
+                <th>Column</th>
+              </tr>
+            </thead>
+            <tbody>
+              {node.grants.map((grant, i) => (
+                <tr key={`${grant.grantee}-${grant.permission}-${grant.column ?? ''}-${i}`}>
+                  <td>
+                    <Link to={`/lineage?tab=access&grantee=${encodeURIComponent(grant.grantee)}`}>{grant.grantee}</Link>
+                  </td>
+                  <td>{grant.granteeType ?? <span className="muted">-</span>}</td>
+                  <td>{grant.permission}</td>
+                  <td>
+                    <span className={grant.state === 'DENY' ? 'grant-state grant-state--deny' : 'grant-state grant-state--grant'}>
+                      {grant.state}
+                    </span>
+                  </td>
+                  <td>{grant.column ?? <span className="muted">(whole object)</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {node.history.length > 0 && (
         <>
@@ -117,14 +169,18 @@ export default function ObjectPage() {
       )}
 
       <h2>Lineage</h2>
+      <p className="muted overview-panel-hint">
+        Column tags are a best-effort signal (qualified &quot;alias.column&quot; references detected in the DDL text), not a
+        certified column-level lineage report.
+      </p>
       <div className="lineage-lists">
         <div>
           <h3>Depends on ({outgoing.length})</h3>
-          <RelatedList ids={outgoing} />
+          <RelatedList rootId={node.id} ids={outgoing} direction="outgoing" />
         </div>
         <div>
           <h3>Used by ({incoming.length})</h3>
-          <RelatedList ids={incoming} />
+          <RelatedList rootId={node.id} ids={incoming} direction="incoming" />
         </div>
       </div>
 
@@ -141,20 +197,47 @@ export default function ObjectPage() {
   )
 }
 
-function RelatedList({ ids }: { ids: string[] }) {
+function RelatedList({ rootId, ids, direction }: { rootId: string; ids: string[]; direction: 'outgoing' | 'incoming' }) {
   const { index } = useCatalog()
   if (ids.length === 0) return <p className="muted">None found.</p>
   return (
     <ul className="related-list">
       {ids.map((id) => {
         const target = index?.byId.get(id)
-        if (!target) return null
+        if (!target || !index) return null
+        const columns = direction === 'outgoing' ? getEdgeColumns(index, rootId, id) : getEdgeColumns(index, id, rootId)
         return (
           <li key={id}>
             <Link to={`/object/${id}`}>{target.qualifiedName}</Link> <TypeBadge type={target.type} />
+            {columns.length > 0 && <ColumnTags columns={columns} />}
           </li>
         )
       })}
     </ul>
+  )
+}
+
+function ColumnTags({ columns, cap = 6 }: { columns: string[]; cap?: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const shown = expanded ? columns : columns.slice(0, cap)
+  const overflow = columns.length - shown.length
+  return (
+    <span className="column-tags">
+      {shown.map((col) => (
+        <span key={col} className="column-tag">
+          {col}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <button type="button" className="column-tag column-tag--more" onClick={() => setExpanded(true)}>
+          +{overflow} more
+        </button>
+      )}
+      {expanded && columns.length > cap && (
+        <button type="button" className="column-tag column-tag--more" onClick={() => setExpanded(false)}>
+          show less
+        </button>
+      )}
+    </span>
   )
 }

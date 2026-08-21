@@ -10,7 +10,7 @@
 #                                           push, hence a dedicated token.
 #   <PREFIX>_DB_USER / <PREFIX>_DB_PASSWORD
 #                                           One pair per server entry in
-#                                           config/servers.yml, where <PREFIX>
+#                                           config/servers.json, where <PREFIX>
 #                                           is that server's
 #                                           credentialsVariablePrefix
 #                                           (Protected, Masked).
@@ -18,6 +18,24 @@
 # Trigger a schedule under CI/CD > Schedules pointing at this pipeline; the
 # sync/pages jobs only run for schedule (or manually-triggered "web"/API)
 # sources, never on ordinary branch pushes.
+#
+# --- Windows PowerShell 5.1 -------------------------------------------
+# validate-config and sync-database-objects now target Windows PowerShell
+# 5.1 specifically (see the #Requires line in every src/*.ps1 / *.psm1
+# file). That's a real runtime requirement, not just a version number:
+# Bootstrap-Dependencies.ps1 downloads the classic Oracle.ManagedDataAccess
+# NuGet package (.NET Framework build) rather than
+# Oracle.ManagedDataAccess.Core, and a .NET Framework assembly cannot be
+# loaded by PowerShell 7/Core - especially not on Linux, where .NET
+# Framework doesn't exist at all. So these two jobs need to run on an
+# actual Windows host now, not the portable mcr.microsoft.com/powershell
+# Linux image used previously. `tags: [windows]` below is a placeholder -
+# point it at your real Windows GitLab Runner. If that runner uses the
+# Docker executor with Windows containers rather than a bare shell
+# executor, add an `image:` line too -
+# mcr.microsoft.com/windows/servercore:ltsc2022 ships Windows PowerShell
+# 5.1 out of the box. The `pages` job is unaffected (plain Node, no
+# PowerShell) and stays on Linux.
 
 stages:
   - validate
@@ -26,7 +44,7 @@ stages:
 
 variables:
   MODULES_CACHE_DIR: "$CI_PROJECT_DIR/.pwsh-modules"
-  CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.yml"
+  CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.json"
   EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
   GIT_DEPTH: "1"
   # How many commits (touching config.git.pathPrefix) get mined for the
@@ -37,6 +55,12 @@ variables:
   # extracted objects themselves, so it's versioned right along with them
   # rather than living only as a separate CI artifact.
   HISTORY_LIMIT: "250"
+  # How many daily volume/index/optimizer-statistics snapshots are kept per
+  # table (metrics/ tree, outside git.pathPrefix - see Update-MetricsHistory.ps1
+  # and README's "Volatile metrics"). This data changes every run by
+  # nature, so it's tracked separately from each object's own version
+  # history rather than bloating it.
+  METRICS_HISTORY_LIMIT: "90"
 
 .sync_rules: &sync_rules
   - if: '$CI_PIPELINE_SOURCE == "schedule"'
@@ -52,18 +76,19 @@ variables:
 validate-config:
   extends: .pwsh_cache
   stage: validate
-  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  tags:
+    - windows # TODO: point this at your actual Windows GitLab Runner tag
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push"'
   script:
-    - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+    - powershell.exe -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
     - |
-      pwsh -NoProfile -Command '
+      powershell.exe -NoProfile -Command '
         $ErrorActionPreference = "Stop"
         $env:PSModulePath = "$env:MODULES_CACHE_DIR/Modules" + [IO.Path]::PathSeparator + $env:PSModulePath
         Import-Module ./src/modules/SyncSql.Common.psm1 -Force
-        $configPath = if (Test-Path "config/servers.yml") { "config/servers.yml" } else { "config/servers.example.yml" }
+        $configPath = if (Test-Path "config/servers.json") { "config/servers.json" } else { "config/servers.example.json" }
         $config = Import-SyncSqlConfig -Path $configPath
         Write-Host "OK: $($config.servers.Count) server(s) defined in $configPath"
       '
@@ -76,13 +101,14 @@ validate-config:
 sync-database-objects:
   extends: .pwsh_cache
   stage: sync
-  image: mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+  tags:
+    - windows # TODO: point this at your actual Windows GitLab Runner tag
   rules: *sync_rules
   timeout: 2h
   before_script:
-    - pwsh -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+    - powershell.exe -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
   script:
-    - pwsh -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR" -DotenvPath "$CI_PROJECT_DIR/sync.env" -HistoryLimit "$HISTORY_LIMIT"
+    - powershell.exe -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR" -DotenvPath "$CI_PROJECT_DIR/sync.env" -HistoryLimit "$HISTORY_LIMIT" -MetricsHistoryLimit "$METRICS_HISTORY_LIMIT"
   artifacts:
     paths:
       - extracted-objects/

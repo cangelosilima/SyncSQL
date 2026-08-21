@@ -1,10 +1,12 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
     SyncSql.Oracle.psm1
-    Oracle extraction backend. Uses the Oracle.ManagedDataAccess.Core
-    NuGet package (pure managed ADO.NET driver, no Oracle Instant Client
-    required) loaded via Add-Type, and DBMS_METADATA.GET_DDL for
-    ready-to-diff object DDL text.
+    Oracle extraction backend. Uses the Oracle.ManagedDataAccess NuGet
+    package (pure managed ADO.NET driver, no Oracle Instant Client
+    required - the classic .NET Framework build, since this project
+    targets Windows PowerShell 5.1; see Bootstrap-Dependencies.ps1) loaded
+    via Add-Type, and DBMS_METADATA.GET_DDL for ready-to-diff object DDL
+    text.
 #>
 
 Set-StrictMode -Version Latest
@@ -34,6 +36,15 @@ $script:SyncSqlOracleDdlTypeMap = @{
 }
 
 function Find-SyncSqlOracleDriverDll {
+    <#
+        Searches -CacheDir for the ODP.NET managed driver DLL. Prefers a
+        .NET-Framework-targeted build (net4x TFM folders, or the classic
+        Oracle.ManagedDataAccess package's non-standard "managed/common"
+        layout) since Windows PowerShell 5.1 runs on .NET Framework, not
+        .NET Core/Standard - falls back to the first candidate found when
+        there's only one, since that package often ships a single "common"
+        build rather than several per-TFM folders.
+    #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$CacheDir)
 
@@ -42,7 +53,7 @@ function Find-SyncSqlOracleDriverDll {
     $candidates = Get-ChildItem -LiteralPath $CacheDir -Recurse -Filter 'Oracle.ManagedDataAccess.dll' -ErrorAction SilentlyContinue
     if (-not $candidates) { return $null }
 
-    $preferred = $candidates | Where-Object { $_.FullName -match 'netstandard2\.1' } | Select-Object -First 1
+    $preferred = $candidates | Where-Object { $_.FullName -match 'net4|managed[\\/]common' } | Select-Object -First 1
     if ($preferred) { return $preferred.FullName }
 
     return ($candidates | Select-Object -First 1).FullName
@@ -171,6 +182,196 @@ function Get-SyncSqlOracleDatabaseLinks {
     }
 }
 
+function Get-SyncSqlOracleGrantsIndex {
+    <#
+        Object-level (ALL_TAB_PRIVS) and column-level (ALL_COL_PRIVS) grants
+        for every object owned by $Owner, folded into a lookup
+        ("owner.objectName" -> formatted "-- [grant] ..." lines, same format
+        ConvertTo-SyncSqlGrantLine produces for MSSQL) that Build-Catalog.ps1
+        parses into structured node.grants entries. Oracle has no DENY
+        concept, so state is always 'GRANT'; ALL_TAB_PRIVS/ALL_COL_PRIVS
+        don't reliably expose whether a grantee is a user or a role across
+        versions, so granteeType is left blank. Best-effort: these views
+        require privileges the connecting account may not have, so failures
+        degrade to an empty index rather than failing the whole owner.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $index = @{}
+    try {
+        $objectQuery = "SELECT GRANTEE, TABLE_NAME, PRIVILEGE FROM ALL_TAB_PRIVS WHERE OWNER = :owner ORDER BY TABLE_NAME, GRANTEE, PRIVILEGE"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $objectQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add((ConvertTo-SyncSqlGrantLine -Permission ([string]$row['PRIVILEGE']) -State 'GRANT' `
+                        -Grantee ([string]$row['GRANTEE']) -GranteeType $null -Column $null))
+        }
+
+        $columnQuery = "SELECT GRANTEE, TABLE_NAME, COLUMN_NAME, PRIVILEGE FROM ALL_COL_PRIVS WHERE OWNER = :owner ORDER BY TABLE_NAME, GRANTEE, PRIVILEGE"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $columnQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add((ConvertTo-SyncSqlGrantLine -Permission ([string]$row['PRIVILEGE']) -State 'GRANT' `
+                        -Grantee ([string]$row['GRANTEE']) -GranteeType $null -Column ([string]$row['COLUMN_NAME'])))
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_PRIVS/ALL_COL_PRIVS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
+
+function Get-SyncSqlOracleColumnListIndex {
+    <#
+        Full ordinal column list (name + data type) for every table/view
+        owned by $Owner, from ALL_TAB_COLUMNS (covers both - Oracle doesn't
+        distinguish table vs. view columns in that view). Same "-- [col]
+        name|dataType" line format the MSSQL backend and Build-Catalog.ps1's
+        parser use.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $index = @{}
+    try {
+        $query = "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_ID FROM ALL_TAB_COLUMNS WHERE OWNER = :owner ORDER BY TABLE_NAME, COLUMN_ID"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $query -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add("-- [col] $($row['COLUMN_NAME'])|$($row['DATA_TYPE'])")
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_COLUMNS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
+
+function Get-SyncSqlOracleMetricsSnapshot {
+    <#
+        Volatile, best-effort operational snapshot per table owned by
+        $Owner - the Oracle equivalent of Get-SyncSqlMsSqlMetricsSnapshot,
+        same output shape (keyed "owner.tableName", ready for
+        New-SyncSqlMetricsSnapshotFile), reduced scope to match what's
+        realistically available without diagnostics-pack privileges:
+
+        - Volume: row count and an estimated size from ALL_TAB_STATISTICS
+          (BLOCKS * 8KB, assuming the common 8K block size - a best-effort
+          estimate, not read from DBA_SEGMENTS, to avoid needing elevated
+          privileges).
+        - Index metrics: row count / distinct keys / leaf blocks / last
+          analyzed from ALL_IND_STATISTICS. Oracle has no equivalent of
+          MSSQL's always-on per-index usage counters without enabling the
+          Diagnostics Pack, so seeks/scans/lookups/updates are simply
+          absent here.
+        - "Optimizer statistics": Oracle has no separate named stats-object
+          abstraction like MSSQL's sys.stats - the table stats *are* what
+          the optimizer uses - so this is a single synthetic entry per
+          table (rows/sample size/last analyzed from ALL_TAB_STATISTICS,
+          modification counter from ALL_TAB_MODIFICATIONS when available).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $capturedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $snapshots = @{}
+
+    try {
+        $query = @"
+SELECT TABLE_NAME, NUM_ROWS, BLOCKS, SAMPLE_SIZE, LAST_ANALYZED
+FROM ALL_TAB_STATISTICS
+WHERE OWNER = :owner AND PARTITION_NAME IS NULL AND SUBPARTITION_NAME IS NULL AND OBJECT_TYPE = 'TABLE'
+"@
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $query -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            $rowCount = if ($row['NUM_ROWS'] -is [DBNull]) { $null } else { [int64]$row['NUM_ROWS'] }
+            $blocks = if ($row['BLOCKS'] -is [DBNull]) { $null } else { [int64]$row['BLOCKS'] }
+            $sampleSize = if ($row['SAMPLE_SIZE'] -is [DBNull]) { $null } else { [int64]$row['SAMPLE_SIZE'] }
+            $lastAnalyzed = if ($row['LAST_ANALYZED'] -is [DBNull]) { $null } else { ([datetime]$row['LAST_ANALYZED']).ToUniversalTime().ToString('o') }
+
+            $snapshots[$key] = [ordered]@{
+                capturedAt = $capturedAt
+                rowCount   = $rowCount
+                reservedKB = if ($null -eq $blocks) { $null } else { $blocks * 8 }
+                dataKB     = $null
+                indexKB    = $null
+                indexes    = @()
+                statistics = @(
+                    [ordered]@{
+                        name                = $row['TABLE_NAME']
+                        rows                = $rowCount
+                        rowsSampled         = $sampleSize
+                        steps               = $null
+                        modificationCounter = $null
+                        lastUpdated         = $lastAnalyzed
+                    }
+                )
+            }
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_STATISTICS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+    }
+
+    try {
+        $modQuery = "SELECT TABLE_NAME, INSERTS, UPDATES, DELETES FROM ALL_TAB_MODIFICATIONS WHERE TABLE_OWNER = :owner"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $modQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $snapshots.ContainsKey($key)) { continue }
+            $inserts = if ($row['INSERTS'] -is [DBNull]) { 0 } else { [int64]$row['INSERTS'] }
+            $updates = if ($row['UPDATES'] -is [DBNull]) { 0 } else { [int64]$row['UPDATES'] }
+            $deletes = if ($row['DELETES'] -is [DBNull]) { 0 } else { [int64]$row['DELETES'] }
+            $snapshots[$key]['statistics'][0]['modificationCounter'] = $inserts + $updates + $deletes
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_MODIFICATIONS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+    }
+
+    try {
+        $indexQuery = @"
+SELECT INDEX_NAME, TABLE_NAME, NUM_ROWS, DISTINCT_KEYS, LEAF_BLOCKS, LAST_ANALYZED
+FROM ALL_IND_STATISTICS
+WHERE TABLE_OWNER = :owner AND PARTITION_NAME IS NULL AND SUBPARTITION_NAME IS NULL
+"@
+        $indexesByTable = @{}
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $indexQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $indexesByTable.ContainsKey($key)) { $indexesByTable[$key] = [System.Collections.Generic.List[object]]::new() }
+            $indexesByTable[$key].Add([ordered]@{
+                    name         = $row['INDEX_NAME']
+                    rowCount     = if ($row['NUM_ROWS'] -is [DBNull]) { $null } else { [int64]$row['NUM_ROWS'] }
+                    distinctKeys = if ($row['DISTINCT_KEYS'] -is [DBNull]) { $null } else { [int64]$row['DISTINCT_KEYS'] }
+                    leafBlocks   = if ($row['LEAF_BLOCKS'] -is [DBNull]) { $null } else { [int64]$row['LEAF_BLOCKS'] }
+                    lastAnalyzed = if ($row['LAST_ANALYZED'] -is [DBNull]) { $null } else { ([datetime]$row['LAST_ANALYZED']).ToUniversalTime().ToString('o') }
+                })
+        }
+        foreach ($key in $indexesByTable.Keys) {
+            if ($snapshots.ContainsKey($key)) { $snapshots[$key]['indexes'] = @($indexesByTable[$key]) }
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_IND_STATISTICS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+    }
+
+    return $snapshots
+}
+
 function Export-SyncSqlOracleServer {
     <#
         Orchestrates a full extraction of one Oracle server entry into
@@ -187,7 +388,8 @@ function Export-SyncSqlOracleServer {
         [Parameter(Mandatory)]$Filters,
         [Parameter(Mandatory)][string[]]$AllowedObjectTypes,
         [Parameter(Mandatory)][string]$StagingRoot,
-        [Parameter(Mandatory)][string]$DriverDllPath
+        [Parameter(Mandatory)][string]$DriverDllPath,
+        [string]$MetricsRoot
     )
 
     $serverName  = $Server.name
@@ -222,12 +424,30 @@ function Export-SyncSqlOracleServer {
             }
         }
 
+        # Optional: object/column grants (ALL_TAB_PRIVS/ALL_COL_PRIVS) and the
+        # full column list (ALL_TAB_COLUMNS) for tables/views, one query pass
+        # per owner regardless of how many object types are being extracted
+        # for that owner - both degrade to an empty index on failure.
+        $grantsByOwner = @{}
+        $columnListByOwner = @{}
+        $metricsByOwner = @{}
+
         foreach ($configType in $script:SyncSqlOracleObjectTypeMap.Keys) {
             if ($AllowedObjectTypes -notcontains $configType) { continue }
             $oracleType = $script:SyncSqlOracleObjectTypeMap[$configType]
             $ddlType = $script:SyncSqlOracleDdlTypeMap[$oracleType]
 
             foreach ($owner in $allowedOwners) {
+                if (-not $grantsByOwner.ContainsKey($owner)) {
+                    $grantsByOwner[$owner] = Get-SyncSqlOracleGrantsIndex -Connection $connection -Owner $owner -ServerName $serverName
+                }
+                if ($oracleType -in @('TABLE', 'VIEW') -and -not $columnListByOwner.ContainsKey($owner)) {
+                    $columnListByOwner[$owner] = Get-SyncSqlOracleColumnListIndex -Connection $connection -Owner $owner -ServerName $serverName
+                }
+                if ($MetricsRoot -and $oracleType -eq 'TABLE' -and -not $metricsByOwner.ContainsKey($owner)) {
+                    $metricsByOwner[$owner] = Get-SyncSqlOracleMetricsSnapshot -Connection $connection -Owner $owner -ServerName $serverName
+                }
+
                 $objectNames = Get-SyncSqlOracleObjectList -Connection $connection -Owner $owner -OracleObjectType $oracleType
                 foreach ($objectName in $objectNames) {
                     if (-not (Test-SyncSqlNameAllowed -Name $objectName -Filter $Filters.objectNames)) { continue }
@@ -240,9 +460,21 @@ function Export-SyncSqlOracleServer {
                         continue
                     }
 
+                    $key = "$owner.$objectName"
+                    if ($oracleType -in @('TABLE', 'VIEW')) {
+                        $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Columns' -SectionIndex $columnListByOwner[$owner] -Key $key
+                    }
+                    $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Grants' -SectionIndex $grantsByOwner[$owner] -Key $key
+
                     New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $serviceName `
                         -SchemaName $owner -ObjectType $configType -ObjectName $objectName -Definition $definition | Out-Null
                     $fileCount++
+
+                    if ($MetricsRoot -and $oracleType -eq 'TABLE' -and $metricsByOwner.ContainsKey($owner) -and $metricsByOwner[$owner].ContainsKey($key)) {
+                        New-SyncSqlMetricsSnapshotFile -MetricsRoot $MetricsRoot -ServerName $serverName -DatabaseName $serviceName `
+                            -SchemaName $owner -ObjectType $configType -ObjectName $objectName `
+                            -Snapshot $metricsByOwner[$owner][$key] | Out-Null
+                    }
                 }
             }
         }
@@ -283,5 +515,8 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlOracleSchemas',
     'Get-SyncSqlOracleObjectList',
     'Get-SyncSqlOracleDatabaseLinks',
+    'Get-SyncSqlOracleGrantsIndex',
+    'Get-SyncSqlOracleColumnListIndex',
+    'Get-SyncSqlOracleMetricsSnapshot',
     'Export-SyncSqlOracleServer'
 )

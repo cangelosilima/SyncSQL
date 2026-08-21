@@ -1,23 +1,40 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useNavigate } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
+import { useTheme } from '../lib/ThemeContext'
 import { layoutGraph } from '../lib/layout'
 import { colorForType } from '../lib/typeColors'
+
+interface EdgeColumnData extends Record<string, unknown> {
+  from: string
+  to: string
+  columns: string[]
+}
 
 interface LineageGraphProps {
   nodeIds: string[]
   focusId?: string
   height?: number | string
+  /**
+   * Single-click handler: when provided, clicking a node drills the graph
+   * into it (re-centering/expanding in place) instead of navigating away.
+   * Double-click always opens the object's detail page regardless.
+   */
+  onNodeActivate?: (id: string) => void
 }
 
-export default function LineageGraph({ nodeIds, focusId, height = 560 }: LineageGraphProps) {
+const EDGE_LABEL_CAP = 3
+
+export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate }: LineageGraphProps) {
   const { index } = useCatalog()
+  const { theme } = useTheme()
   const navigate = useNavigate()
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
 
   const { nodes, edges } = useMemo(() => {
-    if (!index) return { nodes: [] as Node[], edges: [] as Edge[] }
+    if (!index) return { nodes: [] as Node[], edges: [] as Edge<EdgeColumnData>[] }
 
     const idSet = new Set(nodeIds)
     const flowNodes: Node[] = nodeIds
@@ -42,23 +59,38 @@ export default function LineageGraph({ nodeIds, focusId, height = 560 }: Lineage
         }
       })
 
-    const flowEdges: Edge[] = []
+    const flowEdges: Edge<EdgeColumnData>[] = []
     for (const [from, targets] of index.outgoing.entries()) {
       if (!idSet.has(from)) continue
       for (const to of targets) {
         if (!idSet.has(to)) continue
+        const columns = index.edgeColumns.get(`${from}|${to}`) ?? []
+        const hasColumns = columns.length > 0
+        const label = hasColumns
+          ? columns.length > EDGE_LABEL_CAP
+            ? `${columns.slice(0, EDGE_LABEL_CAP).join(', ')}, +${columns.length - EDGE_LABEL_CAP} (click)`
+            : columns.join(', ')
+          : undefined
         flowEdges.push({
           id: `${from}->${to}`,
           source: from,
           target: to,
           animated: false,
-          style: { stroke: 'var(--border)' },
+          label,
+          labelStyle: { fill: 'var(--text-muted)', fontSize: 10 },
+          labelBgStyle: { fill: 'var(--surface)' },
+          labelBgPadding: [3, 2],
+          style: { stroke: hasColumns ? 'var(--accent)' : 'var(--border)', strokeWidth: hasColumns ? 1.5 : 1 },
+          data: { from, to, columns },
         })
       }
     }
 
     return { nodes: layoutGraph(flowNodes, flowEdges), edges: flowEdges }
   }, [index, nodeIds, focusId])
+
+  const selectedEdge = edges.find((e) => e.id === selectedEdgeId)
+  const selectedData = selectedEdge?.data
 
   if (!index) return null
   if (nodes.length === 0) {
@@ -70,15 +102,43 @@ export default function LineageGraph({ nodeIds, focusId, height = 560 }: Lineage
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodeClick={(_, node) => navigate(`/object/${node.id}`)}
+        onNodeClick={(_, node) => (onNodeActivate ? onNodeActivate(node.id) : navigate(`/object/${node.id}`))}
+        onNodeDoubleClick={(_, node) => navigate(`/object/${node.id}`)}
+        onEdgeClick={(_, edge) => {
+          const data = edge.data as EdgeColumnData | undefined
+          if (!data || data.columns.length === 0) return
+          setSelectedEdgeId((current) => (current === edge.id ? null : edge.id))
+        }}
+        onPaneClick={() => setSelectedEdgeId(null)}
         fitView
-        colorMode="dark"
+        colorMode={theme}
         proOptions={{ hideAttribution: true }}
       >
         <Background />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable maskColor="rgba(0, 0, 0, 0.7)" />
+        <MiniMap pannable zoomable maskColor={theme === 'dark' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.75)'} />
       </ReactFlow>
+
+      {selectedData && selectedData.columns.length > 0 && (
+        <div className="lineage-edge-panel">
+          <div className="lineage-edge-panel-title">
+            <span>{index.byId.get(selectedData.from)?.qualifiedName ?? selectedData.from}</span>
+            <span className="lineage-edge-panel-arrow">&rarr;</span>
+            <span>{index.byId.get(selectedData.to)?.qualifiedName ?? selectedData.to}</span>
+            <span className="muted">references {selectedData.columns.length} column{selectedData.columns.length === 1 ? '' : 's'}:</span>
+          </div>
+          <span className="column-tags">
+            {selectedData.columns.map((col) => (
+              <span key={col} className="column-tag">
+                {col}
+              </span>
+            ))}
+          </span>
+          <button type="button" className="lineage-edge-panel-close" aria-label="Close" onClick={() => setSelectedEdgeId(null)}>
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   )
 }

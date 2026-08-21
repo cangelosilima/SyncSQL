@@ -1,7 +1,6 @@
-import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { CatalogProvider, useCatalog } from './lib/CatalogContext'
-import Sidebar from './components/Sidebar'
+import { useTheme } from './lib/ThemeContext'
 import Home from './pages/Home'
 import ObjectPage from './pages/ObjectPage'
 import LineagePage from './pages/LineagePage'
@@ -18,7 +17,6 @@ export default function App() {
 
 function Shell() {
   const { loading, error } = useCatalog()
-  const [treeOpen, setTreeOpen] = useState(false)
 
   if (loading) {
     return (
@@ -42,15 +40,6 @@ function Shell() {
   return (
     <div className="layout">
       <header className="topbar">
-        <button
-          type="button"
-          className="tree-toggle"
-          aria-label={treeOpen ? 'Close tree browser' : 'Open tree browser'}
-          aria-pressed={treeOpen}
-          onClick={() => setTreeOpen((v) => !v)}
-        >
-          &#9776;
-        </button>
         <span className="brand">SyncSQL</span>
         <nav>
           <NavLink to="/" end>
@@ -60,14 +49,9 @@ function Shell() {
           <NavLink to="/lineage">Lineage</NavLink>
           <NavLink to="/history">History</NavLink>
         </nav>
+        <ThemeToggle />
       </header>
       <div className="body">
-        {treeOpen && (
-          <>
-            <div className="sidebar-backdrop" onClick={() => setTreeOpen(false)} />
-            <Sidebar onNavigate={() => setTreeOpen(false)} />
-          </>
-        )}
         <main className="content">
           <Routes>
             <Route path="/" element={<Home />} />
@@ -79,5 +63,14 @@ function Shell() {
         </main>
       </div>
     </div>
+  )
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+  return (
+    <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
+      {theme === 'light' ? '☾ Dark' : '☀ Light'}
+    </button>
   )
 }

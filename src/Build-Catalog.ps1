@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Walks a tree produced by Export-DatabaseObjects.ps1 and builds a
@@ -64,6 +64,15 @@
 .PARAMETER MaxCoChangeCommitSize
     Commits touching more files than this are excluded from co-change
     pair counting.
+
+.PARAMETER MetricsRoot
+    Root of the accumulating metrics history tree (Update-MetricsHistory.ps1's
+    -HistoryRoot - one JSON array file per table, at the same relative
+    path/id as that table's own extracted file). When supplied, each
+    matching node gets that array attached as node.metrics (volume, index
+    fragmentation/usage, optimizer statistics over time). Omit to skip -
+    node.metrics is simply left empty, same "degrade rather than fail"
+    posture as the rest of this script.
 #>
 [CmdletBinding()]
 param(
@@ -74,7 +83,8 @@ param(
     [int]$HistoryLimit = 250,
     [int]$MaxVersionsPerObject = 15,
     [int]$MaxHistoryContentCalls = 1500,
-    [int]$MaxCoChangeCommitSize = 40
+    [int]$MaxCoChangeCommitSize = 40,
+    [string]$MetricsRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -163,7 +173,43 @@ function ConvertFrom-SyncSqlObjectFileLines {
         }
     }
 
-    $otherSections = @($sections | Where-Object { $_.Title -ne 'Extended Properties' } | ForEach-Object {
+    # Full ordinal column list (name + data type), when the extraction
+    # backend attached one (Tables/Views only) - independent of whether any
+    # of those columns happen to have an Extended Properties description.
+    # Falls back to Extended-Properties-only columns (order not guaranteed)
+    # when absent, same as before this section existed.
+    $fullColumns = [System.Collections.Generic.List[object]]::new()
+    $columnsSection = $sections | Where-Object { $_.Title -eq 'Columns' } | Select-Object -First 1
+    if ($columnsSection) {
+        foreach ($line in $columnsSection.Lines) {
+            if ($line -match '^-- \[col\] ([^|]*)\|(.*)$') {
+                $m = $Matches
+                $fullColumns.Add([pscustomobject]@{ Name = $m[1]; DataType = $m[2] })
+            }
+        }
+    }
+
+    # Object/column-level grants ("who can touch this object"), when the
+    # extraction backend attached one - see ConvertTo-SyncSqlGrantLine in
+    # SyncSql.MsSql.psm1 for the line format both backends emit.
+    $grants = [System.Collections.Generic.List[object]]::new()
+    $grantsSection = $sections | Where-Object { $_.Title -eq 'Grants' } | Select-Object -First 1
+    if ($grantsSection) {
+        foreach ($line in $grantsSection.Lines) {
+            if ($line -match '^-- \[grant\] ([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|(.*)$') {
+                $m = $Matches
+                $grants.Add([ordered]@{
+                        permission  = $m[1]
+                        state       = $m[2]
+                        grantee     = $m[3]
+                        granteeType = if ([string]::IsNullOrEmpty($m[4])) { $null } else { $m[4] }
+                        column      = if ([string]::IsNullOrEmpty($m[5])) { $null } else { $m[5] }
+                    })
+            }
+        }
+    }
+
+    $otherSections = @($sections | Where-Object { $_.Title -notin @('Extended Properties', 'Columns', 'Grants') } | ForEach-Object {
         [ordered]@{ title = $_.Title; content = ($_.Lines -join "`n").Trim() }
     })
 
@@ -171,6 +217,8 @@ function ConvertFrom-SyncSqlObjectFileLines {
         Ddl          = ($ddlLines -join "`n").Trim()
         Description  = $objectDescription
         Columns      = $columns
+        FullColumns  = $fullColumns
+        Grants       = $grants
         Sections     = $otherSections
     }
 }
@@ -185,7 +233,7 @@ $bareIndexDb = @{}      # "server::database::name"        -> [nodeId, ...]
 $bareIndexServer = @{}  # "server::name"                  -> [nodeId, ...]
 
 foreach ($file in $files) {
-    $relative = [IO.Path]::GetRelativePath($ObjectsRoot, $file.FullName) -replace '\\', '/'
+    $relative = Get-SyncSqlRelativePath -Root $ObjectsRoot -FullPath $file.FullName
     $segments = $relative -split '/'
     if ($segments.Count -lt 4) {
         Write-SyncSqlLog "Skipping unexpected path shape: $relative" -Level WARN
@@ -202,6 +250,21 @@ foreach ($file in $files) {
     $id = $relative -replace '\.sql$', ''
     $qualifiedName = if ($schema) { "$schema.$name" } else { $name }
 
+    # Prefer the full structural column list (Tables/Views) when the
+    # extraction backend attached one, merging in any Extended Properties
+    # description found for that column; otherwise fall back to whatever
+    # columns happened to have a description (the only ones we used to know
+    # about at all).
+    $columns = if ($parsed.FullColumns.Count -gt 0) {
+        @($parsed.FullColumns | ForEach-Object {
+                $description = if ($parsed.Columns.Contains($_.Name)) { $parsed.Columns[$_.Name] } else { $null }
+                [ordered]@{ name = $_.Name; description = $description; dataType = $_.DataType }
+            })
+    }
+    else {
+        @($parsed.Columns.Keys | ForEach-Object { [ordered]@{ name = $_; description = $parsed.Columns[$_]; dataType = $null } })
+    }
+
     $node = [ordered]@{
         id            = $id
         server        = $server
@@ -213,9 +276,11 @@ foreach ($file in $files) {
         path          = $relative
         ddl           = $parsed.Ddl
         description   = $parsed.Description
-        columns       = @($parsed.Columns.Keys | ForEach-Object { [ordered]@{ name = $_; description = $parsed.Columns[$_] } })
+        columns       = $columns
+        grants        = @($parsed.Grants)
         sections      = $parsed.Sections
         sizeBytes     = [Text.Encoding]::UTF8.GetByteCount($parsed.Ddl)
+        metrics       = @()
     }
     $nodes.Add($node)
 
@@ -283,6 +348,91 @@ foreach ($node in $nodes) {
     }
 }
 
+Write-SyncSqlLog "Detecting column-level references for inferred edges (best-effort)"
+
+# Words that can immediately follow a bare table/view reference without an
+# explicit alias (FROM dbo.Orders WHERE ...) and would otherwise be
+# misread as an alias by Get-SyncSqlAliasesForTarget's "next token" regex.
+$script:SyncSqlAliasStopWords = @(
+    'WHERE', 'ON', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'OUTER', 'FULL', 'CROSS', 'GROUP', 'ORDER',
+    'HAVING', 'UNION', 'SET', 'VALUES', 'INTO', 'SELECT', 'FROM', 'AND', 'OR', 'NOT', 'NULL',
+    'IS', 'IN', 'EXISTS', 'BEGIN', 'END', 'GO', 'WITH', 'FOR', 'BY', 'ALL', 'DISTINCT', 'TOP', 'AS'
+)
+
+function Get-SyncSqlAliasesForTarget {
+    <#
+        Best-effort alias resolution: finds tokens immediately following the
+        target object's bare or schema-qualified name in $ScanText (covers
+        "FROM tbl t", "JOIN sch.tbl AS t", and bare "tbl.column" usage with
+        no alias at all, since the object's own name is always included).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ScanText,
+        [Parameter(Mandatory)]$TargetNode
+    )
+
+    $aliases = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $aliases.Add($TargetNode.name) | Out-Null
+    if ([string]::IsNullOrWhiteSpace($ScanText)) { return $aliases }
+
+    $namePattern = [regex]::Escape($TargetNode.name)
+    $qualifiedPrefix = if ($TargetNode.schema) { "(?:\[?$([regex]::Escape($TargetNode.schema))\]?\.)?" } else { '' }
+    $aliasRegex = [regex]::new("(?i)$qualifiedPrefix\[?$namePattern\]?\s+(?:AS\s+)?\[?([A-Za-z_][\w$#]*)\]?")
+    foreach ($m in $aliasRegex.Matches($ScanText)) {
+        $alias = $m.Groups[1].Value
+        if ($script:SyncSqlAliasStopWords -notcontains $alias.ToUpperInvariant()) {
+            $aliases.Add($alias) | Out-Null
+        }
+    }
+    return $aliases
+}
+
+function Get-SyncSqlUsedColumns {
+    <#
+        Scans $ScanText for "<alias>.<column>" references (alias being any
+        of the target's resolved aliases) and returns the distinct matched
+        column names - the best-effort "column dependency" signal attached
+        to each inferred edge.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ScanText,
+        [Parameter(Mandatory)]$Aliases,
+        [Parameter(Mandatory)][string[]]$ColumnNames
+    )
+
+    if ($Aliases.Count -eq 0 -or $ColumnNames.Count -eq 0 -or [string]::IsNullOrWhiteSpace($ScanText)) { return @() }
+
+    $aliasAlt = (($Aliases | ForEach-Object { [regex]::Escape($_) }) -join '|')
+    $colAlt = (($ColumnNames | ForEach-Object { [regex]::Escape($_) }) -join '|')
+    $regex = [regex]::new("(?i)\b(?:$aliasAlt)\.\[?($colAlt)\]?\b")
+
+    $used = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($m in $regex.Matches($ScanText)) { $used.Add($m.Groups[1].Value) | Out-Null }
+    return @($used)
+}
+
+$nodesByIdForColumns = @{}
+foreach ($n in $nodes) { $nodesByIdForColumns[$n.id] = $n }
+
+foreach ($edge in $edges) {
+    $edge['columns'] = @()
+    $toNode = $nodesByIdForColumns[$edge.to]
+    $fromNode = $nodesByIdForColumns[$edge.from]
+    if (-not $toNode -or -not $fromNode) { continue }
+    if (-not $toNode.columns -or $toNode.columns.Count -eq 0) { continue }
+
+    $columnNames = @($toNode.columns | ForEach-Object { $_.name } | Where-Object { $_ })
+    if ($columnNames.Count -eq 0) { continue }
+
+    $aliases = Get-SyncSqlAliasesForTarget -ScanText $fromNode.ddl -TargetNode $toNode
+    $used = Get-SyncSqlUsedColumns -ScanText $fromNode.ddl -Aliases $aliases -ColumnNames $columnNames
+    if ($used.Count -gt 0) {
+        $edge['columns'] = @($used | Sort-Object)
+    }
+}
+
 Write-SyncSqlLog "Built $($nodes.Count) node(s), $($edges.Count) edge(s)"
 
 $typeCounts = [ordered]@{}
@@ -294,6 +444,21 @@ foreach ($node in $nodes) {
     $node['changeCount'] = 0
     $node['lastChangedAt'] = $null
     $node['history'] = @()
+
+    if ($MetricsRoot) {
+        $metricsPath = Join-Path $MetricsRoot "$($node.id).json"
+        if (Test-Path -LiteralPath $metricsPath) {
+            try {
+                $raw = Get-Content -LiteralPath $metricsPath -Raw
+                if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                    $node['metrics'] = @(ConvertFrom-Json -InputObject $raw)
+                }
+            }
+            catch {
+                Write-SyncSqlLog "Metrics history at '$metricsPath' could not be parsed (leaving node.metrics empty): $($_.Exception.Message)" -Level WARN
+            }
+        }
+    }
 }
 
 $recentChanges = @()
@@ -414,6 +579,7 @@ $catalog = [ordered]@{
 
 $outputDir = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-$catalog | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $OutputPath -Encoding utf8
+$catalogJson = $catalog | ConvertTo-Json -Depth 10 -Compress
+Set-SyncSqlUtf8NoBomContent -Path $OutputPath -Content $catalogJson
 
 Write-SyncSqlLog "Wrote catalog to $OutputPath"
