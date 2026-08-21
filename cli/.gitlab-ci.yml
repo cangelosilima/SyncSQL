@@ -1,0 +1,81 @@
+# CI for the syncsql .NET CLI (this cli/ folder) - lint, test, build, and (on
+# the default branch) pack + publish to Nexus as a dotnet global tool. Included
+# from the root .gitlab-ci.yml, which then just *installs* the published tool
+# for validate-config/sync-database-objects - it never builds this source tree
+# itself. See cli/docs/cli.md for the tool's own usage.
+#
+# Required CI/CD variables (Settings > CI/CD > Variables), only needed for the
+# cli-publish job:
+#   NEXUS_NUGET_SOURCE_URL   NuGet v3 feed URL of the target Nexus repository.
+#   NEXUS_API_KEY            API key/token with publish rights to that feed
+#                             (Protected, Masked).
+#
+# SyncSql.Lineage.Oracle vendors a real ANTLR4 PL/SQL grammar (.g4 files) that
+# Antlr4BuildTasks generates a lexer/parser from at `dotnet build` time - that
+# codegen step needs a JRE on PATH, installed below alongside the .NET SDK
+# image; nothing generated is ever committed to source control.
+
+stages:
+  - cli-lint
+  - cli-test
+  - cli-build
+  - cli-publish
+
+variables:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+
+.cli_dotnet: &cli_dotnet
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - cli/**/*
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      changes:
+        - cli/**/*
+  before_script:
+    - apt-get update -qq && apt-get install -y --no-install-recommends default-jre-headless -qq
+    - cd cli
+  cache:
+    key: cli-nuget-v1
+    paths:
+      - .nuget/packages/
+
+cli-lint:
+  <<: *cli_dotnet
+  stage: cli-lint
+  script:
+    # The two Grammar/*Base.cs files are vendored unmodified from upstream
+    # (see src/SyncSql.Lineage.Oracle/Grammar/NOTICE.md) - excluded so
+    # formatting never diverges them from the original source.
+    - dotnet format SyncSql.slnx --verify-no-changes
+        --exclude src/SyncSql.Lineage.Oracle/Grammar/PlSqlLexerBase.cs src/SyncSql.Lineage.Oracle/Grammar/PlSqlParserBase.cs
+
+cli-test:
+  <<: *cli_dotnet
+  stage: cli-test
+  script:
+    - dotnet test SyncSql.slnx --configuration Release --logger "console;verbosity=normal"
+
+cli-build:
+  <<: *cli_dotnet
+  stage: cli-build
+  script:
+    - dotnet build SyncSql.slnx --configuration Release
+
+# Publishes a new tool version to Nexus on every default-branch change under
+# cli/ - Directory.Build.props' <Version> is the single source of truth for
+# the published version number; bump it there to cut a new release.
+cli-publish:
+  <<: *cli_dotnet
+  stage: cli-publish
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes:
+        - cli/**/*
+  script:
+    - dotnet pack src/SyncSql.Cli --configuration Release --output ./nupkg
+    - dotnet nuget push "./nupkg/*.nupkg" --source "$NEXUS_NUGET_SOURCE_URL" --api-key "$NEXUS_API_KEY" --skip-duplicate
