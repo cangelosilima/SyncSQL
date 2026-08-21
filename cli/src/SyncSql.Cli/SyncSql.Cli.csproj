@@ -23,4 +23,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Published as a dotnet global tool ("dotnet tool install", global scope) rather than a
+       self-contained executable - see cli/docs/cli.md for install instructions. -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>syncsql</ToolCommandName>
+    <PackageId>SyncSql.Cli</PackageId>
+    <Description>Extraction, lineage, and catalog building for a fleet of MSSQL/Oracle servers - the syncsql CLI.</Description>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)../../nupkg</PackageOutputPath>
+  </PropertyGroup>
+
 </Project>
