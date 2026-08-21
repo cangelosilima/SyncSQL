@@ -4,6 +4,7 @@ using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
 using SyncSql.Extraction.MsSql;
 using SyncSql.Extraction.Oracle;
+using SyncSql.Git;
 using SyncSql.Lineage.MsSql;
 using SyncSql.Lineage.Oracle;
 
@@ -28,7 +29,6 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IGitHistoryMiner, GitHistoryMiner>();
         services.AddSingleton<IMetricsHistoryStore, MetricsHistoryStore>();
         services.AddSingleton<ICatalogBuilder, CatalogBuilder>();
-
-        // The Git publish module (IGitRepository) is registered here once SyncSql.Git is built out.
+        services.AddSingleton<IGitRepository, GitRepository>();
     }
 }

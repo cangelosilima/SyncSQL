@@ -14,6 +14,7 @@
     <Project Path="tests/SyncSql.Core.Tests/SyncSql.Core.Tests.csproj" />
     <Project Path="tests/SyncSql.Extraction.MsSql.Tests/SyncSql.Extraction.MsSql.Tests.csproj" />
     <Project Path="tests/SyncSql.Extraction.Oracle.Tests/SyncSql.Extraction.Oracle.Tests.csproj" />
+    <Project Path="tests/SyncSql.Git.Tests/SyncSql.Git.Tests.csproj" />
     <Project Path="tests/SyncSql.Lineage.MsSql.Tests/SyncSql.Lineage.MsSql.Tests.csproj" />
     <Project Path="tests/SyncSql.Lineage.Oracle.Tests/SyncSql.Lineage.Oracle.Tests.csproj" />
   </Folder>
