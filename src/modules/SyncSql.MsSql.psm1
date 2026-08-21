@@ -283,27 +283,142 @@ function Add-SyncSqlExtendedPropertiesBlock {
     return $Definition + "`n" + ($block -join "`n")
 }
 
-function Add-SyncSqlSectionBlock {
+function Get-SyncSqlMsSqlGrants {
     <#
-        Generic version of Add-SyncSqlExtendedPropertiesBlock for the other
-        appended sections (Foreign Keys, Check Constraints, Indexes,
-        Statistics, Replication...). Build-Catalog.ps1's section parser
-        splits on the "-- === Title ===" marker, so any title works as long
-        as it's unique within one object's file.
+        Object- and column-level GRANT/DENY permissions (sys.database_permissions,
+        class = 1: OBJECT_OR_COLUMN) so each object can carry its own access
+        map - who can do what to it, down to the column when the grant was
+        scoped that way. Server-level/database-level permissions and role
+        membership are out of scope; this is "who can touch this object", not
+        a full permissions audit.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    s.name  AS SchemaName,
+    o.name  AS ObjectName,
+    dp.name AS GranteeName,
+    dp.type_desc AS GranteeType,
+    perm.permission_name AS PermissionName,
+    perm.state_desc AS StateDesc,
+    c.name AS ColumnName
+FROM sys.database_permissions perm
+JOIN sys.database_principals dp ON dp.principal_id = perm.grantee_principal_id
+JOIN sys.objects o ON o.object_id = perm.major_id
+JOIN sys.schemas s ON s.schema_id = o.schema_id
+LEFT JOIN sys.columns c ON c.object_id = perm.major_id AND c.column_id = perm.minor_id AND perm.minor_id <> 0
+WHERE perm.class = 1 AND perm.major_id > 0 AND perm.state_desc IN ('GRANT', 'DENY')
+ORDER BY s.name, o.name, dp.name, perm.permission_name;
+"@
+    return Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+}
+
+function ConvertTo-SyncSqlGrantLine {
+    <#
+        Shared formatting for the pipe-delimited "-- [grant] ..." lines
+        Build-Catalog.ps1 parses back into structured node.grants entries.
+        Used by both the MSSQL and Oracle backends so the on-disk format (and
+        the parser) only needs to exist once.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param(
-        [Parameter(Mandatory)][AllowEmptyString()][string]$Definition,
-        [Parameter(Mandatory)][string]$Title,
-        [Parameter(Mandatory)]$SectionIndex,
-        [Parameter(Mandatory)][string]$Key
+        [Parameter(Mandatory)][string]$Permission,
+        [Parameter(Mandatory)][string]$State,
+        [Parameter(Mandatory)][string]$Grantee,
+        [AllowEmptyString()][AllowNull()][string]$GranteeType,
+        [AllowEmptyString()][AllowNull()][string]$Column
+    )
+    return "-- [grant] $Permission|$State|$Grantee|$GranteeType|$Column"
+}
+
+function Get-SyncSqlMsSqlGrantsIndex {
+    <#
+        Wraps Get-SyncSqlMsSqlGrants in a try/catch and returns a lookup
+        ("schema.object" -> formatted "-- [grant] ..." lines) instead of raw
+        rows, so callers get an empty index rather than an error when the
+        query isn't available (permissions, edition, etc) - same shape as
+        Get-SyncSqlMsSqlExtendedPropertiesIndex.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database,
+        [Parameter(Mandatory)][string]$ServerName
     )
 
-    if (-not $SectionIndex.ContainsKey($Key)) { return $Definition }
+    $index = @{}
+    try {
+        foreach ($row in (Get-SyncSqlMsSqlGrants -ConnectionInfo $ConnectionInfo -Database $Database)) {
+            $key = "$($row.SchemaName).$($row.ObjectName)"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add((ConvertTo-SyncSqlGrantLine -Permission $row.PermissionName -State $row.StateDesc `
+                        -Grantee $row.GranteeName -GranteeType $row.GranteeType -Column ([string]$row.ColumnName)))
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Database] sys.database_permissions extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
 
-    $block = @('', "-- === $Title ===") + $SectionIndex[$Key]
-    return $Definition + "`n" + ($block -join "`n")
+function Get-SyncSqlMsSqlColumnList {
+    <#
+        Full ordinal column list (name + data type) for tables and views -
+        unlike Get-SyncSqlMsSqlExtendedPropertiesIndex's column map, this is
+        not limited to columns that happen to have a description, so it can
+        back a real "which columns exist" / column-lineage picture.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database
+    )
+
+    $query = @"
+SELECT
+    sch.name AS SchemaName,
+    o.name   AS TableName,
+    c.name   AS ColumnName,
+    ty.name  AS DataType,
+    c.column_id AS OrdinalPosition
+FROM sys.columns c
+JOIN sys.objects o ON o.object_id = c.object_id
+JOIN sys.schemas sch ON sch.schema_id = o.schema_id
+JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+WHERE o.type IN ('U', 'V') AND o.is_ms_shipped = 0
+ORDER BY sch.name, o.name, c.column_id;
+"@
+    return Invoke-SyncSqlMsSqlQuery @ConnectionInfo -Database $Database -Query $query
+}
+
+function Get-SyncSqlMsSqlColumnListIndex {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$ConnectionInfo,
+        [Parameter(Mandatory)][string]$Database,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $index = @{}
+    try {
+        foreach ($row in (Get-SyncSqlMsSqlColumnList -ConnectionInfo $ConnectionInfo -Database $Database)) {
+            $key = "$($row.SchemaName).$($row.TableName)"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add("-- [col] $($row.ColumnName)|$($row.DataType)")
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Database] Column list extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
 }
 
 function Get-SyncSqlMsSqlForeignKeys {
@@ -673,6 +788,12 @@ function Export-SyncSqlMsSqlServer {
         # returns an empty index on failure.
         $extendedProperties = Get-SyncSqlMsSqlExtendedPropertiesIndex -ConnectionInfo $connectionInfo -Database $database -ServerName $serverName
 
+        # Optional: sys.database_permissions (object/column grants) and the
+        # full sys.columns list for tables/views. Both degrade to an empty
+        # index (with a warning) rather than failing the database.
+        $grants = Get-SyncSqlMsSqlGrantsIndex -ConnectionInfo $connectionInfo -Database $database -ServerName $serverName
+        $columnList = Get-SyncSqlMsSqlColumnListIndex -ConnectionInfo $connectionInfo -Database $database -ServerName $serverName
+
         $needsModules = @('StoredProcedures', 'Views', 'Triggers', 'Functions') | Where-Object { $AllowedObjectTypes -contains $_ }
         if ($needsModules) {
             foreach ($obj in (Get-SyncSqlMsSqlModuleObjects -ConnectionInfo $connectionInfo -Database $database)) {
@@ -681,7 +802,14 @@ function Export-SyncSqlMsSqlServer {
                 if (-not $allowedSchemas.ContainsKey($obj.SchemaName) -or -not $allowedSchemas[$obj.SchemaName]) { continue }
                 if (-not (Test-SyncSqlNameAllowed -Name $obj.ObjectName -Filter $Filters.objectNames)) { continue }
 
-                $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $obj.Definition -ExtendedPropertiesIndex $extendedProperties `
+                $key = "$($obj.SchemaName).$($obj.ObjectName)"
+                $definition = $obj.Definition
+                # Views have a real column list (sys.columns); procs/functions/triggers don't.
+                if ($objectType -eq 'Views') {
+                    $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Columns' -SectionIndex $columnList -Key $key
+                }
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Grants' -SectionIndex $grants -Key $key
+                $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $definition -ExtendedPropertiesIndex $extendedProperties `
                     -SchemaName $obj.SchemaName -ObjectName $obj.ObjectName
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $obj.SchemaName -ObjectType $objectType -ObjectName $obj.ObjectName `
@@ -713,6 +841,8 @@ function Export-SyncSqlMsSqlServer {
                 $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Check Constraints' -SectionIndex $checkConstraints -Key $key
                 $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Indexes' -SectionIndex $indexes -Key $key
                 $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Statistics' -SectionIndex $statistics -Key $key
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Columns' -SectionIndex $columnList -Key $key
+                $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Grants' -SectionIndex $grants -Key $key
                 $definition = Add-SyncSqlExtendedPropertiesBlock -Definition $definition -ExtendedPropertiesIndex $extendedProperties `
                     -SchemaName $table.SchemaName -ObjectName $table.TableName
 
@@ -728,9 +858,11 @@ function Export-SyncSqlMsSqlServer {
                 if (-not $allowedSchemas.ContainsKey($syn.SchemaName) -or -not $allowedSchemas[$syn.SchemaName]) { continue }
                 if (-not (Test-SyncSqlNameAllowed -Name $syn.SynonymName -Filter $Filters.objectNames)) { continue }
 
+                $definition = Add-SyncSqlSectionBlock -Definition $syn.Definition -Title 'Grants' -SectionIndex $grants `
+                    -Key "$($syn.SchemaName).$($syn.SynonymName)"
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $syn.SchemaName -ObjectType 'Synonyms' -ObjectName $syn.SynonymName `
-                    -Definition $syn.Definition | Out-Null
+                    -Definition $definition | Out-Null
                 $fileCount++
             }
         }
@@ -765,7 +897,11 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlMsSqlExtendedProperties',
     'Get-SyncSqlMsSqlExtendedPropertiesIndex',
     'Add-SyncSqlExtendedPropertiesBlock',
-    'Add-SyncSqlSectionBlock',
+    'Get-SyncSqlMsSqlGrants',
+    'Get-SyncSqlMsSqlGrantsIndex',
+    'ConvertTo-SyncSqlGrantLine',
+    'Get-SyncSqlMsSqlColumnList',
+    'Get-SyncSqlMsSqlColumnListIndex',
     'Get-SyncSqlMsSqlForeignKeys',
     'Get-SyncSqlMsSqlCheckConstraints',
     'Get-SyncSqlMsSqlIndexes',

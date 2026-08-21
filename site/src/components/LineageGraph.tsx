@@ -10,9 +10,15 @@ interface LineageGraphProps {
   nodeIds: string[]
   focusId?: string
   height?: number | string
+  /**
+   * Single-click handler: when provided, clicking a node drills the graph
+   * into it (re-centering/expanding in place) instead of navigating away.
+   * Double-click always opens the object's detail page regardless.
+   */
+  onNodeActivate?: (id: string) => void
 }
 
-export default function LineageGraph({ nodeIds, focusId, height = 560 }: LineageGraphProps) {
+export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate }: LineageGraphProps) {
   const { index } = useCatalog()
   const navigate = useNavigate()
 
@@ -47,12 +53,19 @@ export default function LineageGraph({ nodeIds, focusId, height = 560 }: Lineage
       if (!idSet.has(from)) continue
       for (const to of targets) {
         if (!idSet.has(to)) continue
+        const columns = index.edgeColumns.get(`${from}|${to}`) ?? []
+        const hasColumns = columns.length > 0
+        const label = hasColumns ? (columns.length > 3 ? `${columns.slice(0, 3).join(', ')}, +${columns.length - 3}` : columns.join(', ')) : undefined
         flowEdges.push({
           id: `${from}->${to}`,
           source: from,
           target: to,
           animated: false,
-          style: { stroke: 'var(--border)' },
+          label,
+          labelStyle: { fill: 'var(--text-muted)', fontSize: 10 },
+          labelBgStyle: { fill: 'var(--surface)' },
+          labelBgPadding: [3, 2],
+          style: { stroke: hasColumns ? 'var(--accent)' : 'var(--border)', strokeWidth: hasColumns ? 1.5 : 1 },
         })
       }
     }
@@ -70,7 +83,8 @@ export default function LineageGraph({ nodeIds, focusId, height = 560 }: Lineage
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodeClick={(_, node) => navigate(`/object/${node.id}`)}
+        onNodeClick={(_, node) => (onNodeActivate ? onNodeActivate(node.id) : navigate(`/object/${node.id}`))}
+        onNodeDoubleClick={(_, node) => navigate(`/object/${node.id}`)}
         fitView
         colorMode="dark"
         proOptions={{ hideAttribution: true }}

@@ -1,11 +1,10 @@
-import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { CatalogProvider, useCatalog } from './lib/CatalogContext'
-import Sidebar from './components/Sidebar'
 import Home from './pages/Home'
 import ObjectPage from './pages/ObjectPage'
 import LineagePage from './pages/LineagePage'
 import Explorer from './pages/Explorer'
+import Access from './pages/Access'
 import History from './pages/History'
 
 export default function App() {
@@ -18,7 +17,6 @@ export default function App() {
 
 function Shell() {
   const { loading, error } = useCatalog()
-  const [treeOpen, setTreeOpen] = useState(false)
 
   if (loading) {
     return (
@@ -42,15 +40,6 @@ function Shell() {
   return (
     <div className="layout">
       <header className="topbar">
-        <button
-          type="button"
-          className="tree-toggle"
-          aria-label={treeOpen ? 'Close tree browser' : 'Open tree browser'}
-          aria-pressed={treeOpen}
-          onClick={() => setTreeOpen((v) => !v)}
-        >
-          &#9776;
-        </button>
         <span className="brand">SyncSQL</span>
         <nav>
           <NavLink to="/" end>
@@ -58,22 +47,18 @@ function Shell() {
           </NavLink>
           <NavLink to="/explorer">Explorer</NavLink>
           <NavLink to="/lineage">Lineage</NavLink>
+          <NavLink to="/access">Access</NavLink>
           <NavLink to="/history">History</NavLink>
         </nav>
       </header>
       <div className="body">
-        {treeOpen && (
-          <>
-            <div className="sidebar-backdrop" onClick={() => setTreeOpen(false)} />
-            <Sidebar onNavigate={() => setTreeOpen(false)} />
-          </>
-        )}
         <main className="content">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/explorer" element={<Explorer />} />
             <Route path="/object/*" element={<ObjectPage />} />
             <Route path="/lineage" element={<LineagePage />} />
+            <Route path="/access" element={<Access />} />
             <Route path="/history" element={<History />} />
           </Routes>
         </main>

@@ -212,6 +212,30 @@ function New-SyncSqlObjectFile {
     return $filePath
 }
 
+function Add-SyncSqlSectionBlock {
+    <#
+        Appends a "-- === Title ===" marked section to an object's definition
+        text, generic across every appended section (Foreign Keys, Check
+        Constraints, Indexes, Statistics, Grants, Columns...).
+        Build-Catalog.ps1's section parser splits on that marker, so any
+        title works as long as it's unique within one object's file. Shared
+        between the MSSQL and Oracle extraction backends.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Definition,
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)]$SectionIndex,
+        [Parameter(Mandatory)][string]$Key
+    )
+
+    if (-not $SectionIndex.ContainsKey($Key)) { return $Definition }
+
+    $block = @('', "-- === $Title ===") + $SectionIndex[$Key]
+    return $Definition + "`n" + ($block -join "`n")
+}
+
 Export-ModuleMember -Function @(
     'Write-SyncSqlLog',
     'Import-SyncSqlConfig',
@@ -219,5 +243,6 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlEffectiveFilters',
     'Get-SyncSqlAllowedObjectTypes',
     'ConvertTo-SyncSqlSafeFileName',
-    'New-SyncSqlObjectFile'
+    'New-SyncSqlObjectFile',
+    'Add-SyncSqlSectionBlock'
 )

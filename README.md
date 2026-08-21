@@ -142,33 +142,36 @@ dark data-terminal:
   reachability, capped to one hop across a linked-server boundary), a
   change-frequency heatmap, and objects that tend to change together in
   the same commit.
-- **Explorer** — a sortable, filterable table listing every object. The
-  server/database tree from earlier versions is now a toggleable drawer
-  (hamburger icon, top left) rather than an always-open sidebar; Explorer
-  is the primary way to browse.
-- **Object detail** — qualified name, `sys.extended_properties`
-  descriptions (object + column level, MSSQL only), the DDL, structured
-  panels for any Foreign Keys / Check Constraints / Indexes / Statistics
-  sections, "depends on" / "used by" lineage lists with an embedded
-  neighborhood graph, and a change-history list with a point-in-time
-  viewer (see below).
-- **Lineage** — a full graph explorer (`/#/lineage`), filterable, rendered
-  with `@xyflow/react` + `dagre` auto-layout.
+- **Explorer** — a sortable, filterable table listing every object; it's the
+  primary way to browse the catalog (there is no separate tree sidebar - see
+  "Explorer replaces the sidebar" below).
+- **Object detail** — qualified name, `sys.extended_properties` descriptions
+  (object + column level, MSSQL only), the full structural column list with
+  data types (Tables/Views), the DDL, structured panels for any Foreign Keys
+  / Check Constraints / Indexes / Statistics sections, an **Access** panel
+  (see "Grant mapping" below), "depends on" / "used by" lineage lists
+  annotated with best-effort column tags with an embedded neighborhood
+  graph, and a change-history list with a point-in-time viewer (see below).
+- **Lineage** (`/#/lineage`) — a full graph explorer rendered with
+  `@xyflow/react` + `dagre` auto-layout. Clicking a node drills the graph
+  into that object's own neighborhood in place (with a breadcrumb trail, a
+  Back button, and an adjustable 1/2/3-hop radius) rather than leaving the
+  page; double-click opens that object's full detail page. Edges carrying a
+  known column-level reference (see "Column dependency tracking" below) are
+  highlighted and labeled with the referenced column names.
+- **Access** (`/#/access`) — search by grantee (user, role or group) to see
+  every object they have a GRANT or DENY permission on, down to the column
+  when the grant was scoped that way (see "Grant mapping" below).
 - **History** — a global commit timeline of everything the pipeline has
   changed, expandable per commit.
 
-All of Explorer/Lineage/the sidebar's tree search share one GitLab-style
-filter bar: type to get attribute suggestions (server, database, schema,
-type, name, description), pick an operator (is / is not / contains / is
-in / is not in), then pick from suggested values pulled from the catalog.
-Suggestion lookups are capped and debounced, and committed filters (not
-keystrokes) are what actually re-filter the object list, so it stays
-responsive on large catalogs.
-
-The tree (in the drawer, and Explorer's implicit grouping) is
-Server → Database → Schema → Type → Object; schema-less types (Schemas,
-LinkedServers, Replication, DatabaseLinks) land under a synthetic
-"(server-level)" bucket.
+All of Explorer/Lineage's filter bar share one GitLab-style filter bar: type
+to get attribute suggestions (server, database, schema, type, name,
+description), pick an operator (is / is not / contains / is in / is not
+in), then pick from suggested values pulled from the catalog. Suggestion
+lookups are capped and debounced, and committed filters (not keystrokes)
+are what actually re-filter the object list, so it stays responsive on
+large catalogs.
 
 **Lineage is inferred, not parsed.** `Build-Catalog.ps1` regex-matches
 identifiers found in each object's DDL text (plus its Foreign Keys section,
@@ -180,6 +183,55 @@ name. Any traversal that crosses a linked-server/DB-link boundary (in the
 "most referenced indirectly" analytics) stops one hop past that boundary
 rather than fanning out across a remote server's own dependency graph. The
 site says as much on its overview page.
+
+### Explorer replaces the sidebar
+
+Earlier versions of the site had an always-open (later toggleable) tree
+sidebar (Server → Database → Schema → Type → Object) alongside Explorer.
+It has been removed: Explorer's filter bar plus sortable columns cover the
+same browsing need with less UI, and every other page (Lineage, Access,
+Overview, History) links directly to object detail pages rather than
+requiring the tree.
+
+### Grant mapping
+
+`Build-Catalog.ps1` parses a per-object "Grants" section (attached by the
+extraction backend, best-effort - see "Known limitations" below) into a
+structured `grants` list on each catalog node: grantee, grantee type (MSSQL
+only - `SQL_USER`, `DATABASE_ROLE`, `WINDOWS_GROUP`, ...), permission
+(`SELECT`, `EXECUTE`, ...), state (`GRANT`/`DENY` - MSSQL only, Oracle has
+no DENY concept), and the column when the grant was scoped to one rather
+than the whole object.
+
+- MSSQL: `sys.database_permissions` (object/column-level, class =
+  `OBJECT_OR_COLUMN`) joined to `sys.database_principals` for the grantee
+  and its type.
+- Oracle: `ALL_TAB_PRIVS` (object-level) and `ALL_COL_PRIVS`
+  (column-level) for every object owned by each extracted schema.
+
+Every object's detail page has an **Access** panel listing its own grants;
+the **Access** page (`/#/access`) flips the query around - search by
+grantee to see every object (and, when scoped, column) that principal can
+touch. Both degrade to "no grants" rather than failing extraction when the
+underlying permissions view isn't accessible to the connecting account.
+
+### Column dependency tracking
+
+Tables and views get a full structural column list (name + data type),
+independent of whether a column happens to have an
+`sys.extended_properties`/documentation entry - `sys.columns` (MSSQL) /
+`ALL_TAB_COLUMNS` (Oracle). `Build-Catalog.ps1` then re-scans each inferred
+edge's source DDL for qualified `alias.column` references (resolving
+simple `FROM`/`JOIN` aliases, plus the bare/qualified object name itself)
+against the target's column list, and records which of the target's
+columns are actually referenced on that edge. This is the same
+best-effort, regex-based approach the rest of lineage inference uses, not a
+certified column-level lineage report - it will miss dynamic SQL, `SELECT
+*`, and computed/aliased column expressions.
+
+This shows up as column tags next to each entry in an object's "depends
+on"/"used by" lists, and as highlighted, labeled edges in the Lineage
+graph.
 
 ### History, heatmap and point-in-time
 
@@ -269,12 +321,20 @@ target repo to include history), then `npm run dev` inside `site/`.
 - Lineage edges are inferred via text/regex matching (plus structural FK
   data), not a real T-SQL/PL-SQL parser — see "The catalog / lineage
   site" above.
+- Column dependency tags on lineage edges are likewise regex-based (alias
+  resolution over `FROM`/`JOIN` text), not a real parser — see "Column
+  dependency tracking" above.
+- Grant extraction (MSSQL `sys.database_permissions`, Oracle
+  `ALL_TAB_PRIVS`/`ALL_COL_PRIVS`) only covers object/column-level grants
+  on the extracted objects themselves — server/database-level permissions,
+  role membership, and (Oracle) whether a grantee is itself a user or a
+  role are out of scope. See "Grant mapping" above.
 - History/heatmap/point-in-time only cover the mined commit window
   (`HISTORY_LIMIT`, default 250 commits) and only reconstruct individual
   objects' DDL, not a full historical catalog snapshot — see "History,
   heatmap and point-in-time" above.
 
-Every optional/best-effort extraction step (extended properties, FKs,
-checks, indexes, statistics, replication) degrades independently: a
-failure on one is logged as a warning and the rest of that database's
-extraction proceeds normally.
+Every optional/best-effort extraction step (extended properties, grants,
+full column lists, FKs, checks, indexes, statistics, replication) degrades
+independently: a failure on one is logged as a warning and the rest of
+that database's extraction proceeds normally.

@@ -171,6 +171,82 @@ function Get-SyncSqlOracleDatabaseLinks {
     }
 }
 
+function Get-SyncSqlOracleGrantsIndex {
+    <#
+        Object-level (ALL_TAB_PRIVS) and column-level (ALL_COL_PRIVS) grants
+        for every object owned by $Owner, folded into a lookup
+        ("owner.objectName" -> formatted "-- [grant] ..." lines, same format
+        ConvertTo-SyncSqlGrantLine produces for MSSQL) that Build-Catalog.ps1
+        parses into structured node.grants entries. Oracle has no DENY
+        concept, so state is always 'GRANT'; ALL_TAB_PRIVS/ALL_COL_PRIVS
+        don't reliably expose whether a grantee is a user or a role across
+        versions, so granteeType is left blank. Best-effort: these views
+        require privileges the connecting account may not have, so failures
+        degrade to an empty index rather than failing the whole owner.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $index = @{}
+    try {
+        $objectQuery = "SELECT GRANTEE, TABLE_NAME, PRIVILEGE FROM ALL_TAB_PRIVS WHERE OWNER = :owner ORDER BY TABLE_NAME, GRANTEE, PRIVILEGE"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $objectQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add((ConvertTo-SyncSqlGrantLine -Permission ([string]$row['PRIVILEGE']) -State 'GRANT' `
+                        -Grantee ([string]$row['GRANTEE']) -GranteeType $null -Column $null))
+        }
+
+        $columnQuery = "SELECT GRANTEE, TABLE_NAME, COLUMN_NAME, PRIVILEGE FROM ALL_COL_PRIVS WHERE OWNER = :owner ORDER BY TABLE_NAME, GRANTEE, PRIVILEGE"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $columnQuery -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add((ConvertTo-SyncSqlGrantLine -Permission ([string]$row['PRIVILEGE']) -State 'GRANT' `
+                        -Grantee ([string]$row['GRANTEE']) -GranteeType $null -Column ([string]$row['COLUMN_NAME'])))
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_PRIVS/ALL_COL_PRIVS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
+
+function Get-SyncSqlOracleColumnListIndex {
+    <#
+        Full ordinal column list (name + data type) for every table/view
+        owned by $Owner, from ALL_TAB_COLUMNS (covers both - Oracle doesn't
+        distinguish table vs. view columns in that view). Same "-- [col]
+        name|dataType" line format the MSSQL backend and Build-Catalog.ps1's
+        parser use.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Owner,
+        [Parameter(Mandatory)][string]$ServerName
+    )
+
+    $index = @{}
+    try {
+        $query = "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_ID FROM ALL_TAB_COLUMNS WHERE OWNER = :owner ORDER BY TABLE_NAME, COLUMN_ID"
+        foreach ($row in (Invoke-SyncSqlOracleQuery -Connection $Connection -Query $query -Parameters @{ owner = $Owner })) {
+            $key = "$Owner.$($row['TABLE_NAME'])"
+            if (-not $index.ContainsKey($key)) { $index[$key] = [System.Collections.Generic.List[string]]::new() }
+            $index[$key].Add("-- [col] $($row['COLUMN_NAME'])|$($row['DATA_TYPE'])")
+        }
+    }
+    catch {
+        Write-SyncSqlLog "[$ServerName/$Owner] ALL_TAB_COLUMNS extraction failed (continuing without it): $($_.Exception.Message)" -Level WARN
+        return @{}
+    }
+    return $index
+}
+
 function Export-SyncSqlOracleServer {
     <#
         Orchestrates a full extraction of one Oracle server entry into
@@ -222,12 +298,26 @@ function Export-SyncSqlOracleServer {
             }
         }
 
+        # Optional: object/column grants (ALL_TAB_PRIVS/ALL_COL_PRIVS) and the
+        # full column list (ALL_TAB_COLUMNS) for tables/views, one query pass
+        # per owner regardless of how many object types are being extracted
+        # for that owner - both degrade to an empty index on failure.
+        $grantsByOwner = @{}
+        $columnListByOwner = @{}
+
         foreach ($configType in $script:SyncSqlOracleObjectTypeMap.Keys) {
             if ($AllowedObjectTypes -notcontains $configType) { continue }
             $oracleType = $script:SyncSqlOracleObjectTypeMap[$configType]
             $ddlType = $script:SyncSqlOracleDdlTypeMap[$oracleType]
 
             foreach ($owner in $allowedOwners) {
+                if (-not $grantsByOwner.ContainsKey($owner)) {
+                    $grantsByOwner[$owner] = Get-SyncSqlOracleGrantsIndex -Connection $connection -Owner $owner -ServerName $serverName
+                }
+                if ($oracleType -in @('TABLE', 'VIEW') -and -not $columnListByOwner.ContainsKey($owner)) {
+                    $columnListByOwner[$owner] = Get-SyncSqlOracleColumnListIndex -Connection $connection -Owner $owner -ServerName $serverName
+                }
+
                 $objectNames = Get-SyncSqlOracleObjectList -Connection $connection -Owner $owner -OracleObjectType $oracleType
                 foreach ($objectName in $objectNames) {
                     if (-not (Test-SyncSqlNameAllowed -Name $objectName -Filter $Filters.objectNames)) { continue }
@@ -239,6 +329,12 @@ function Export-SyncSqlOracleServer {
                         Write-SyncSqlLog "[$serverName/$serviceName] Failed to extract DDL for $owner.$objectName ($configType): $($_.Exception.Message)" -Level WARN
                         continue
                     }
+
+                    $key = "$owner.$objectName"
+                    if ($oracleType -in @('TABLE', 'VIEW')) {
+                        $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Columns' -SectionIndex $columnListByOwner[$owner] -Key $key
+                    }
+                    $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Grants' -SectionIndex $grantsByOwner[$owner] -Key $key
 
                     New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $serviceName `
                         -SchemaName $owner -ObjectType $configType -ObjectName $objectName -Definition $definition | Out-Null
@@ -283,5 +379,7 @@ Export-ModuleMember -Function @(
     'Get-SyncSqlOracleSchemas',
     'Get-SyncSqlOracleObjectList',
     'Get-SyncSqlOracleDatabaseLinks',
+    'Get-SyncSqlOracleGrantsIndex',
+    'Get-SyncSqlOracleColumnListIndex',
     'Export-SyncSqlOracleServer'
 )
