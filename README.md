@@ -208,11 +208,16 @@ tree.
 ### Theme
 
 A light/dark toggle lives in the top right of every page (`lib/ThemeContext.tsx`),
-persisted to `localStorage`. Light is the default. DDL/code blocks are the
-one deliberate exception — always rendered dark (matching their
-`highlight.js` syntax theme) regardless of which site theme is active, so
-SQL stays legible with one consistent look. The Lineage graph (`@xyflow/react`)
-follows the site theme too, defaulting to light along with everything else.
+persisted to `localStorage`. Light is the default, styled around the
+SyncSQL brand red. Dark uses **"Midnight"** — a dark, purple-tinted palette
+in the style of a well-known VS Code dark theme (background/foreground/
+comment/accent colors all drawn from it, pink standing in for brand red as
+the accent). DDL/code blocks are the one deliberate exception — always
+rendered in the Midnight palette (`components/midnight-hljs.css`, a
+hand-mapped `highlight.js` theme) regardless of which site theme is active,
+so SQL stays legible with one consistent look. The Lineage graph
+(`@xyflow/react`) follows the site theme too, defaulting to light along
+with everything else.
 
 ### Grant mapping
 

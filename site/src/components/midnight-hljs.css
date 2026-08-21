@@ -1,0 +1,81 @@
+/*
+  "Midnight" theme for highlight.js - a dark, purple-tinted syntax palette
+  (background #282a36, foreground #f8f8f2, comment #6272a4, cyan #8be9fd,
+  green #50fa7b, orange #ffb86c, pink #ff79c6, purple #bd93f9, red #ff5555,
+  yellow #f1fa8c) in the style of a well-known VS Code dark theme, hand-
+  mapped onto highlight.js's token classes for SQL.
+*/
+.hljs {
+  color: #f8f8f2;
+  background: #282a36;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #6272a4;
+  font-style: italic;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-formula {
+  color: #ff79c6;
+}
+
+.hljs-section,
+.hljs-name,
+.hljs-selector-tag,
+.hljs-deletion,
+.hljs-subst {
+  color: #ff5555;
+}
+
+.hljs-literal {
+  color: #8be9fd;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: #f1fa8c;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-number {
+  color: #bd93f9;
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-title {
+  color: #50fa7b;
+}
+
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-class .hljs-title {
+  color: #8be9fd;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-link {
+  text-decoration: underline;
+}

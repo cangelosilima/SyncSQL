@@ -1,11 +1,15 @@
 /*
   Light/dark are both first-class - toggled via lib/ThemeContext.tsx, which
   stamps data-theme="light"|"dark" on <html> (persisted to localStorage,
-  default "light"). Red is reserved for interactive/brand chrome; per-type
+  default "light"). Light uses the SyncSQL brand red as its accent; dark
+  uses the "Midnight" palette (a dark, purple-tinted scheme in the style of
+  a well-known VS Code dark theme - background/foreground/comment/accent
+  all drawn from it, pink standing in for brand red as the accent). Per-type
   colors (lib/typeColors.ts) carry the actual information coding and are
   left alone in both themes. Code/DDL blocks (.code-block) are the one
-  deliberate exception - always dark regardless of site theme, since that's
-  where the syntax highlighting theme lives.
+  deliberate exception - always rendered in the Midnight palette regardless
+  of site theme, since that's where the syntax highlighting theme
+  (components/midnight-hljs.css) lives.
 */
 :root {
   --bg: #f5f5f7;
@@ -20,14 +24,14 @@
 }
 
 :root[data-theme='dark'] {
-  --bg: #0a0a0c;
-  --surface: #131316;
-  --surface-alt: #1a1a1f;
-  --text: #e9e9ec;
-  --text-muted: #8b8b95;
-  --border: #26262c;
-  --accent: #e2001a;
-  --accent-contrast: #ffffff;
+  --bg: #282a36;
+  --surface: #21222c;
+  --surface-alt: #343746;
+  --text: #f8f8f2;
+  --text-muted: #6272a4;
+  --border: #44475a;
+  --accent: #ff79c6;
+  --accent-contrast: #282a36;
   color-scheme: dark;
 }
 
@@ -294,13 +298,13 @@ a {
 }
 
 .code-block {
-  /* Always dark, independent of the site theme toggle - fixed colors, not
-     theme variables, to match the github-dark.css highlight.js theme. */
-  background: #000000;
-  color: #e6edf3;
+  /* Always the "Midnight" palette, independent of the site theme toggle -
+     fixed colors, not theme variables, to match components/midnight-hljs.css. */
+  background: #282a36;
+  color: #f8f8f2;
   padding: 1rem;
   border-radius: 2px;
-  border: 1px solid #26262c;
+  border: 1px solid #44475a;
   overflow-x: auto;
   font-size: 0.82rem;
   line-height: 1.5;
