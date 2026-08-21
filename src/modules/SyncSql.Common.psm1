@@ -270,6 +270,12 @@ function New-SyncSqlObjectFile {
         [Parameter(Mandatory)][string]$ObjectType,
         [Parameter(Mandatory)][string]$ObjectName,
         [Parameter(Mandatory)][AllowEmptyString()][string]$Definition,
+        # 'mssql' or 'oracle' - which extraction backend produced this object.
+        # Mandatory (rather than inferred later from path/type) so every
+        # newly-written object is unambiguously taggable for engine-specific
+        # lineage parsing (Build-Catalog.ps1) without guessing from object
+        # type names that overlap between engines (Tables, Views, ...).
+        [Parameter(Mandatory)][ValidateSet('mssql', 'oracle')][string]$Engine,
         [string]$Extension = 'sql'
     )
 
@@ -299,6 +305,7 @@ function New-SyncSqlObjectFile {
         "-- Database: $DatabaseName"
         "-- Type:     $ObjectType"
         "-- Object:   $qualifiedName"
+        "-- Engine:   $Engine"
     ) -join "`n"
     $header += "`n`n"
 

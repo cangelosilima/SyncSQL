@@ -919,7 +919,7 @@ function Export-SyncSqlMsSqlServer {
         foreach ($ls in (Get-SyncSqlMsSqlLinkedServers -ConnectionInfo $connectionInfo)) {
             if (-not (Test-SyncSqlNameAllowed -Name $ls.LinkedServerName -Filter $Filters.objectNames)) { continue }
             New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName '_ServerLevel' `
-                -ObjectType 'LinkedServers' -ObjectName $ls.LinkedServerName -Definition $ls.Definition | Out-Null
+                -ObjectType 'LinkedServers' -ObjectName $ls.LinkedServerName -Definition $ls.Definition -Engine 'mssql' | Out-Null
             $fileCount++
         }
     }
@@ -938,7 +938,7 @@ function Export-SyncSqlMsSqlServer {
             foreach ($schemaName in $allowedSchemas.Keys) {
                 if (-not $allowedSchemas[$schemaName]) { continue }
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
-                    -ObjectType 'Schemas' -ObjectName $schemaName -Definition "CREATE SCHEMA [$schemaName];" | Out-Null
+                    -ObjectType 'Schemas' -ObjectName $schemaName -Definition "CREATE SCHEMA [$schemaName];" -Engine 'mssql' | Out-Null
                 $fileCount++
             }
         }
@@ -973,7 +973,7 @@ function Export-SyncSqlMsSqlServer {
                     -SchemaName $obj.SchemaName -ObjectName $obj.ObjectName
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $obj.SchemaName -ObjectType $objectType -ObjectName $obj.ObjectName `
-                    -Definition $definition | Out-Null
+                    -Definition $definition -Engine 'mssql' | Out-Null
                 $fileCount++
             }
         }
@@ -1010,7 +1010,7 @@ function Export-SyncSqlMsSqlServer {
 
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $table.SchemaName -ObjectType 'Tables' -ObjectName $table.TableName `
-                    -Definition $definition | Out-Null
+                    -Definition $definition -Engine 'mssql' | Out-Null
                 $fileCount++
 
                 if ($MetricsRoot -and $metricsSnapshots.ContainsKey($key)) {
@@ -1030,7 +1030,7 @@ function Export-SyncSqlMsSqlServer {
                     -Key "$($syn.SchemaName).$($syn.SynonymName)"
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
                     -SchemaName $syn.SchemaName -ObjectType 'Synonyms' -ObjectName $syn.SynonymName `
-                    -Definition $definition | Out-Null
+                    -Definition $definition -Engine 'mssql' | Out-Null
                 $fileCount++
             }
         }
@@ -1040,7 +1040,7 @@ function Export-SyncSqlMsSqlServer {
                 foreach ($pub in (Get-SyncSqlMsSqlReplication -ConnectionInfo $connectionInfo -Database $database)) {
                     if (-not (Test-SyncSqlNameAllowed -Name $pub.PublicationName -Filter $Filters.objectNames)) { continue }
                     New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $database `
-                        -ObjectType 'Replication' -ObjectName $pub.PublicationName -Definition $pub.Definition | Out-Null
+                        -ObjectType 'Replication' -ObjectName $pub.PublicationName -Definition $pub.Definition -Engine 'mssql' | Out-Null
                     $fileCount++
                 }
             }

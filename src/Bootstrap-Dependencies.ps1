@@ -1,11 +1,13 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Prepares everything Export-DatabaseObjects.ps1 needs: the SqlServer
-    PowerShell module and the Oracle.ManagedDataAccess managed ADO.NET
-    driver (no native Oracle client required). Config parsing uses plain
-    JSON (built into PowerShell itself), so no separate module is needed
-    for that.
+    Prepares everything Export-DatabaseObjects.ps1 / Build-Catalog.ps1 need:
+    the SqlServer PowerShell module, the Oracle.ManagedDataAccess managed
+    ADO.NET driver (no native Oracle client required), and the
+    Microsoft.SqlServer.TransactSql.ScriptDom parser library used for
+    real (not regex-based) MSSQL lineage inference. Config parsing uses
+    plain JSON (built into PowerShell itself), so no separate module is
+    needed for that.
 
     Targets Windows PowerShell 5.1 (.NET Framework), so this downloads the
     classic Oracle.ManagedDataAccess NuGet package rather than
@@ -26,6 +28,7 @@
 param(
     [string]$ModulesCacheDir = (Join-Path (Split-Path $PSScriptRoot -Parent) '.pwsh-modules'),
     [string]$OracleDriverVersion,
+    [string]$ScriptDomVersion,
     [switch]$Force
 )
 
@@ -34,8 +37,10 @@ Set-StrictMode -Version Latest
 
 $modulesDir = Join-Path $ModulesCacheDir 'Modules'
 $oracleDir = Join-Path $ModulesCacheDir 'oracle'
+$scriptDomDir = Join-Path $ModulesCacheDir 'scriptdom'
 New-Item -ItemType Directory -Path $modulesDir -Force | Out-Null
 New-Item -ItemType Directory -Path $oracleDir -Force | Out-Null
+New-Item -ItemType Directory -Path $scriptDomDir -Force | Out-Null
 
 function Install-SyncSqlPSGalleryModule {
     param([Parameter(Mandatory)][string]$Name)
@@ -105,7 +110,49 @@ function Install-SyncSqlOracleDriver {
     Write-Host "[bootstrap] Oracle managed driver $Version ready under $oracleDir"
 }
 
+function Install-SyncSqlScriptDom {
+    <#
+        Microsoft.SqlServer.TransactSql.ScriptDom (MIT licensed, zero
+        dependencies) - the real T-SQL parser Build-Catalog.ps1 uses for
+        MSSQL lineage inference in place of regex text matching. Ships a
+        per-TFM lib/ layout (unlike Oracle.ManagedDataAccess's flatter
+        managed/common one), so this pins to the lib/net472 build - the
+        classic .NET Framework target Windows PowerShell 5.1 needs, same
+        reasoning as the Oracle driver above.
+    #>
+    param([string]$Version)
+
+    $sentinel = Join-Path $scriptDomDir '.scriptdom-version'
+    if ((Test-Path -LiteralPath $sentinel) -and -not $Force) {
+        Write-Host "[bootstrap] ScriptDom already cached ($(Get-Content $sentinel)), skipping."
+        return
+    }
+
+    $packageId = 'Microsoft.SqlServer.TransactSql.ScriptDom'
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        Write-Host "[bootstrap] Resolving latest $packageId version from NuGet"
+        $Version = Get-SyncSqlLatestNuGetVersion -PackageId $packageId
+    }
+    Write-Host "[bootstrap] Downloading $packageId $Version"
+
+    $idLower = $packageId.ToLowerInvariant()
+    $verLower = $Version.ToLowerInvariant()
+    $downloadUrl = "https://api.nuget.org/v3-flatcontainer/$idLower/$verLower/$idLower.$verLower.nupkg"
+
+    $tempZip = Join-Path ([IO.Path]::GetTempPath()) "$idLower.$verLower.zip"
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing
+
+    if (Test-Path -LiteralPath $scriptDomDir) { Remove-Item -LiteralPath $scriptDomDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $scriptDomDir -Force | Out-Null
+    Expand-Archive -LiteralPath $tempZip -DestinationPath $scriptDomDir -Force
+    Remove-Item -LiteralPath $tempZip -Force
+
+    Set-Content -LiteralPath (Join-Path $scriptDomDir '.scriptdom-version') -Value $Version
+    Write-Host "[bootstrap] ScriptDom $Version ready under $scriptDomDir"
+}
+
 Install-SyncSqlPSGalleryModule -Name 'SqlServer'
 Install-SyncSqlOracleDriver -Version $OracleDriverVersion
+Install-SyncSqlScriptDom -Version $ScriptDomVersion
 
 Write-Host "[bootstrap] Dependencies ready under $ModulesCacheDir"

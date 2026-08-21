@@ -25,9 +25,11 @@ config/servers.json --defines-->  which servers/databases/schemas/objects
         |
         v
 Bootstrap-Dependencies.ps1   (SqlServer module, Oracle.ManagedDataAccess
-                               driver - the classic .NET Framework build,
-                               see "Windows PowerShell 5.1" below - config
-                               parsing is plain JSON, no extra module needed)
+                               driver, Microsoft.SqlServer.TransactSql.ScriptDom
+                               (MSSQL lineage parsing) - all classic .NET
+                               Framework builds, see "Windows PowerShell 5.1"
+                               below - config parsing is plain JSON, no
+                               extra module needed)
         |
         v
 Export-DatabaseObjects.ps1                              [CI stage: sync]
@@ -252,16 +254,40 @@ lookups are capped and debounced, and committed filters (not keystrokes)
 are what actually re-filter the object list, so it stays responsive on
 large catalogs.
 
-**Lineage is inferred, not parsed.** `Build-Catalog.ps1` regex-matches
-identifiers found in each object's DDL text (plus its Foreign Keys section,
-which is structural rather than inferred) against every other known object
-name. It is a reasonable starting point for exploration, not a certified
-lineage report — it will miss dynamic SQL, and can occasionally produce a
-false-positive edge when an identifier collides with an unrelated object
-name. Any traversal that crosses a linked-server/DB-link boundary (in the
-"most referenced indirectly" analytics) stops one hop past that boundary
-rather than fanning out across a remote server's own dependency graph. The
-site says as much on its overview page.
+**Lineage inference is engine-specific, and only MSSQL's is a real parse.**
+`Build-Catalog.ps1` tags every extracted object with the engine that
+produced it (a `-- Engine:   mssql`/`oracle` header line `New-SyncSqlObjectFile`
+writes into every extracted `.sql` file, alongside `-- Server:`/`-- Database:`/etc.)
+and dispatches accordingly:
+
+- **MSSQL** objects are parsed with `Microsoft.SqlServer.TransactSql.ScriptDom`
+  (real T-SQL AST, not text matching - see `SyncSql.MsSqlLineage.psm1`) when
+  ScriptDom was found under `-ModulesCacheDir` (Bootstrap-Dependencies.ps1
+  fetches it automatically); table/view references, schema-qualified
+  function calls, `EXEC`/`EXECUTE` targets, `FOREIGN KEY ... REFERENCES`
+  targets, and column references bound to their actual FROM-clause alias
+  are all read straight off the parse tree. This doesn't match identifiers
+  inside string literals/comments, doesn't misread `SELECT *`/computed
+  columns as references, and binds "alias.column" to the alias's *real*
+  table rather than guessing from nearby text.
+- **Oracle** objects still use a text scan (real PL/SQL parsing would mean
+  vendoring a ~300k-line generated ANTLR parser with no way to verify it
+  even compiles under Windows PowerShell 5.1 without an actual Windows
+  host to test on - see `SyncSql.OracleLineage.psm1`'s header comment),
+  but the scan runs over text a real lexical scanner has already cleaned
+  up: comments and string literals (including Oracle's `q'...'`
+  alternative quoting) are blanked out, and `"quoted identifiers"` are
+  unwrapped to plain text - so it no longer matches identifier-shaped text
+  that was actually inside a literal.
+- Any node missing an Engine tag (an extraction from before that header
+  field existed) falls back to the original raw-text regex scan.
+
+None of this is a certified lineage report even for MSSQL - it will still
+miss dynamic SQL and anything built at runtime, and a traversal that
+crosses a linked-server/DB-link boundary (in the "most referenced
+indirectly" analytics) still stops one hop past that boundary rather than
+fanning out across a remote server's own dependency graph. The site says
+as much on its overview page.
 
 ### Explorer replaces the sidebar
 
@@ -373,14 +399,18 @@ issue.
 Tables and views get a full structural column list (name + data type),
 independent of whether a column happens to have an
 `sys.extended_properties`/documentation entry - `sys.columns` (MSSQL) /
-`ALL_TAB_COLUMNS` (Oracle). `Build-Catalog.ps1` then re-scans each inferred
-edge's source DDL for qualified `alias.column` references (resolving
-simple `FROM`/`JOIN` aliases, plus the bare/qualified object name itself)
-against the target's column list, and records which of the target's
-columns are actually referenced on that edge. This is the same
-best-effort, regex-based approach the rest of lineage inference uses, not a
-certified column-level lineage report - it will miss dynamic SQL, `SELECT
-*`, and computed/aliased column expressions.
+`ALL_TAB_COLUMNS` (Oracle). `Build-Catalog.ps1` then checks each inferred
+edge's source object for `alias.column` references against the target's
+column list, and records which of the target's columns are actually
+referenced on that edge - using the same per-engine methodology as edge
+inference itself: for MSSQL (when ScriptDom is available) the alias comes
+from ScriptDom's own FROM-clause binding, not a guess, so `alias.column` is
+resolved to the exact table that alias was declared against; Oracle and
+the no-ScriptDom fallback still resolve it with a regex scan (over
+comment/string-scrubbed text for Oracle) for whatever token immediately
+follows the target's name. Neither is a certified column-level lineage
+report - both will miss dynamic SQL, `SELECT *`, and computed/aliased
+column expressions.
 
 This shows up as column tags next to each entry in an object's "depends
 on"/"used by" lists, and as highlighted, labeled edges in the Lineage
@@ -454,7 +484,11 @@ directory into
 target repo to include history; add `-MetricsRoot <metrics-staging-dir>`
 to include that one run's metrics snapshot - real trend graphs need
 several runs' worth of history accumulated in a real `metrics/` tree, so
-a single local run only shows a single data point per chart), then
+a single local run only shows a single data point per chart; add
+`-ScriptDomDllPath <path to Microsoft.SqlServer.TransactSql.ScriptDom.dll>`
+- e.g. `.pwsh-modules\scriptdom\lib\net472\Microsoft.SqlServer.TransactSql.ScriptDom.dll`
+after running Bootstrap-Dependencies.ps1 - for real T-SQL-parser-based
+MSSQL lineage instead of the regex fallback), then
 `npm run dev` inside `site/`.
 
 ## Known limitations (v2)
@@ -488,12 +522,24 @@ a single local run only shows a single data point per chart), then
 - Linked server / database link passwords are never extracted (not
   readable from the catalog) — the generated script has a placeholder
   that must be filled in manually if ever used to recreate the link.
-- Lineage edges are inferred via text/regex matching (plus structural FK
-  data), not a real T-SQL/PL-SQL parser — see "The catalog / lineage
-  site" above.
-- Column dependency tags on lineage edges are likewise regex-based (alias
-  resolution over `FROM`/`JOIN` text), not a real parser — see "Column
+- Lineage edges use a real T-SQL parser for MSSQL (ScriptDom, when found -
+  see "Lineage inference is engine-specific" above) but still text/regex
+  matching for Oracle - a real PL/SQL grammar would mean vendoring a
+  ~300k-line generated ANTLR parser with no prebuilt package to fetch
+  instead, and no way to verify it compiles under Windows PowerShell
+  5.1/.NET Framework without an actual Windows host to test on; left as a
+  follow-up once that can be done on a real runner. Even MSSQL's
+  real-parser path will still miss dynamic SQL and four-part
+  cross-linked-server names built at runtime.
+- Column dependency tags on lineage edges follow the same split: real
+  alias binding for MSSQL (via ScriptDom), regex-based alias resolution
+  for Oracle and for MSSQL when ScriptDom isn't available - see "Column
   dependency tracking" above.
+- MSSQL lineage parsing requires ScriptDom to have been fetched by
+  Bootstrap-Dependencies.ps1 (same `-ModulesCacheDir` as the SqlServer
+  module/Oracle driver) and successfully loaded; if it's missing or fails
+  to load, MSSQL nodes silently fall back to the same regex-based scan
+  Oracle uses, rather than failing the catalog build.
 - Grant extraction (MSSQL `sys.database_permissions`, Oracle
   `ALL_TAB_PRIVS`/`ALL_COL_PRIVS`) only covers object/column-level grants
   on the extracted objects themselves — server/database-level permissions,

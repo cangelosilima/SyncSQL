@@ -24,7 +24,10 @@
 
 .PARAMETER ModulesCacheDir
     Directory populated by Bootstrap-Dependencies.ps1 with the SqlServer
-    PowerShell module and the Oracle managed driver.
+    PowerShell module, the Oracle managed driver, and ScriptDom (used for
+    real T-SQL-parser-based MSSQL lineage inference in Build-Catalog.ps1;
+    falls back to the regex-based scan if not found, never a hard
+    failure).
 
 .PARAMETER ServerNameInclude / ServerNameExclude
     Optional regex overrides for which configured servers actually run in
@@ -99,6 +102,10 @@ Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Common.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.MsSql.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Oracle.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Git.psm1') -Force
+# Only Find-SyncSqlScriptDomDll is needed here (to locate the DLL for the
+# -ScriptDomDllPath handed to Build-Catalog.ps1 below) - actually loading
+# ScriptDom happens inside Build-Catalog.ps1 itself.
+Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.MsSqlLineage.psm1') -Force
 
 Write-SyncSqlLog "Loading config from $ConfigPath"
 $config = Import-SyncSqlConfig -Path $ConfigPath
@@ -129,6 +136,10 @@ $metricsRoot = Join-Path ([IO.Path]::GetTempPath()) "syncsql-metrics-$([Guid]::N
 New-Item -ItemType Directory -Path $metricsRoot -Force | Out-Null
 
 $oracleDriverDll = Find-SyncSqlOracleDriverDll -CacheDir (Join-Path $ModulesCacheDir 'oracle')
+$scriptDomDll = Find-SyncSqlScriptDomDll -CacheDir (Join-Path $ModulesCacheDir 'scriptdom')
+if (-not $scriptDomDll) {
+    Write-SyncSqlLog "ScriptDom not found under '$ModulesCacheDir/scriptdom' - MSSQL lineage will fall back to the regex-based text scan. Run Bootstrap-Dependencies.ps1 to fetch it." -Level WARN
+}
 
 $summaryLines = [System.Collections.Generic.List[string]]::new()
 $failedServers = [System.Collections.Generic.List[string]]::new()
@@ -205,6 +216,7 @@ else {
     $metricsHistoryLimitCopy = $MetricsHistoryLimit
     $metricsRootCopy = $metricsRoot
     $metricsDirName = 'metrics'
+    $scriptDomDllCopy = $scriptDomDll
     $catalogHook = {
         param($WorkDir, $PathPrefix)
 
@@ -220,7 +232,8 @@ else {
         $catalogOutputPath = [IO.Path]::Combine($WorkDir, $PathPrefix, 'catalog.json')
         Write-SyncSqlLog "Building catalog.json ($catalogHistoryLimit-commit history window) -> $catalogOutputPath"
         & $buildCatalogScript -ObjectsRoot (Join-Path $WorkDir $PathPrefix) -OutputPath $catalogOutputPath `
-            -RepoRoot $WorkDir -PathPrefix $PathPrefix -HistoryLimit $catalogHistoryLimit -MetricsRoot $metricsHistoryRoot
+            -RepoRoot $WorkDir -PathPrefix $PathPrefix -HistoryLimit $catalogHistoryLimit -MetricsRoot $metricsHistoryRoot `
+            -ScriptDomDllPath $scriptDomDllCopy
     }.GetNewClosure()
 
     try {

@@ -73,6 +73,15 @@
     fragmentation/usage, optimizer statistics over time). Omit to skip -
     node.metrics is simply left empty, same "degrade rather than fail"
     posture as the rest of this script.
+
+.PARAMETER ScriptDomDllPath
+    Path to Microsoft.SqlServer.TransactSql.ScriptDom.dll (Bootstrap-Dependencies.ps1's
+    scriptdom cache dir - see Find-SyncSqlScriptDomDll in
+    SyncSql.MsSqlLineage.psm1), used for real T-SQL-parser-based lineage
+    inference on MSSQL objects. Omit to fall back to the original
+    regex-based text scan for MSSQL nodes too (same behavior Oracle nodes
+    already get - see "Inferring lineage edges" below) - never a hard
+    failure, just a less precise result.
 #>
 [CmdletBinding()]
 param(
@@ -84,7 +93,8 @@ param(
     [int]$MaxVersionsPerObject = 15,
     [int]$MaxHistoryContentCalls = 1500,
     [int]$MaxCoChangeCommitSize = 40,
-    [string]$MetricsRoot
+    [string]$MetricsRoot,
+    [string]$ScriptDomDllPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,6 +106,31 @@ Set-StrictMode -Version Latest
 # resolved reference to this module's exported functions out from under it.
 if (-not (Get-Module -Name SyncSql.Common)) {
     Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.Common.psm1')
+}
+if (-not (Get-Module -Name SyncSql.MsSqlLineage)) {
+    Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.MsSqlLineage.psm1')
+}
+if (-not (Get-Module -Name SyncSql.OracleLineage)) {
+    Import-Module (Join-Path $PSScriptRoot 'modules/SyncSql.OracleLineage.psm1')
+}
+
+# Real ScriptDom-based MSSQL lineage is opt-in on whether the DLL was
+# actually found/loaded - never a hard requirement, so this script still
+# works (falling back to the regex path for MSSQL too) when
+# Bootstrap-Dependencies.ps1 hasn't been run, e.g. a quick local preview.
+$script:UseScriptDomForMsSql = $false
+if (-not [string]::IsNullOrWhiteSpace($ScriptDomDllPath)) {
+    try {
+        Import-SyncSqlScriptDom -DllPath $ScriptDomDllPath
+        $script:UseScriptDomForMsSql = $true
+        Write-SyncSqlLog "ScriptDom loaded from '$ScriptDomDllPath' - MSSQL lineage will use real T-SQL parsing."
+    }
+    catch {
+        Write-SyncSqlLog "Could not load ScriptDom from '$ScriptDomDllPath' (falling back to regex-based lineage for MSSQL too): $($_.Exception.Message)" -Level WARN
+    }
+}
+else {
+    Write-SyncSqlLog "No -ScriptDomDllPath supplied - MSSQL lineage will use the regex-based text scan (same as Oracle's fallback path)." -Level WARN
 }
 
 if (-not (Test-Path -LiteralPath $ObjectsRoot)) {
@@ -117,7 +152,15 @@ function ConvertFrom-SyncSqlObjectFileLines {
 
     $allLines = @($Lines)
     $i = 0
-    while ($i -lt $allLines.Count -and $allLines[$i].StartsWith('-- ')) { $i++ }
+    # 'mssql'/'oracle' when the header carries an Engine line (every object
+    # written since that field was added - see New-SyncSqlObjectFile);
+    # $null for older extractions/historical git-show'd versions predating
+    # it, in which case lineage inference falls back to the regex path.
+    $engine = $null
+    while ($i -lt $allLines.Count -and $allLines[$i].StartsWith('-- ')) {
+        if ($allLines[$i] -match '^-- Engine:\s*(\S+)$') { $engine = $Matches[1] }
+        $i++
+    }
     if ($i -lt $allLines.Count -and [string]::IsNullOrEmpty($allLines[$i])) { $i++ }
 
     # NOTE: @() must wrap the *whole* if/else statement, not each branch -
@@ -220,6 +263,7 @@ function ConvertFrom-SyncSqlObjectFileLines {
         FullColumns  = $fullColumns
         Grants       = $grants
         Sections     = $otherSections
+        Engine       = $engine
     }
 }
 
@@ -279,6 +323,7 @@ foreach ($file in $files) {
         columns       = $columns
         grants        = @($parsed.Grants)
         sections      = $parsed.Sections
+        engine        = $parsed.Engine
         sizeBytes     = [Text.Encoding]::UTF8.GetByteCount($parsed.Ddl)
         metrics       = @()
     }
@@ -297,7 +342,7 @@ foreach ($file in $files) {
     $bareIndexServer[$serverKey].Add($id)
 }
 
-Write-SyncSqlLog "Inferring lineage edges (best-effort text matching)"
+Write-SyncSqlLog "Inferring lineage edges"
 $edgeSet = [System.Collections.Generic.HashSet[string]]::new()
 $edges = [System.Collections.Generic.List[object]]::new()
 
@@ -310,8 +355,77 @@ function Add-SyncSqlEdge {
     }
 }
 
+function Resolve-SyncSqlObjectRef {
+    <#
+        Resolves a (possibly schema-qualified) name referenced from $Node's
+        own server+database scope to a node id, or $null if it can't be
+        resolved unambiguously. A schema-qualified reference to an unknown
+        schema is left unresolved rather than falling back to a bare-name
+        guess - if the author was specific, an ambiguous bare match would
+        be a worse guess, not a better one. A bare reference only resolves
+        when exactly one object with that name exists in scope (database
+        first, then server, for cross-linked-server/DB-link bare
+        references) - same "don't guess on ambiguity" rule the regex-only
+        version of this script used.
+    #>
+    param($Node, [string]$Schema, [string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+    $nameLower = $Name.ToLowerInvariant()
+
+    if (-not [string]::IsNullOrWhiteSpace($Schema)) {
+        $key = "$($Node.server)::$($Node.database)::$($Schema.ToLowerInvariant()).$nameLower"
+        if ($qualifiedIndex.ContainsKey($key)) { return $qualifiedIndex[$key] }
+        return $null
+    }
+
+    $dbKey = "$($Node.server)::$($Node.database)::$nameLower"
+    if ($bareIndexDb.ContainsKey($dbKey) -and $bareIndexDb[$dbKey].Count -eq 1) { return $bareIndexDb[$dbKey][0] }
+
+    $serverKey = "$($Node.server)::$nameLower"
+    if ($bareIndexServer.ContainsKey($serverKey) -and $bareIndexServer[$serverKey].Count -eq 1) { return $bareIndexServer[$serverKey][0] }
+
+    return $null
+}
+
+# Legacy regex text scan - still used for Oracle (over a scrubbed copy of
+# the text, see Get-SyncSqlOracleScrubbedText) and for any node missing an
+# Engine tag (an older extraction run from before that header field
+# existed; falls back to the original raw-text behavior rather than
+# failing). MSSQL nodes use real T-SQL parsing instead - see
+# SyncSql.MsSqlLineage.psm1 - whenever ScriptDom was loaded successfully.
 $qualifiedPattern = [regex]'\[?([A-Za-z_][\w$#]*)\]?\.\[?([A-Za-z_][\w$#]*)\]?'
 $barePattern = [regex]'\b([A-Za-z_][\w$#]{3,})\b'
+
+function Get-SyncSqlRegexObjectRefs {
+    <#
+        The original qualified/bare-name text scan, factored out so both
+        the Oracle (scrubbed-text) and legacy (raw-text) paths can share
+        it. Returns the same @{Schema=;Name=} shape
+        Get-SyncSqlMsSqlDdlReferences returns, so the resolution loop below
+        doesn't need to know which path produced a given ref.
+    #>
+    param([string]$ScanText)
+    $refs = [System.Collections.Generic.List[object]]::new()
+    if ([string]::IsNullOrWhiteSpace($ScanText)) { return $refs }
+
+    foreach ($match in $qualifiedPattern.Matches($ScanText)) {
+        $refs.Add([pscustomobject]@{ Schema = $match.Groups[1].Value; Name = $match.Groups[2].Value })
+    }
+
+    $seenBareTokens = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($match in $barePattern.Matches($ScanText)) {
+        if ($seenBareTokens.Add($match.Value)) {
+            $refs.Add([pscustomobject]@{ Schema = $null; Name = $match.Value })
+        }
+    }
+    return $refs
+}
+
+# Cached per-node so the column-tagging pass below can reuse this node's
+# parsed/scrubbed form instead of re-parsing every source object once per
+# outgoing edge.
+$msSqlParsedByNodeId = @{}
+$oracleScrubbedByNodeId = @{}
 
 foreach ($node in $nodes) {
     # Scan the DDL plus the (high-confidence, structural) Foreign Keys
@@ -321,30 +435,23 @@ foreach ($node in $nodes) {
     $scanText = if ($fkSection) { $node.ddl + "`n" + $fkSection.content } else { $node.ddl }
     if ([string]::IsNullOrWhiteSpace($scanText)) { continue }
 
-    foreach ($match in $qualifiedPattern.Matches($scanText)) {
-        $schemaLower = $match.Groups[1].Value.ToLowerInvariant()
-        $nameLower = $match.Groups[2].Value.ToLowerInvariant()
-        $key = "$($node.server)::$($node.database)::$schemaLower.$nameLower"
-        if ($qualifiedIndex.ContainsKey($key)) {
-            Add-SyncSqlEdge -From $node.id -To $qualifiedIndex[$key]
-        }
+    if ($node.engine -eq 'mssql' -and $script:UseScriptDomForMsSql) {
+        $parsed = Get-SyncSqlMsSqlDdlReferences -Ddl $scanText
+        $msSqlParsedByNodeId[$node.id] = $parsed
+        $objectRefs = $parsed.ObjectRefs
+    }
+    elseif ($node.engine -eq 'oracle') {
+        $scrubbed = Get-SyncSqlOracleScrubbedText -Ddl $scanText
+        $oracleScrubbedByNodeId[$node.id] = $scrubbed
+        $objectRefs = @(Get-SyncSqlRegexObjectRefs -ScanText $scrubbed)
+    }
+    else {
+        $objectRefs = @(Get-SyncSqlRegexObjectRefs -ScanText $scanText)
     }
 
-    $seenBareTokens = [System.Collections.Generic.HashSet[string]]::new()
-    foreach ($match in $barePattern.Matches($scanText)) {
-        $tokenLower = $match.Value.ToLowerInvariant()
-        if (-not $seenBareTokens.Add($tokenLower)) { continue }
-
-        $dbKey = "$($node.server)::$($node.database)::$tokenLower"
-        if ($bareIndexDb.ContainsKey($dbKey) -and $bareIndexDb[$dbKey].Count -eq 1) {
-            Add-SyncSqlEdge -From $node.id -To $bareIndexDb[$dbKey][0]
-            continue
-        }
-
-        $serverKey = "$($node.server)::$tokenLower"
-        if ($bareIndexServer.ContainsKey($serverKey) -and $bareIndexServer[$serverKey].Count -eq 1) {
-            Add-SyncSqlEdge -From $node.id -To $bareIndexServer[$serverKey][0]
-        }
+    foreach ($ref in $objectRefs) {
+        $targetId = Resolve-SyncSqlObjectRef -Node $node -Schema $ref.Schema -Name $ref.Name
+        if ($targetId) { Add-SyncSqlEdge -From $node.id -To $targetId }
     }
 }
 
@@ -413,6 +520,36 @@ function Get-SyncSqlUsedColumns {
     return @($used)
 }
 
+function Get-SyncSqlMsSqlUsedColumns {
+    <#
+        MSSQL equivalent of Get-SyncSqlAliasesForTarget + Get-SyncSqlUsedColumns
+        combined, but using ScriptDom's real alias bindings
+        ($ParsedFrom.Aliases, from Get-SyncSqlMsSqlDdlReferences) instead
+        of a regex guess at what token follows a table reference. An alias
+        "matches" the target when resolving its bound Schema/Name (in
+        $FromNode's own server+database scope) lands on $ToNode's id.
+    #>
+    param($FromNode, $ParsedFrom, $ToNode, [string[]]$ColumnNames)
+
+    $used = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if (-not $ParsedFrom -or $ColumnNames.Count -eq 0) { return @($used) }
+
+    $matchingAliases = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($aliasEntry in $ParsedFrom.Aliases.GetEnumerator()) {
+        $resolvedId = Resolve-SyncSqlObjectRef -Node $FromNode -Schema $aliasEntry.Value.Schema -Name $aliasEntry.Value.Name
+        if ($resolvedId -eq $ToNode.id) { [void]$matchingAliases.Add($aliasEntry.Key) }
+    }
+    if ($matchingAliases.Count -eq 0) { return @($used) }
+
+    $columnLookup = [System.Collections.Generic.HashSet[string]]::new([string[]]$ColumnNames, [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($colRef in $ParsedFrom.ColumnRefs) {
+        if ($matchingAliases.Contains($colRef.AliasOrTable) -and $columnLookup.Contains($colRef.Column)) {
+            [void]$used.Add($colRef.Column)
+        }
+    }
+    return @($used)
+}
+
 $nodesByIdForColumns = @{}
 foreach ($n in $nodes) { $nodesByIdForColumns[$n.id] = $n }
 
@@ -426,8 +563,27 @@ foreach ($edge in $edges) {
     $columnNames = @($toNode.columns | ForEach-Object { $_.name } | Where-Object { $_ })
     if ($columnNames.Count -eq 0) { continue }
 
-    $aliases = Get-SyncSqlAliasesForTarget -ScanText $fromNode.ddl -TargetNode $toNode
-    $used = Get-SyncSqlUsedColumns -ScanText $fromNode.ddl -Aliases $aliases -ColumnNames $columnNames
+    # @() wraps every one of these call sites (not just the functions'
+    # own internal returns) - PowerShell unrolls a function's return value
+    # through the output pipeline same as an if/else branch (see the
+    # ConvertFrom-SyncSqlObjectFileLines NOTE above), so a HashSet/List
+    # with exactly one element silently collapses to a bare scalar unless
+    # the assignment itself is wrapped - confirmed by testing this exact
+    # pattern, not a hypothetical.
+    if ($fromNode.engine -eq 'mssql' -and $msSqlParsedByNodeId.ContainsKey($fromNode.id)) {
+        $used = @(Get-SyncSqlMsSqlUsedColumns -FromNode $fromNode -ParsedFrom $msSqlParsedByNodeId[$fromNode.id] -ToNode $toNode -ColumnNames $columnNames)
+    }
+    else {
+        $scanText = if ($fromNode.engine -eq 'oracle' -and $oracleScrubbedByNodeId.ContainsKey($fromNode.id)) {
+            $oracleScrubbedByNodeId[$fromNode.id]
+        }
+        else {
+            $fromNode.ddl
+        }
+        $aliases = @(Get-SyncSqlAliasesForTarget -ScanText $scanText -TargetNode $toNode)
+        $used = @(Get-SyncSqlUsedColumns -ScanText $scanText -Aliases $aliases -ColumnNames $columnNames)
+    }
+
     if ($used.Count -gt 0) {
         $edge['columns'] = @($used | Sort-Object)
     }

@@ -419,7 +419,7 @@ function Export-SyncSqlOracleServer {
                     Write-SyncSqlLog "[$serverName] Could not extract CREATE USER DDL for '$owner' (insufficient privileges?): $($_.Exception.Message)" -Level WARN
                 }
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $serviceName `
-                    -ObjectType 'Schemas' -ObjectName $owner -Definition $definition | Out-Null
+                    -ObjectType 'Schemas' -ObjectName $owner -Definition $definition -Engine 'oracle' | Out-Null
                 $fileCount++
             }
         }
@@ -467,7 +467,7 @@ function Export-SyncSqlOracleServer {
                     $definition = Add-SyncSqlSectionBlock -Definition $definition -Title 'Grants' -SectionIndex $grantsByOwner[$owner] -Key $key
 
                     New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $serviceName `
-                        -SchemaName $owner -ObjectType $configType -ObjectName $objectName -Definition $definition | Out-Null
+                        -SchemaName $owner -ObjectType $configType -ObjectName $objectName -Definition $definition -Engine 'oracle' | Out-Null
                     $fileCount++
 
                     if ($MetricsRoot -and $oracleType -eq 'TABLE' -and $metricsByOwner.ContainsKey($owner) -and $metricsByOwner[$owner].ContainsKey($key)) {
@@ -493,7 +493,7 @@ function Export-SyncSqlOracleServer {
                 }
 
                 New-SyncSqlObjectFile -StagingRoot $StagingRoot -ServerName $serverName -DatabaseName $serviceName `
-                    -SchemaName $link.Owner -ObjectType 'DatabaseLinks' -ObjectName $link.DbLink -Definition $definition | Out-Null
+                    -SchemaName $link.Owner -ObjectType 'DatabaseLinks' -ObjectName $link.DbLink -Definition $definition -Engine 'oracle' | Out-Null
                 $fileCount++
             }
         }
