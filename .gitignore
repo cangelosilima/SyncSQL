@@ -13,3 +13,9 @@ staging/
 site/node_modules/
 site/dist/
 site/*.tsbuildinfo
+
+# .NET CLI build output
+cli/**/bin/
+cli/**/obj/
+cli/**/*.nupkg
+cli/nupkg/

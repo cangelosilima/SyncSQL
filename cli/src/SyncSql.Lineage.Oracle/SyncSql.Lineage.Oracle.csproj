@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SyncSql.Core\SyncSql.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+    <!-- Build-time only: generates+compiles PlSqlLexer/PlSqlParser from Grammar/*.g4 as part of
+         `dotnet build` (needs a `java` on PATH - see Grammar/NOTICE.md). Nothing generated is
+         committed; PrivateAssets keeps this tool out of this project's own published dependency list. -->
+    <PackageReference Include="Antlr4BuildTasks" Version="12.14.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- No <Package> (namespace) set: PlSqlLexerBase/PlSqlParserBase are vendored unmodified from
+       upstream and reference the generated PlSqlLexer/PlSqlParser types unqualified from the global
+       namespace, so the generated code needs to land in the global namespace too - matches how the
+       upstream grammar's own C# target is built. -->
+  <ItemGroup>
+    <Antlr4 Include="Grammar\PlSqlLexer.g4" />
+    <Antlr4 Include="Grammar\PlSqlParser.g4">
+      <Visitor>true</Visitor>
+      <Listener>false</Listener>
+    </Antlr4>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The vendored grammar/generated parser predates C# nullable annotations and isn't ours to
+         annotate - enforcing it project-wide would just fight ~300k lines of generated code we don't
+         hand-edit. The hand-written analyzer/visitor in this project still follows nullable discipline
+         by convention. -->
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
