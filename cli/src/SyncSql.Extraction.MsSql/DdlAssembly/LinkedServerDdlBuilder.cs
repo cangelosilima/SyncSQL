@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.MsSql.DdlAssembly;
+﻿namespace SyncSql.Extraction.MsSql.DdlAssembly;
 
 /// <summary>A direct port of Get-SyncSqlMsSqlLinkedServers' foreach body. Passwords are never extractable from the catalog - the generated login-mapping script has a placeholder that must be filled in manually.</summary>
 internal static class LinkedServerDdlBuilder

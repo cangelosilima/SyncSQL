@@ -1,4 +1,4 @@
-namespace SyncSql.Core.Domain;
+﻿namespace SyncSql.Core.Domain;
 
 /// <summary>A (possibly schema-qualified) reference to another object, as found by lineage analysis.</summary>
 public sealed record ObjectRef(string? Schema, string Name);

@@ -1,4 +1,4 @@
-using Oracle.ManagedDataAccess.Client;
+﻿using Oracle.ManagedDataAccess.Client;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;
 

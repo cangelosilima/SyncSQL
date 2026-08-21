@@ -1,4 +1,4 @@
-using SyncSql.Core.Domain;
+﻿using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Abstractions;
 
@@ -10,13 +10,13 @@ namespace SyncSql.Core.Abstractions;
 /// </summary>
 public interface ILineageAnalyzer
 {
-    DatabaseEngine Engine { get; }
+    public DatabaseEngine Engine { get; }
 
-    LineageAnalysisResult Analyze(string ddl);
+    public LineageAnalysisResult Analyze(string ddl);
 }
 
 /// <summary>Runtime dispatch from an object's engine to the matching <see cref="ILineageAnalyzer"/> - implemented in SyncSql.Cli via keyed DI, keeping Core free of a DI container reference.</summary>
 public interface ILineageAnalyzerResolver
 {
-    ILineageAnalyzer Resolve(DatabaseEngine engine);
+    public ILineageAnalyzer Resolve(DatabaseEngine engine);
 }

@@ -1,4 +1,4 @@
-namespace SyncSql.Core.Configuration;
+﻿namespace SyncSql.Core.Configuration;
 
 /// <summary>
 /// A server's fully-resolved filters (config.defaults merged with that server's own overrides, key by

@@ -1,4 +1,4 @@
-using SyncSql.Core.Domain;
+﻿using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Abstractions;
 
@@ -22,8 +22,8 @@ public sealed record MetricsHistoryUpdateRequest
 public interface IMetricsHistoryStore
 {
     /// <summary>Appends every snapshot under request.SnapshotRoot into its object's history file under request.HistoryRoot. Returns the number of objects updated.</summary>
-    Task<int> UpdateAsync(MetricsHistoryUpdateRequest request, CancellationToken cancellationToken);
+    public Task<int> UpdateAsync(MetricsHistoryUpdateRequest request, CancellationToken cancellationToken);
 
     /// <summary>Loads one object's accumulated metrics history (oldest first), or an empty list if it has none.</summary>
-    Task<IReadOnlyList<MetricsSnapshot>> LoadHistoryAsync(string historyRoot, string objectId, CancellationToken cancellationToken);
+    public Task<IReadOnlyList<MetricsSnapshot>> LoadHistoryAsync(string historyRoot, string objectId, CancellationToken cancellationToken);
 }

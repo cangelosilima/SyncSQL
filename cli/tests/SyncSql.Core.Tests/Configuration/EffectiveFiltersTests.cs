@@ -1,4 +1,4 @@
-using SyncSql.Core.Configuration;
+﻿using SyncSql.Core.Configuration;
 using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Tests.Configuration;

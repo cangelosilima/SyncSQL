@@ -1,4 +1,4 @@
-using SyncSql.Core.Domain;
+﻿using SyncSql.Core.Domain;
 using SyncSql.Core.Serialization;
 
 namespace SyncSql.Core.Tests.Serialization;

@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.Oracle;
+﻿namespace SyncSql.Extraction.Oracle;
 
 internal static class OracleTypeMaps
 {

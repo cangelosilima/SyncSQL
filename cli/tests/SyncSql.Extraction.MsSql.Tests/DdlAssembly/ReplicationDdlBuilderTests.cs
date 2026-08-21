@@ -1,4 +1,4 @@
-using SyncSql.Extraction.MsSql.DdlAssembly;
+﻿using SyncSql.Extraction.MsSql.DdlAssembly;
 
 namespace SyncSql.Extraction.MsSql.Tests.DdlAssembly;
 

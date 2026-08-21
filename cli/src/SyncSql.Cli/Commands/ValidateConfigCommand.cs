@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using SyncSql.Cli.Composition;
 using SyncSql.Core.Configuration;
 using System.CommandLine;

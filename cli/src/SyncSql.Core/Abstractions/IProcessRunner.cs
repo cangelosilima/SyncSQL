@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 
 namespace SyncSql.Core.Abstractions;
@@ -11,7 +11,7 @@ public sealed record ProcessResult(int ExitCode, string StandardOutput, string S
 /// <summary>Runs an external process and captures its output - the one seam SyncSql.Catalog (git log/show) and SyncSql.Git (clone/commit/push) both shell through, so both are unit-testable without a real `git` binary.</summary>
 public interface IProcessRunner
 {
-    Task<ProcessResult> RunAsync(
+    public Task<ProcessResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         string? workingDirectory = null,
@@ -57,8 +57,8 @@ public sealed class SystemProcessRunner : IProcessRunner
         using Process process = new() { StartInfo = startInfo };
         StringBuilder stdout = new();
         StringBuilder stderr = new();
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdout.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) stderr.AppendLine(e.Data); };
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.AppendLine(e.Data); } };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
 
         process.Start();
         process.BeginOutputReadLine();

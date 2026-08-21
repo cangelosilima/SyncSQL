@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.MsSql.DdlAssembly;
+﻿namespace SyncSql.Extraction.MsSql.DdlAssembly;
 
 /// <summary>
 /// MSSQL doesn't store a reusable "CREATE TABLE" text the way it does for procedures/views - this

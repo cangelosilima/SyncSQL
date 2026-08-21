@@ -1,4 +1,4 @@
-using SyncSql.Core.Domain;
+﻿using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Abstractions;
 
@@ -45,5 +45,5 @@ public sealed record GitHistoryMiningResult
 /// </summary>
 public interface IGitHistoryMiner
 {
-    Task<GitHistoryMiningResult> MineAsync(GitHistoryMiningRequest request, CancellationToken cancellationToken);
+    public Task<GitHistoryMiningResult> MineAsync(GitHistoryMiningRequest request, CancellationToken cancellationToken);
 }

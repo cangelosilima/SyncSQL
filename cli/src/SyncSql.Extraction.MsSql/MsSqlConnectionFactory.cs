@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+﻿using Microsoft.Data.SqlClient;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;
 

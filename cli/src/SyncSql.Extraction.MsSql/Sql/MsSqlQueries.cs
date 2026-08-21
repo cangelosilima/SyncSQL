@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.MsSql.Sql;
+﻿namespace SyncSql.Extraction.MsSql.Sql;
 
 /// <summary>
 /// Every catalog-view query the MSSQL extractor runs, verbatim from SyncSql.MsSql.psm1 - none of these

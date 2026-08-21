@@ -1,4 +1,4 @@
-namespace SyncSql.Core.Abstractions;
+﻿namespace SyncSql.Core.Abstractions;
 
 /// <summary>
 /// The only production <see cref="ICredentialProvider"/>: reads "&lt;prefix&gt;_DB_USER"/"&lt;prefix&gt;_DB_PASSWORD"

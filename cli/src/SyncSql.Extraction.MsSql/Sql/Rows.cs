@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.MsSql.Sql;
+﻿namespace SyncSql.Extraction.MsSql.Sql;
 
 // Dapper maps these by property name (case-insensitive) against each query's column aliases in
 // MsSqlQueries - one row type per query, kept as plain mutable-by-Dapper classes (Dapper materializes

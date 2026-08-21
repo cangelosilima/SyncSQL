@@ -16,7 +16,28 @@ charset = utf-8
 # File-scoped namespaces everywhere.
 csharp_style_namespace_declarations = file_scoped:error
 
-# One type per file, PascalCase types/members, _camelCase private fields.
+# One type per file, PascalCase types/members, _camelCase private *instance* fields.
+# Private const/static readonly fields are conceptually constants, so they follow the
+# same PascalCase convention as the rest of the codebase's members (matching the
+# .NET runtime's own style) rather than the instance-field underscore convention -
+# these two more specific rules must stay listed before the general one below, since
+# Roslyn applies the first matching naming rule in declaration order.
+dotnet_naming_rule.private_const_pascal_case.severity = warning
+dotnet_naming_rule.private_const_pascal_case.symbols = private_const_fields
+dotnet_naming_rule.private_const_pascal_case.style = pascal_case
+dotnet_naming_symbols.private_const_fields.applicable_kinds = field
+dotnet_naming_symbols.private_const_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_const_fields.required_modifiers = const
+
+dotnet_naming_rule.private_static_readonly_pascal_case.severity = warning
+dotnet_naming_rule.private_static_readonly_pascal_case.symbols = private_static_readonly_fields
+dotnet_naming_rule.private_static_readonly_pascal_case.style = pascal_case
+dotnet_naming_symbols.private_static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly_fields.required_modifiers = static,readonly
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
 dotnet_naming_rule.private_fields_underscore.severity = warning
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case

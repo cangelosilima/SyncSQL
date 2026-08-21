@@ -1,4 +1,4 @@
-using SyncSql.Core.Domain;
+﻿using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Abstractions;
 
@@ -28,5 +28,5 @@ public sealed record CatalogBuildRequest
 /// </summary>
 public interface ICatalogBuilder
 {
-    Task<Catalog> BuildAsync(CatalogBuildRequest request, CancellationToken cancellationToken);
+    public Task<Catalog> BuildAsync(CatalogBuildRequest request, CancellationToken cancellationToken);
 }

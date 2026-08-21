@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.MsSql.DdlAssembly;
+﻿namespace SyncSql.Extraction.MsSql.DdlAssembly;
 
 /// <summary>
 /// Best-effort, informational-only publication/article listing - a direct port of

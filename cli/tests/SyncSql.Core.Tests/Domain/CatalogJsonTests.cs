@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Tests.Domain;

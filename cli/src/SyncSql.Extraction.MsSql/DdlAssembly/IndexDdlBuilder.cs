@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.MsSql.DdlAssembly;
+﻿namespace SyncSql.Extraction.MsSql.DdlAssembly;
 
 /// <summary>
 /// Only plain rowstore CLUSTERED/NONCLUSTERED indexes get a runnable CREATE INDEX line; anything else

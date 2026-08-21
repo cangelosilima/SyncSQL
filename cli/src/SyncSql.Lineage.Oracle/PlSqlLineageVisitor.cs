@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using Antlr4.Runtime;
 using SyncSql.Core.Domain;
 

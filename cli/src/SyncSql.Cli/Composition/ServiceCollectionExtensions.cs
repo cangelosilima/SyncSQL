@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using SyncSql.Catalog;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;

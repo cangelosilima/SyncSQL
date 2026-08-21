@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using SyncSql.Core.Domain;
 using SyncSql.Lineage.MsSql;
 

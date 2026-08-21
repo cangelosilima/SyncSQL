@@ -1,4 +1,4 @@
-using SyncSql.Core.Configuration;
+﻿using SyncSql.Core.Configuration;
 
 namespace SyncSql.Core.Abstractions;
 
@@ -34,5 +34,5 @@ public sealed record GitPublishResult
 /// </summary>
 public interface IGitRepository
 {
-    Task<GitPublishResult> PublishAsync(GitPublishRequest request, CancellationToken cancellationToken);
+    public Task<GitPublishResult> PublishAsync(GitPublishRequest request, CancellationToken cancellationToken);
 }

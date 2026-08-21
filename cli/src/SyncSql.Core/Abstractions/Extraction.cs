@@ -1,4 +1,4 @@
-using SyncSql.Core.Configuration;
+﻿using SyncSql.Core.Configuration;
 using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Abstractions;
@@ -9,7 +9,7 @@ public sealed record DatabaseCredentials(string Username, string Password);
 /// <summary>Resolves <see cref="DatabaseCredentials"/> from the process environment given a server's credentialsVariablePrefix.</summary>
 public interface ICredentialProvider
 {
-    DatabaseCredentials Resolve(string credentialsVariablePrefix);
+    public DatabaseCredentials Resolve(string credentialsVariablePrefix);
 }
 
 public sealed record ExtractionOptions
@@ -27,9 +27,9 @@ public sealed record ExtractionOptions
 /// </summary>
 public interface IDatabaseObjectExtractor
 {
-    DatabaseEngine Engine { get; }
+    public DatabaseEngine Engine { get; }
 
-    Task<ExtractionOutcome> ExtractAsync(
+    public Task<ExtractionOutcome> ExtractAsync(
         ServerConfig server,
         EffectiveFilters filters,
         ExtractionOptions options,
@@ -39,5 +39,5 @@ public interface IDatabaseObjectExtractor
 /// <summary>Runtime dispatch from a server's configured engine to the matching <see cref="IDatabaseObjectExtractor"/> - implemented in SyncSql.Cli via keyed DI, keeping Core free of a DI container reference.</summary>
 public interface IDatabaseObjectExtractorResolver
 {
-    IDatabaseObjectExtractor Resolve(DatabaseEngine engine);
+    public IDatabaseObjectExtractor Resolve(DatabaseEngine engine);
 }

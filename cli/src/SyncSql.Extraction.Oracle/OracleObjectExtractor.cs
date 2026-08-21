@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;

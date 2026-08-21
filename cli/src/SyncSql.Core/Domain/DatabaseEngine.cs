@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 using SyncSql.Core.Json;
 
 namespace SyncSql.Core.Domain;

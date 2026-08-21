@@ -1,4 +1,4 @@
-using SyncSql.Extraction.Oracle;
+﻿using SyncSql.Extraction.Oracle;
 
 namespace SyncSql.Extraction.Oracle.Tests;
 

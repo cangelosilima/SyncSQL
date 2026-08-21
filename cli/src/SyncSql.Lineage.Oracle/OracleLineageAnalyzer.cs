@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using Antlr4.Runtime;
 using Microsoft.Extensions.Logging;
 using SyncSql.Core.Abstractions;

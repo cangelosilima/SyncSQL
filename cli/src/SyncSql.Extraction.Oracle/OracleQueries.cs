@@ -1,4 +1,4 @@
-namespace SyncSql.Extraction.Oracle;
+﻿namespace SyncSql.Extraction.Oracle;
 
 /// <summary>Every dictionary-view query the Oracle extractor runs, verbatim from SyncSql.Oracle.psm1 (`:name` bind variables - see OracleCommandRunner for why BindByName=true matters here).</summary>
 internal static class OracleQueries
