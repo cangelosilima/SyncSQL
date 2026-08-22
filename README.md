@@ -20,6 +20,9 @@ locally, with no native Oracle client install required
 (`Oracle.ManagedDataAccess.Core` is a fully managed ADO.NET driver) and no
 separate bootstrap step: every dependency, including the real parsers behind
 lineage inference for both engines, is a normal NuGet package reference.
+The CLI itself never touches git - it only reads and writes local files;
+cloning, committing, and pushing are the CI pipeline's own job, done
+directly in `.gitlab-ci.yml` (see "Running the pipeline" below).
 
 ## How it works
 
@@ -35,12 +38,12 @@ flowchart TD
 
     staged["extracted-objects/{server}/{database}/{type}/[{schema}/]{object}.sql<br/>metrics-snapshot/{...} - merged across every parallel job"]
 
-    subgraph sync["CI stage: sync - one job (syncsql git publish)"]
+    subgraph sync["CI stage: sync - one job, plain shell git + syncsql"]
         direction TB
-        clone["Clone this repo --history-limit commits deep,<br/>replace pathPrefix/ with the staged tree -<br/>dropped objects show up as deletions"]
+        clone["git clone --history-limit commits deep,<br/>replace pathPrefix/ with the staged tree -<br/>dropped objects show up as deletions"]
         metrics["syncsql metrics update<br/>folds this run's snapshots into repo/metrics/<br/>(outside pathPrefix - accumulates across runs)"]
-        catalog["syncsql catalog build<br/>structure + lineage (real parser per engine)<br/>+ history mined from this repo's own git log<br/>+ metrics/ per node, writes pathPrefix/catalog.json"]
-        commit["One commit: extracted objects + catalog.json<br/>+ updated metrics/ tree. Push."]
+        catalog["syncsql catalog build<br/>structure + lineage (real parser per engine)<br/>+ history mined read-only from this repo's<br/>own git log + metrics/ per node,<br/>writes pathPrefix/catalog.json"]
+        commit["git commit + push:<br/>extracted objects + catalog.json<br/>+ updated metrics/ tree, all in one commit"]
         clone --> metrics --> catalog --> commit
     end
 
@@ -71,22 +74,19 @@ diff**.
 
 `cli/` is a Clean/Onion-architecture .NET 10 solution: `SyncSql.Core` holds
 domain records and abstractions with zero infrastructure dependencies;
-`SyncSql.Extraction.MsSql`/`.Oracle`, `SyncSql.Lineage.MsSql`/`.Oracle`,
-`SyncSql.Catalog`, and `SyncSql.Git` each implement one of those
-abstractions; `SyncSql.Cli` is the sole composition root, wiring everything
-via dependency injection and exposing the commands below. Every project
-outside `SyncSql.Cli` depends only inward on `SyncSql.Core`.
+`SyncSql.Extraction.MsSql`/`.Oracle`, `SyncSql.Lineage.MsSql`/`.Oracle`, and
+`SyncSql.Catalog` each implement one of those abstractions; `SyncSql.Cli`
+is the sole composition root, wiring everything via dependency injection
+and exposing the commands below. Every project outside `SyncSql.Cli`
+depends only inward on `SyncSql.Core`. There is no git-publish project or
+abstraction anywhere in this solution - `syncsql` only reads and writes
+local files (`SyncSql.Catalog`'s history mining is a read-only `git log`/
+`git show`, never a write).
 
 ```
 syncsql validate-config --config <path>
-syncsql sync --config <path> [--staging-root] [--metrics-snapshot-root] [--skip-git]
+syncsql sync --config <path> [--staging-root] [--metrics-snapshot-root]
              [--server-include/--server-exclude]
-             [--history-limit] [--metrics-history-limit]
-             [--push-token] [--dotenv-path]
-syncsql git publish --config <path> --staging-root <path>
-                     [--metrics-snapshot-root] [--history-limit]
-                     [--metrics-history-limit] [--push-token]
-                     [--summary] [--dotenv-path]
 syncsql catalog build --objects-root <path> --output <path>
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
@@ -95,16 +95,13 @@ syncsql metrics update --snapshot-root <path> --history-root <path>
                         [--history-limit]
 ```
 
-`sync` is the umbrella command (extract → catalog → metrics → git publish)
-that a single-job pipeline runs; `git publish` is the same clone/fold-
-metrics/rebuild-catalog/commit/push sequence with no extraction of its
-own, for publishing a tree that one or more `sync --skip-git` runs already
-populated - e.g. one CI job per server extracting in parallel, feeding a
-single `git publish` job (see "Running the pipeline" below). `catalog
-build` and `metrics update` are the same responsibilities split out
-further still as composable, independently usable verbs - handy for local
-preview or rebuilding `catalog.json` against a different history window
-without re-extracting. Install it as a
+`sync` extracts (purely local - no git of any kind); `catalog build` and
+`metrics update` are the other two pure, composable steps (rebuild the
+catalog, fold metrics history) - handy for local preview or rebuilding
+`catalog.json` against a different history window without re-extracting.
+Publishing results to git is entirely the calling pipeline's job, done as
+plain shell (see "Running the pipeline" below) - `syncsql` itself never
+clones, commits, or pushes. Install it as a
 [dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools)
 from the project's Nexus feed, or run it straight from source with
 `dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
@@ -117,8 +114,10 @@ Nothing in that file is secret: it lists server hostnames and the regex
 filters that decide what gets extracted. See the field descriptions below
 for the full schema; in short:
 
-- `git`: where extracted objects get pushed. Left blank (the default),
-  they're pushed back into **this same project** using the predefined
+- `git`: where extracted objects get pushed. Read and acted on directly by
+  `.gitlab-ci.yml`'s `sync-database-objects` job (via `jq`) - `syncsql`
+  itself never touches this block. Left blank (the default), objects are
+  pushed back into **this same project** using the predefined
   `CI_SERVER_*` variables — see the token requirement below. Set it to a
   full URL to push into a different project instead.
 - `defaults` / per-server overrides: `databases`, `schemas`,
@@ -174,19 +173,21 @@ mined for the heatmap / co-change / point-in-time features baked into
   credentials needed.
 - **extract-server** (`extract`): the only jobs that touch your databases -
   one job **per server**, run in parallel via a GitLab
-  `parallel: matrix:`. Each instance runs `syncsql sync --skip-git
-  --server-include "^<server>$"`, writing to the same
-  `extracted-objects/`/`metrics-snapshot/` artifact paths every instance
-  shares (safe - extraction always writes under `<server>/...` first, so
-  different servers' output never collides), which GitLab then merges
-  together for the job below.
-- **sync-database-objects** (`sync`): publishes the merged output of every
-  extract-server instance in one commit - `syncsql git publish` clones,
-  replaces `config.git.pathPrefix` with the merged tree, folds this run's
-  metrics into the accumulating history, rebuilds `catalog.json` (see "How
-  it works" above), and pushes. No extraction of its own. Produces a
-  `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job knows
-  where to find `catalog.json` in the checkout.
+  `parallel: matrix:`. Each instance runs `syncsql sync
+  --server-include "^<server>$"` (purely local - no git), writing to the
+  same `extracted-objects/`/`metrics-snapshot/` artifact paths every
+  instance shares (safe - extraction always writes under `<server>/...`
+  first, so different servers' output never collides), which GitLab then
+  merges together for the job below.
+- **sync-database-objects** (`sync`): the only place git actually runs.
+  A plain shell script - not `syncsql` - resolves `config.git.*` (via
+  `jq`), clones the target repo, replaces `config.git.pathPrefix` with the
+  merged extract-server output, calls `syncsql metrics update` to fold
+  this run's metrics into the accumulating history and `syncsql catalog
+  build` to rebuild `catalog.json` (see "How it works" above), then
+  commits everything together and pushes. Writes a `dotenv` report
+  (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job knows where to find
+  `catalog.json` in the checkout.
 - **pages** (`pages`): fetches the branch tip (to see the commit
   sync-database-objects just pushed), builds `site/` (React/Vite) with
   the `catalog.json` it finds there, and publishes it as this project's
@@ -197,8 +198,9 @@ and has to be kept in sync by hand with `config/servers.json` - a server
 present in the config but missing from the matrix silently isn't extracted
 by this pipeline. For a small fleet where that upkeep isn't worth the
 parallelism, `.gitlab-ci.yml` documents the one-line swap back to a single
-sequential `syncsql sync` job (drop `extract-server`, give
-`sync-database-objects` a `sync` script instead of `git publish`).
+sequential job (drop `extract-server`, give sync-database-objects's script
+a leading `syncsql sync --config "$CONFIG_PATH" ...` call with no
+`--server-include`, ahead of its existing git script).
 
 All three run on a portable Linux image (`mcr.microsoft.com/dotnet/sdk:10.0`),
 installing the `syncsql` tool from Nexus - no Windows runner needed.
@@ -380,7 +382,7 @@ entirely separate from the object's version history:
     available).
 - `syncsql metrics update` runs inside the same git checkout the catalog
   builder uses, but writes to `<repo>/metrics/` - a tree kept entirely
-  outside `config.git.pathPrefix`, so the git publish step's
+  outside `config.git.pathPrefix`, so the CI pipeline's
   wipe-and-replace of the object tree never touches it. Each run appends
   this run's snapshot to the existing history array per table and trims it
   to `--history-limit` (default 90, override via the `METRICS_HISTORY_LIMIT`
@@ -445,13 +447,14 @@ count as a warning.
 
 A static Pages site can't run live `git` queries, so the catalog builder
 mines history *during the sync CI stage* instead, right before committing:
-`syncsql sync` clones the target repo deeply enough (`--history-limit`
-commits, default 250 — override via the `HISTORY_LIMIT` CI variable) for
-`syncsql catalog build` to mine it (`--repo-root`), and the resulting
-`catalog.json` is written straight into that same checkout and committed
-alongside the objects it describes - so it's versioned in git history too,
-not just a CI artifact that disappears after the job expires. Mining
-history produces:
+`sync-database-objects`'s shell script clones the target repo deeply
+enough (`--depth`/`--history-limit` commits, default 250 — override via
+the `HISTORY_LIMIT` CI variable) for `syncsql catalog build` to mine it
+(`--repo-root`, read-only - `git log`/`git show`, no writes), and the
+resulting `catalog.json` is written straight into that same checkout and
+committed alongside the objects it describes - so it's versioned in git
+history too, not just a CI artifact that disappears after the job
+expires. Mining history produces:
 
 - a global commit timeline (the History page and Overview's "latest
   changes"),
@@ -468,9 +471,9 @@ re-running the whole analysis per commit, which doesn't fit a scheduled
 CI job. What you get is real historical DDL per object within the mined
 commit window, plus a commit-level view of what changed together, which
 covers the practical "what changed and when" questions without that cost.
-Running with `--skip-git` (no git publish, so no repo to mine and nowhere
-to commit `catalog.json` into) simply omits all of this — empty history,
-zero change counts — rather than failing.
+Running `syncsql catalog build` without `--repo-root` (no repo to mine)
+simply omits all of this — empty history, zero change counts — rather
+than failing.
 
 To work on the site locally:
 
@@ -489,16 +492,13 @@ with a real one (see below) to preview actual data.
 ```bash
 export SQLPROD01_DB_USER='...'
 export SQLPROD01_DB_PASSWORD='...'
-syncsql sync --config ./config/servers.json --skip-git
+syncsql sync --config ./config/servers.json --staging-root ./staging
 ```
 
-`--skip-git` leaves the extracted files under `--staging-root` (printed in
-the log, or pass your own path) instead of publishing them - so no
-`catalog.json` is built in this mode either (there's no git checkout to
-write it into or mine history from), and this run's metrics snapshots are
-left in place rather than being folded into a `metrics/` history tree. To
-build a `catalog.json` for local preview, feed the object staging directory
-into:
+`sync` is purely local - it just leaves the extracted files under
+`--staging-root` (printed in the log if you don't pass one) and the
+metrics snapshots under `--metrics-snapshot-root`. To build a
+`catalog.json` for local preview, feed the object staging directory into:
 
 ```bash
 syncsql catalog build \

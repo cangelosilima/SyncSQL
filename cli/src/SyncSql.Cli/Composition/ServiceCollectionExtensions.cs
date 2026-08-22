@@ -4,7 +4,6 @@ using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
 using SyncSql.Extraction.MsSql;
 using SyncSql.Extraction.Oracle;
-using SyncSql.Git;
 using SyncSql.Lineage.MsSql;
 using SyncSql.Lineage.Oracle;
 
@@ -29,6 +28,5 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IGitHistoryMiner, GitHistoryMiner>();
         services.AddSingleton<IMetricsHistoryStore, MetricsHistoryStore>();
         services.AddSingleton<ICatalogBuilder, CatalogBuilder>();
-        services.AddSingleton<IGitRepository, GitRepository>();
     }
 }

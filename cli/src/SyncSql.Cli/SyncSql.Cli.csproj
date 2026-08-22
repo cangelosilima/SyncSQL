@@ -7,7 +7,6 @@
     <ProjectReference Include="..\SyncSql.Lineage.MsSql\SyncSql.Lineage.MsSql.csproj" />
     <ProjectReference Include="..\SyncSql.Lineage.Oracle\SyncSql.Lineage.Oracle.csproj" />
     <ProjectReference Include="..\SyncSql.Catalog\SyncSql.Catalog.csproj" />
-    <ProjectReference Include="..\SyncSql.Git\SyncSql.Git.csproj" />
   </ItemGroup>
 
   <ItemGroup>

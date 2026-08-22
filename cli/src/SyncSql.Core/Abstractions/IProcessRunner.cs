@@ -8,7 +8,7 @@ public sealed record ProcessResult(int ExitCode, string StandardOutput, string S
     public bool Succeeded => ExitCode == 0;
 }
 
-/// <summary>Runs an external process and captures its output - the one seam SyncSql.Catalog (git log/show) and SyncSql.Git (clone/commit/push) both shell through, so both are unit-testable without a real `git` binary.</summary>
+/// <summary>Runs an external process and captures its output - the seam SyncSql.Catalog's git history mining (`git log`/`git show`, read-only) shells through, so it's unit-testable without a real `git` binary.</summary>
 public interface IProcessRunner
 {
     public Task<ProcessResult> RunAsync(

@@ -2,17 +2,32 @@
 
 `syncsql` is a cross-platform .NET 10 command-line tool that extracts
 database objects from a fleet of MSSQL and Oracle servers, infers
-lineage between them, builds the `catalog.json` document the
-[catalog/lineage site](../../site) consumes, and publishes the result to
-git. It is a full rewrite of the project's original Windows PowerShell
-5.1 pipeline (`src/*.ps1`) with the same config schema, the same
-extracted-object file format, and the same `catalog.json` shape - existing
-`config/servers.json` files and any repository already populated by the
-PowerShell version work with `syncsql` unmodified.
+lineage between them, and builds the `catalog.json` document the
+[catalog/lineage site](../../site) consumes. It is a full rewrite of the
+project's original Windows PowerShell 5.1 pipeline (`src/*.ps1`) with the
+same config schema, the same extracted-object file format, and the same
+`catalog.json` shape - existing `config/servers.json` files and any
+repository already populated by the PowerShell version work with
+`syncsql` unmodified.
 
 Unlike the PowerShell version, `syncsql` runs anywhere .NET 10 runs
 (Linux, macOS, Windows) and can be installed and run locally, not just
 from CI.
+
+**`syncsql` never touches git itself** - no clone, no commit, no push,
+and no knowledge of `config.git.*`. It only reads and writes local
+files: extracted objects, metrics snapshots, and `catalog.json` (which
+its own `catalog build` command optionally reads git history *from*, via
+read-only `git log`/`git show`, purely to mine the change heatmap/
+co-change/point-in-time features - it never writes to that checkout).
+Publishing results to a git repository is entirely the calling
+pipeline's responsibility - see the root `.gitlab-ci.yml`'s
+`sync-database-objects` job for the reference implementation (clone,
+replace `config.git.pathPrefix`, commit, push, calling `syncsql metrics
+update` and `syncsql catalog build` in between for the non-git steps).
+This keeps the tool a pure, git-agnostic data pipeline you can run and
+test anywhere, with exactly one place deciding how and where results get
+published.
 
 ## Install
 
@@ -71,14 +86,11 @@ failure (missing/invalid field, no servers defined, malformed JSON).
 
 ### `syncsql sync`
 
-The umbrella command: extracts every configured (and selected) server,
-writes each object as its own `.sql` file, captures a metrics snapshot
-per table, and - unless `--skip-git` is set - clones the target
-repository, replaces `config.git.pathPrefix` with the freshly staged
-tree, folds this run's metrics into the accumulating metrics history,
-rebuilds `catalog.json`, and pushes everything as one commit. This
-mirrors the original `Export-DatabaseObjects.ps1`'s end-to-end behavior
-and is what a scheduled CI pipeline should invoke.
+Extracts every configured (and selected) server: writes each object as
+its own `.sql` file and each table's metrics as its own snapshot file.
+Purely local - no git operation of any kind. This is the extraction half
+of what a scheduled CI pipeline runs; the other half (publishing the
+result) is the calling pipeline's job - see the root `.gitlab-ci.yml`.
 
 ```bash
 syncsql sync --config ./config/servers.json
@@ -87,69 +99,29 @@ syncsql sync --config ./config/servers.json
 | Option                     | Default                          | Description |
 |----------------------------|-----------------------------------|-------------|
 | `--config`                 | *(required)*                      | Path to `config/servers.json`. |
-| `--staging-root`           | a fresh temp directory            | Local directory the extraction is written to before being synced into the git checkout. |
-| `--metrics-snapshot-root`  | a fresh temp directory            | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - never committed as-is, only folded into history at publish time). Set this alongside `--staging-root` when a downstream job needs to collect both - see `syncsql git publish` below for the parallel-per-server-extraction use case this exists for. |
-| `--skip-git`               | off                                | Extract only; leave results under `--staging-root` without cloning/committing/pushing. No `catalog.json` is built in this mode (there is no git checkout to write it into or mine history from). |
+| `--staging-root`           | a fresh temp directory            | Local directory each extracted object is written to. |
+| `--metrics-snapshot-root`  | a fresh temp directory            | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - one JSON file per table, meant to be folded into history later via `syncsql metrics update`). |
 | `--server-include`         | `config.serverSelection.include`  | Regex a server name must match to run. Repeatable. Overrides the config value entirely when passed. |
 | `--server-exclude`         | `config.serverSelection.exclude`  | Regex that excludes a server. Repeatable. Overrides the config value entirely when passed. |
-| `--history-limit`          | `250`                             | How many commits to clone (so `catalog.json` can be rebuilt from real history in the same push) and mine for the catalog's change heatmap/co-change/point-in-time features. |
-| `--metrics-history-limit`  | `90`                              | Maximum number of daily metrics snapshots retained per table. |
-| `--push-token`             | `CI_JOB_Maintainer_Token`, then `GIT_PUSH_TOKEN` env var | Token used to push to the target git repository. Required unless `--skip-git` is set. |
-| `--dotenv-path`            | *(none)*                          | Optional path to write a small `KEY=VALUE` file with the resolved `PATH_PREFIX`/`GIT_BRANCH` (`config.git.pathPrefix`/`.branch`, after defaulting). Meant to be picked up by CI as a `dotenv` artifact report so a downstream job (e.g. one that builds the catalog/lineage site) knows where this run published to without hardcoding it. |
 
-Exit code `0` if every selected server extracted successfully (and, if
-publishing, the push succeeded or there was nothing to publish); `1` if
-any server failed (extraction error or missing credentials) or, when
-publishing, no push token was available. A partial failure does not stop
-the run - other servers still extract, and (unless every server failed)
-the successful ones still get published.
+Exit code `0` if every selected server extracted successfully; `1` if
+any server failed (extraction error or missing credentials). A partial
+failure does not stop the run - other servers still extract.
 
-### `syncsql git publish`
-
-Publishes an already-populated extracted-objects tree - clone, replace
-`config.git.pathPrefix`, fold metrics, rebuild `catalog.json`, commit,
-push - with **no extraction of its own**. Pairs with one or more
-`sync --skip-git` runs that populated `--staging-root` (and, optionally,
-`--metrics-snapshot-root`) beforehand: run each server's extraction as an
-independent parallel CI job writing to the same staging/metrics roots
-(safe - extraction always writes under `<server>/...` first, so different
-servers never collide), then run `git publish` once against the merged
-result. This is what turns "extract every server" from one long
-sequential job into N short parallel ones feeding a single, fast publish
-step - see the root `.gitlab-ci.yml`'s `extract-server`/
-`sync-database-objects` jobs for the reference setup.
-
-```bash
-syncsql git publish \
-  --config ./config/servers.json \
-  --staging-root ./extracted-objects \
-  --metrics-snapshot-root ./metrics-snapshot \
-  --push-token "$CI_JOB_Maintainer_Token"
-```
-
-| Option                     | Default                          | Description |
-|----------------------------|-----------------------------------|-------------|
-| `--config`                 | *(required)*                      | Path to `config/servers.json`. |
-| `--staging-root`           | *(required)*                      | Pre-populated extracted-objects tree to publish. |
-| `--metrics-snapshot-root`  | *(none)*                          | This run's metrics snapshots. Omit to publish without folding in new metrics - `catalog.json` is still built from whatever metrics history the target repo's own `metrics/` tree already has. |
-| `--history-limit`          | `250`                             | How many commits to clone (so `catalog.json` can be rebuilt from real history in the same push) and mine for the catalog's change heatmap/co-change/point-in-time features. |
-| `--metrics-history-limit`  | `90`                              | Maximum number of daily metrics snapshots retained per table. |
-| `--push-token`             | `CI_JOB_Maintainer_Token`, then `GIT_PUSH_TOKEN` env var | Token used to push to the target git repository. |
-| `--summary`                | *(none)*                          | Extra text appended to the commit message, e.g. a per-server extraction summary collected from the upstream extraction jobs. |
-| `--dotenv-path`            | *(none)*                          | Same as `sync`'s `--dotenv-path`. |
-
-`sync` (without `--skip-git`) and `git publish` share the exact same
-clone/fold-metrics/rebuild-catalog/commit/push implementation - the only
-difference is whether extraction happens first. Exit code `0` on success
-(including "nothing to publish"), `1` if no push token was available.
+`--server-include`/`--server-exclude` make it possible to fan extraction
+out across a fleet as independent parallel jobs, each scoped to one
+server, all writing into the same `--staging-root`/`--metrics-snapshot-root`
+- safe, since extraction always writes under `<server>/...` first, so
+different servers never collide. See the root `.gitlab-ci.yml`'s
+`extract-server` job (a GitLab `parallel: matrix:` over server names)
+for the reference setup.
 
 ### `syncsql catalog build`
 
 Standalone `catalog.json` builder: walks an already-extracted tree and
-(re)builds the catalog without extracting anything or touching git for
-staging. Mirrors the original `Build-Catalog.ps1`. Useful for local
-preview or rebuilding `catalog.json` against a different history window
-without re-running extraction.
+(re)builds the catalog. Mirrors the original `Build-Catalog.ps1`. Useful
+for local preview, or for a CI pipeline to call after it has cloned a
+target repository and populated `--repo-root`/`--path-prefix` itself.
 
 ```bash
 syncsql catalog build --objects-root ./staging --output ./catalog.json
@@ -159,7 +131,7 @@ syncsql catalog build --objects-root ./staging --output ./catalog.json
 |----------------------------------|-----------|-------------|
 | `--objects-root`                 | *(required)* | Root of the extracted tree (`server/database/type/[schema/]object.sql`). |
 | `--output`                       | *(required)* | File path the catalog JSON is written to. |
-| `--repo-root`                    | *(none)*  | Git checkout containing `--path-prefix`, mined for history/heatmap/point-in-time data. Omit to skip all of that (empty history, zero change counts) rather than failing. |
+| `--repo-root`                    | *(none)*  | Git checkout containing `--path-prefix`, mined **read-only** (`git log`/`git show`) for history/heatmap/point-in-time data - never written to. Omit to skip all of that (empty history, zero change counts) rather than failing. |
 | `--path-prefix`                  | `objects` | Folder inside `--repo-root` holding the extracted tree. |
 | `--history-limit`                | `250`     | Maximum number of commits (touching `--path-prefix`) to mine. |
 | `--max-versions-per-object`      | `15`      | Maximum historical versions kept (and content-fetched via `git show`) per object, most recent first. |
@@ -188,7 +160,9 @@ Exit code `0` on success, `1` if `--objects-root` doesn't exist.
 Folds this run's freshly captured metrics snapshots (row counts, index
 fragmentation/usage, optimizer statistics) into a growing per-object
 history array, kept entirely separate from each object's own versioned
-`.sql` file. Mirrors the original `Update-MetricsHistory.ps1`.
+`.sql` file. Mirrors the original `Update-MetricsHistory.ps1`. Purely
+local - reads `--snapshot-root`, writes `--history-root`, no git
+operation of any kind.
 
 ```bash
 syncsql metrics update --snapshot-root ./metrics-snapshot --history-root ./metrics
@@ -196,13 +170,9 @@ syncsql metrics update --snapshot-root ./metrics-snapshot --history-root ./metri
 
 | Option              | Default | Description |
 |----------------------|---------|-------------|
-| `--snapshot-root`    | *(required)* | Root of this run's freshly captured snapshot tree (one JSON file per object, same relative path/id as the object's own `.sql` file - `sync`'s internal metrics staging directory). |
-| `--history-root`     | *(required)* | Root of the accumulating history tree, e.g. `<target-repo-checkout>/metrics`. Kept outside `config.git.pathPrefix` so `sync`'s wipe-and-replace of the object tree never touches it. |
+| `--snapshot-root`    | *(required)* | Root of this run's freshly captured snapshot tree (one JSON file per object, same relative path/id as the object's own `.sql` file - `sync`'s `--metrics-snapshot-root`). |
+| `--history-root`     | *(required)* | Root of the accumulating history tree, e.g. `<target-repo-checkout>/metrics`. Kept outside `config.git.pathPrefix` so a wipe-and-replace of the object tree never touches it. |
 | `--history-limit`    | `90`    | Maximum snapshots retained per object; oldest are trimmed first. |
-
-`syncsql sync` calls this automatically as part of its git-publish step;
-run it directly only if orchestrating the extract/catalog/publish steps
-yourself.
 
 ## Configuration
 
@@ -214,11 +184,13 @@ extracted.
 
 - **`git`**: where extracted objects get pushed - `remoteUrl`, `branch`
   (default `main`), `pathPrefix` (default `objects`), `commitUserName`,
-  `commitUserEmail`, `commitMessage`. Leave `remoteUrl` blank to push
-  back into the repository identified by the GitLab CI predefined
-  variables `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH`
-  (only resolvable when running inside GitLab CI); set it to push
-  elsewhere, including for local runs.
+  `commitUserEmail`, `commitMessage`. `syncsql` itself never reads or
+  acts on this block - it exists purely as part of the config schema
+  `validate-config` checks. The calling pipeline resolves and acts on it
+  directly (see the root `.gitlab-ci.yml`, which reads it via `jq`);
+  leaving `remoteUrl` blank there means push back into the repository
+  identified by the GitLab CI predefined variables
+  `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH`.
 - **`defaults`** / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
   (`Schemas`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
@@ -244,30 +216,29 @@ Credentials are **never** stored in the config. Each server entry has a
 environment. A server missing either variable is skipped (logged as an
 error, counted as a failure) rather than aborting the whole run.
 
-The git push token (`sync --push-token`, or the `CI_JOB_Maintainer_Token`/`GIT_PUSH_TOKEN`
-environment variables) is handed to `git` only through `GIT_ASKPASS`
-plus per-invocation environment variables - never a command-line
-argument, never embedded in the remote URL - so it cannot leak through a
-process listing, `git remote -v`, or shell history.
+The git push token used by the calling pipeline (`CI_JOB_Maintainer_Token`,
+in the reference `.gitlab-ci.yml`) never passes through `syncsql` at
+all - the pipeline hands it to `git` directly via `GIT_ASKPASS` plus a
+process environment variable, never a command-line argument and never
+embedded in the remote URL, so it cannot leak through a process listing,
+`git remote -v`, or shell history.
 
 ## Exit codes
 
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. |
-| `1`  | A handled failure: invalid config, a missing `--objects-root`, one or more servers failed to extract or had missing credentials, or (for `sync`/`git publish`, when publishing) no push token was available. |
+| `1`  | A handled failure: invalid config, a missing `--objects-root`, or one or more servers failed to extract or had missing credentials. |
 | other | An unhandled exception - treat as a bug; the exception message and stack trace are printed. |
 
 ## Running locally
 
 ```bash
-syncsql sync --config ./config/servers.json --skip-git
+syncsql sync --config ./config/servers.json --staging-root ./staging
 ```
 
-`--skip-git` leaves the extracted files under `--staging-root` (printed
-in the log, or pass your own path) instead of publishing them - no
-`catalog.json` is built in this mode either. To build one for local
-preview from that staging directory:
+Leaves the extracted files under `./staging`. To build a `catalog.json`
+for local preview from that staging directory:
 
 ```bash
 syncsql catalog build \
@@ -276,11 +247,12 @@ syncsql catalog build \
 ```
 
 Add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
-target repository to include history/heatmap/co-change data, and
-`--metrics-root <metrics-history-dir>` to include accumulated metrics
-trends (a single local run only ever has one snapshot to show - real
-trend graphs need several runs' worth of history accumulated in a real
-`metrics/` tree). Then `npm run dev` inside `site/`.
+target repository to include history/heatmap/co-change data (read-only -
+nothing is written back to that checkout), and `--metrics-root
+<metrics-history-dir>` to include accumulated metrics trends (a single
+local run only ever has one snapshot to show - real trend graphs need
+several runs' worth of history accumulated in a real `metrics/` tree,
+via `syncsql metrics update`). Then `npm run dev` inside `site/`.
 
 ## Architecture
 
@@ -296,9 +268,8 @@ trend graphs need several runs' worth of history accumulated in a real
   `ILineageAnalyzer` per engine (`Microsoft.SqlServer.TransactSql.ScriptDom`,
   a vendored ANTLR PL/SQL grammar).
 - **`SyncSql.Catalog`** - node assembly, per-engine lineage dispatch,
-  git history mining, metrics folding.
-- **`SyncSql.Git`** - clone/sync/commit/push, shelling out to the `git`
-  CLI.
+  read-only git history mining (`git log`/`git show`, via `IProcessRunner`),
+  metrics folding.
 - **`SyncSql.Cli`** - the composition root: wires every implementation
   above via keyed dependency injection and exposes the commands
   documented here.
@@ -306,4 +277,6 @@ trend graphs need several runs' worth of history accumulated in a real
 Every project outside `SyncSql.Cli` depends only inward on `SyncSql.Core`
 - adding a third database engine is a new extraction/lineage project
 pair plus one DI registration, with no change to `SyncSql.Catalog` or
-the CLI's orchestration logic.
+the CLI's orchestration logic. There is deliberately no `SyncSql.Git`
+project or any git-write abstraction anywhere in this solution - see the
+note at the top of this document.
