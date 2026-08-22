@@ -23,49 +23,44 @@ lineage inference for both engines, is a normal NuGet package reference.
 
 ## How it works
 
+```mermaid
+flowchart TD
+    config["config/servers.json<br/>which servers / databases / schemas / objects"]
+
+    subgraph extract["CI stage: extract - one parallel job per server"]
+        direction LR
+        mssql["MSSQL extraction<br/>modules, tables + FKs/checks/indexes, grants,<br/>synonyms, replication, extended properties<br/>+ a per-table metrics snapshot"]
+        oracle["Oracle extraction<br/>DBMS_METADATA.GET_DDL, managed driver<br/>+ a per-table metrics snapshot (reduced scope)"]
+    end
+
+    staged["extracted-objects/{server}/{database}/{type}/[{schema}/]{object}.sql<br/>metrics-snapshot/{...} - merged across every parallel job"]
+
+    subgraph sync["CI stage: sync - one job (syncsql git publish)"]
+        direction TB
+        clone["Clone this repo --history-limit commits deep,<br/>replace pathPrefix/ with the staged tree -<br/>dropped objects show up as deletions"]
+        metrics["syncsql metrics update<br/>folds this run's snapshots into repo/metrics/<br/>(outside pathPrefix - accumulates across runs)"]
+        catalog["syncsql catalog build<br/>structure + lineage (real parser per engine)<br/>+ history mined from this repo's own git log<br/>+ metrics/ per node, writes pathPrefix/catalog.json"]
+        commit["One commit: extracted objects + catalog.json<br/>+ updated metrics/ tree. Push."]
+        clone --> metrics --> catalog --> commit
+    end
+
+    subgraph pages["CI stage: pages"]
+        site["site/ (React + Vite)<br/>fetches the branch tip, reads catalog.json<br/>(metrics already folded in), builds,<br/>publishes as a GitLab Pages site"]
+    end
+
+    config --> extract
+    mssql --> staged
+    oracle --> staged
+    staged --> sync
+    commit --> site
 ```
-config/servers.json --defines-->  which servers/databases/schemas/objects
-        |
-        v
-syncsql sync --config config/servers.json         [CI stage: sync]
-        |
-        +--> MSSQL extraction   (sys.sql_modules, sys.tables + FKs/checks/
-        |                        indexes, grants, sys.servers, sys.synonyms,
-        |                        replication publications, optionally
-        |                        sys.extended_properties - PLUS a volatile
-        |                        metrics snapshot per table, staged
-        |                        separately, never into the object's own file)
-        +--> Oracle extraction  (DBMS_METADATA.GET_DDL via the managed
-        |                        ADO.NET driver - same metrics snapshot,
-        |                        reduced scope)
-        |
-        v
-extracted-objects/<server>/<database>/<objectType>/[<schema>/]<object>.sql
-        |
-        v
-git publish  (still inside the sync stage)
-  clone this project (deep enough to mine, see --history-limit), replace
-  <pathPrefix>/ with the staged tree (dropped objects show up as
-  deletions), THEN inside that same checkout:
-    1. `syncsql metrics update` folds this run's metrics snapshots into
-       <repo>/metrics/ - a tree OUTSIDE <pathPrefix>, so it accumulates
-       across runs (growing history, --metrics-history-limit retention)
-       instead of being wiped/replaced like the object tree is.
-    2. `syncsql catalog build` builds structure, lineage (a real parser per
-       engine - see below), history/heatmap/point-in-time mined from this
-       project's own git log, AND reads that same metrics/ tree to attach
-       it per node - writing <pathPrefix>/catalog.json right alongside the
-       objects it describes.
-  ONE commit carries the extracted objects, catalog.json and the updated
-  metrics/ tree together. Commit, push.
-        |
-        v
-site/ (React + Vite)                                    [CI stage: pages]
-  fetches the branch tip (to see the commit sync just pushed), reads
-  <pathPrefix>/catalog.json straight out of that checkout (metrics history
-  is already folded in, node.metrics), builds with it copied into
-  public/data/, publishes as a GitLab Pages site
-```
+
+Extraction fans out across the fleet as independent parallel jobs (safe -
+each always writes under its own server's path first, so different servers
+never collide); a single job downloads the merged result and does the one
+publish, so there's still exactly one commit and one push per run - see
+"Running the pipeline" below for the tradeoff that split buys and the
+one-line fallback to a single sequential job for a small fleet.
 
 Every extracted `.sql` file gets a small static header (server / database /
 type / object name / engine) and nothing else — no timestamps — so
