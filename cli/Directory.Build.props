@@ -1,0 +1,31 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- CA1848/CA1873 push toward LoggerMessage source-generated delegates, which pays off in hot
+         library paths but is needless boilerplate for a CLI that logs a handful of times per
+         human-paced command invocation. -->
+    <!-- CA1859 pushes concrete collection types into public/internal signatures for a JIT devirtualization
+         win that doesn't matter at this call volume, and fights against programming-to-interfaces. -->
+    <NoWarn>$(NoWarn);CA1848;CA1873;CA1859</NoWarn>
+
+    <!-- Shared package identity/versioning for every project in this solution. -->
+    <Authors>SyncSQL</Authors>
+    <Company>SyncSQL</Company>
+    <Version>1.0.0</Version>
+    <RepositoryUrl>https://github.com/cangelosilima/SyncSQL</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- Test projects opt out of TreatWarningsAsErrors friction (e.g. xUnit
+       analyzer suggestions) by overriding after import - see each .Tests.csproj. -->
+
+</Project>

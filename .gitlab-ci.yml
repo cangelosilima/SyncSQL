@@ -14,38 +14,44 @@
 #                                           is that server's
 #                                           credentialsVariablePrefix
 #                                           (Protected, Masked).
+#   NEXUS_NUGET_SOURCE_URL / NEXUS_API_KEY  Only needed by cli/.gitlab-ci.yml's
+#                                           cli-publish job and by
+#                                           validate-config/extract-server/
+#                                           sync-database-objects below (to
+#                                           install the published syncsql
+#                                           tool) - see cli/docs/cli.md.
 #
 # Trigger a schedule under CI/CD > Schedules pointing at this pipeline; the
-# sync/pages jobs only run for schedule (or manually-triggered "web"/API)
-# sources, never on ordinary branch pushes.
+# extract/sync/pages jobs only run for schedule (or manually-triggered
+# "web"/API) pipeline sources, never on ordinary branch pushes.
 #
-# --- Windows PowerShell 5.1 -------------------------------------------
-# validate-config and sync-database-objects now target Windows PowerShell
-# 5.1 specifically (see the #Requires line in every src/*.ps1 / *.psm1
-# file). That's a real runtime requirement, not just a version number:
-# Bootstrap-Dependencies.ps1 downloads the classic Oracle.ManagedDataAccess
-# NuGet package (.NET Framework build) rather than
-# Oracle.ManagedDataAccess.Core, and a .NET Framework assembly cannot be
-# loaded by PowerShell 7/Core - especially not on Linux, where .NET
-# Framework doesn't exist at all. So these two jobs need to run on an
-# actual Windows host now, not the portable mcr.microsoft.com/powershell
-# Linux image used previously. `tags: [windows]` below is a placeholder -
-# point it at your real Windows GitLab Runner. If that runner uses the
-# Docker executor with Windows containers rather than a bare shell
-# executor, add an `image:` line too -
-# mcr.microsoft.com/windows/servercore:ltsc2022 ships Windows PowerShell
-# 5.1 out of the box. The `pages` job is unaffected (plain Node, no
-# PowerShell) and stays on Linux.
+# validate-config, extract-server, and sync-database-objects all run the
+# syncsql .NET CLI (cli/, see cli/docs/cli.md) rather than the retired
+# Windows PowerShell 5.1 pipeline - a portable Linux image, no Windows runner
+# needed. The CLI itself is built, tested, and published to Nexus by
+# cli/.gitlab-ci.yml, included below; these jobs just install whatever
+# version is currently published there. Extraction is fanned out across the
+# fleet as parallel per-server jobs (extract-server) feeding one final
+# sync-database-objects job that publishes everything in a single commit -
+# see extract-server's own comment below for the tradeoff that buys.
+
+include:
+  - local: 'cli/.gitlab-ci.yml'
 
 stages:
+  - cli-lint
+  - cli-test
+  - cli-build
+  - cli-publish
   - validate
+  - extract
   - sync
   - pages
 
 variables:
-  MODULES_CACHE_DIR: "$CI_PROJECT_DIR/.pwsh-modules"
   CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.json"
   EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
+  METRICS_SNAPSHOT_DIR: "$CI_PROJECT_DIR/metrics-snapshot"
   GIT_DEPTH: "1"
   # How many commits (touching config.git.pathPrefix) get mined for the
   # change-heatmap / co-change / per-object version history features baked
@@ -56,8 +62,8 @@ variables:
   # rather than living only as a separate CI artifact.
   HISTORY_LIMIT: "250"
   # How many daily volume/index/optimizer-statistics snapshots are kept per
-  # table (metrics/ tree, outside git.pathPrefix - see Update-MetricsHistory.ps1
-  # and README's "Volatile metrics"). This data changes every run by
+  # table (metrics/ tree, outside git.pathPrefix - see "syncsql metrics
+  # update" and README's "Volatile metrics"). This data changes every run by
   # nature, so it's tracked separately from each object's own version
   # history rather than bloating it.
   METRICS_HISTORY_LIMIT: "90"
@@ -67,51 +73,73 @@ variables:
   - if: '$CI_PIPELINE_SOURCE == "web"'
   - if: '$CI_PIPELINE_SOURCE == "trigger"'
 
-.pwsh_cache:
-  cache:
-    key: pwsh-deps-v1
-    paths:
-      - .pwsh-modules/
+.syncsql_cli:
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  before_script:
+    - dotnet tool install --global SyncSql.Cli --add-source "$NEXUS_NUGET_SOURCE_URL"
+    - export PATH="$PATH:$HOME/.dotnet/tools"
 
 validate-config:
-  extends: .pwsh_cache
+  extends: .syncsql_cli
   stage: validate
-  tags:
-    - windows # TODO: point this at your actual Windows GitLab Runner tag
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push"'
   script:
-    - powershell.exe -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
     - |
-      powershell.exe -NoProfile -Command '
-        $ErrorActionPreference = "Stop"
-        $env:PSModulePath = "$env:MODULES_CACHE_DIR/Modules" + [IO.Path]::PathSeparator + $env:PSModulePath
-        Import-Module ./src/modules/SyncSql.Common.psm1 -Force
-        $configPath = if (Test-Path "config/servers.json") { "config/servers.json" } else { "config/servers.example.json" }
-        $config = Import-SyncSqlConfig -Path $configPath
-        Write-Host "OK: $($config.servers.Count) server(s) defined in $configPath"
-      '
+      if [ -f "config/servers.json" ]; then CONFIG_FILE="config/servers.json"; else CONFIG_FILE="config/servers.example.json"; fi
+    - syncsql validate-config --config "$CONFIG_FILE"
 
-# Extracts the configured database objects and pushes them to git.
-# Export-DatabaseObjects.ps1 also builds catalog.json (structure, inferred
-# lineage, and history/heatmap/point-in-time data mined from this same
-# repo's own commit history) and commits it in the same commit as the
-# extracted objects, under config.git.pathPrefix - see src/Build-Catalog.ps1.
-sync-database-objects:
-  extends: .pwsh_cache
-  stage: sync
-  tags:
-    - windows # TODO: point this at your actual Windows GitLab Runner tag
+# Extracts one server's database objects - in parallel with every other entry
+# in the matrix below, each as its own CI job. Every instance writes to the
+# SAME --staging-root/--metrics-snapshot-root: extraction always writes under
+# <server>/... first (see ExtractedObjectFile.RelativePath), so concurrent
+# instances scoped to different servers never collide, and GitLab merges every
+# instance's artifacts together for the downstream sync-database-objects job
+# below (a plain job-name in `dependencies:` pulls in *all* instances of a
+# `parallel:` job). No git operation happens here - see sync-database-objects.
+#
+# The SERVER_NAME list must match every server config/servers.json's
+# serverSelection would actually run for this pipeline; keep it in sync by
+# hand whenever the fleet changes - a server present in config/servers.json
+# but missing here silently isn't extracted. For a small fleet where that
+# upkeep isn't worth it, drop this job and the matrix, and instead give
+# sync-database-objects below `syncsql sync --config "$CONFIG_PATH"
+# --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root
+# "$METRICS_SNAPSHOT_DIR" --dotenv-path ... --history-limit ...
+# --metrics-history-limit ...` as its own script instead of `git publish` -
+# same end result, back to one sequential job extracting every server.
+extract-server:
+  extends: .syncsql_cli
+  stage: extract
   rules: *sync_rules
-  timeout: 2h
-  before_script:
-    - powershell.exe -NoProfile -File src/Bootstrap-Dependencies.ps1 -ModulesCacheDir "$MODULES_CACHE_DIR"
+  timeout: 1h
+  parallel:
+    matrix:
+      - SERVER_NAME: ["SQLPROD01", "SQLPROD02_FINANCE_ONLY", "ORAPROD01"]
   script:
-    - powershell.exe -NoProfile -File src/Export-DatabaseObjects.ps1 -ConfigPath "$CONFIG_PATH" -ModulesCacheDir "$MODULES_CACHE_DIR" -StagingRoot "$EXTRACTED_OBJECTS_DIR" -DotenvPath "$CI_PROJECT_DIR/sync.env" -HistoryLimit "$HISTORY_LIMIT" -MetricsHistoryLimit "$METRICS_HISTORY_LIMIT"
+    - syncsql sync --config "$CONFIG_PATH" --skip-git --server-include "^${SERVER_NAME}$" --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR"
   artifacts:
     paths:
       - extracted-objects/
+      - metrics-snapshot/
+    expire_in: 1 day
+
+# Publishes the merged output of every extract-server instance above: clone,
+# replace config.git.pathPrefix, fold metrics, rebuild catalog.json (structure,
+# inferred lineage - real T-SQL/PL-SQL parsing, not text matching - and
+# history/heatmap/point-in-time data mined from this same repo's own commit
+# history), commit, push - all in one commit, same as before. No extraction of
+# its own; see `syncsql git publish` in cli/docs/cli.md.
+sync-database-objects:
+  extends: .syncsql_cli
+  stage: sync
+  rules: *sync_rules
+  dependencies:
+    - extract-server
+  script:
+    - syncsql git publish --config "$CONFIG_PATH" --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR" --dotenv-path "$CI_PROJECT_DIR/sync.env" --history-limit "$HISTORY_LIMIT" --metrics-history-limit "$METRICS_HISTORY_LIMIT"
+  artifacts:
     reports:
       dotenv: sync.env
     expire_in: 1 day

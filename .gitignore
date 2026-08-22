@@ -1,11 +1,8 @@
-# PowerShell module / driver cache populated by src/Bootstrap-Dependencies.ps1
-.pwsh-modules/
-
-# Local extraction output when running with -SkipGit
+# Local extraction output when running `syncsql sync --skip-git`
 staging/
 *.staging/
 
-# CI artifact directories created by Export-DatabaseObjects.ps1 / Build-Catalog.ps1
+# CI artifact directories created by `syncsql sync` / `syncsql catalog build`
 /extracted-objects/
 /catalog/
 
@@ -13,3 +10,9 @@ staging/
 site/node_modules/
 site/dist/
 site/*.tsbuildinfo
+
+# .NET CLI build output
+cli/**/bin/
+cli/**/obj/
+cli/**/*.nupkg
+cli/nupkg/

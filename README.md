@@ -12,11 +12,14 @@ fragmentation/usage, the statistics the query optimizer actually uses) is
 tracked separately as a graphable time series rather than bloating that
 version history — see "Volatile metrics" below.
 
-Built as a GitLab CI scheduled pipeline driven entirely by **Windows
-PowerShell 5.1** for the extraction itself (see "Windows PowerShell 5.1"
-below for why that's a real runtime requirement, not just a version
-number) - no native Oracle client install required, just Git for Windows
-and the modules `Bootstrap-Dependencies.ps1` fetches on its own.
+The extraction, lineage inference, and catalog building is a cross-platform
+**.NET 10 CLI** (`cli/`, published as the `syncsql` dotnet global tool - see
+[`cli/docs/cli.md`](cli/docs/cli.md) for the full command reference). It
+runs anywhere .NET 10 runs - Linux, macOS, or Windows - both in CI and
+locally, with no native Oracle client install required
+(`Oracle.ManagedDataAccess.Core` is a fully managed ADO.NET driver) and no
+separate bootstrap step: every dependency, including the real parsers behind
+lineage inference for both engines, is a normal NuGet package reference.
 
 ## How it works
 
@@ -24,43 +27,35 @@ and the modules `Bootstrap-Dependencies.ps1` fetches on its own.
 config/servers.json --defines-->  which servers/databases/schemas/objects
         |
         v
-Bootstrap-Dependencies.ps1   (SqlServer module, Oracle.ManagedDataAccess
-                               driver - the classic .NET Framework build,
-                               see "Windows PowerShell 5.1" below - config
-                               parsing is plain JSON, no extra module needed)
+syncsql sync --config config/servers.json         [CI stage: sync]
         |
-        v
-Export-DatabaseObjects.ps1                              [CI stage: sync]
-        |
-        +--> SyncSql.MsSql.psm1    (Invoke-Sqlcmd against sys.sql_modules,
-        |                           sys.tables + FKs/checks/indexes, grants,
-        |                           sys.servers, sys.synonyms, replication
-        |                           publications, optionally
-        |                           sys.extended_properties - PLUS a
-        |                           volatile metrics snapshot per table,
-        |                           written to a separate -MetricsRoot,
-        |                           never into the object's own file)
-        +--> SyncSql.Oracle.psm1   (DBMS_METADATA.GET_DDL via the managed
-        |                           ADO.NET driver, no Instant Client -
-        |                           same -MetricsRoot snapshot, reduced scope)
+        +--> MSSQL extraction   (sys.sql_modules, sys.tables + FKs/checks/
+        |                        indexes, grants, sys.servers, sys.synonyms,
+        |                        replication publications, optionally
+        |                        sys.extended_properties - PLUS a volatile
+        |                        metrics snapshot per table, staged
+        |                        separately, never into the object's own file)
+        +--> Oracle extraction  (DBMS_METADATA.GET_DDL via the managed
+        |                        ADO.NET driver - same metrics snapshot,
+        |                        reduced scope)
         |
         v
 extracted-objects/<server>/<database>/<objectType>/[<schema>/]<object>.sql
         |
         v
-SyncSql.Git.psm1  (still inside the sync stage)
-  clone this project (deep enough to mine, see -HistoryLimit), replace
+git publish  (still inside the sync stage)
+  clone this project (deep enough to mine, see --history-limit), replace
   <pathPrefix>/ with the staged tree (dropped objects show up as
   deletions), THEN inside that same checkout:
-    1. Update-MetricsHistory.ps1 folds this run's metrics snapshots into
+    1. `syncsql metrics update` folds this run's metrics snapshots into
        <repo>/metrics/ - a tree OUTSIDE <pathPrefix>, so it accumulates
-       across runs (growing history, -MetricsHistoryLimit retention)
+       across runs (growing history, --metrics-history-limit retention)
        instead of being wiped/replaced like the object tree is.
-    2. Build-Catalog.ps1 builds structure, best-effort lineage,
-       history/heatmap/point-in-time mined from this project's own git
-       log, AND reads that same metrics/ tree to attach it per node -
-       writing <pathPrefix>/catalog.json right alongside the objects it
-       describes.
+    2. `syncsql catalog build` builds structure, lineage (a real parser per
+       engine - see below), history/heatmap/point-in-time mined from this
+       project's own git log, AND reads that same metrics/ tree to attach
+       it per node - writing <pathPrefix>/catalog.json right alongside the
+       objects it describes.
   ONE commit carries the extracted objects, catalog.json and the updated
   metrics/ tree together. Commit, push.
         |
@@ -73,57 +68,52 @@ site/ (React + Vite)                                    [CI stage: pages]
 ```
 
 Every extracted `.sql` file gets a small static header (server / database /
-type / object name) and nothing else — no timestamps — so re-running the
-pipeline with no underlying database changes produces **zero diff**.
+type / object name / engine) and nothing else — no timestamps — so
+re-running the pipeline with no underlying database changes produces **zero
+diff**.
 
-## Windows PowerShell 5.1
+## The syncsql CLI
 
-Every `src/*.ps1`/`*.psm1` file declares `#Requires -Version 5.1`, and the
-code is genuinely written to that floor rather than just having the number
-changed — it deliberately avoids PowerShell 6/7-only surface, and one
-dependency (the Oracle driver) is a real, non-optional runtime requirement
-tied to running on actual Windows PowerShell:
+`cli/` is a Clean/Onion-architecture .NET 10 solution: `SyncSql.Core` holds
+domain records and abstractions with zero infrastructure dependencies;
+`SyncSql.Extraction.MsSql`/`.Oracle`, `SyncSql.Lineage.MsSql`/`.Oracle`,
+`SyncSql.Catalog`, and `SyncSql.Git` each implement one of those
+abstractions; `SyncSql.Cli` is the sole composition root, wiring everything
+via dependency injection and exposing the commands below. Every project
+outside `SyncSql.Cli` depends only inward on `SyncSql.Core`.
 
-- No `??`/`?:`/`??=` operators, no `ConvertFrom-Json -AsHashtable`
-  (replaced by `ConvertTo-SyncSqlOrderedHashtable`, a recursive
-  PSCustomObject-to-ordered-hashtable walk), no `ConvertTo-Json -AsArray`
-  (replaced by manually wrapping in `[...]`, since a 0- or 1-element array
-  otherwise collapses back to a scalar/empty object), no
-  `[IO.Path]::GetRelativePath` (.NET Core only - replaced by
-  `Get-SyncSqlRelativePath`), no `Join-Path` calls with more than one
-  `ChildPath` segment (`-AdditionalChildPath` is PS6+ only - replaced by
-  `[IO.Path]::Combine(string[])`).
-- `Set-Content`/`Out-File -Encoding utf8` **adds a byte-order mark** on
-  Windows PowerShell (the BOM-less `utf8NoBOM` encoding name doesn't exist
-  before PS6). Left unfixed, every extracted `.sql`/metrics/`catalog.json`
-  file would gain a 3-byte BOM prefix under 5.1, showing up as a spurious
-  full-file diff on every object on the very next run - directly defeating
-  the "zero diff" design goal above. `Set-SyncSqlUtf8NoBomContent` (writes
-  via `[System.Text.UTF8Encoding]::new($false)` + `File.WriteAllText`)
-  is used everywhere instead.
-- `Bootstrap-Dependencies.ps1` downloads the **classic**
-  `Oracle.ManagedDataAccess` NuGet package (.NET Framework build), not
-  `Oracle.ManagedDataAccess.Core` (targets netstandard2.1/.NET Core). This
-  is the one piece that isn't just "also works on 5.1" - a .NET Framework
-  assembly cannot be loaded by PowerShell 7/Core at all, especially not on
-  Linux, where .NET Framework doesn't exist. So Oracle extraction
-  genuinely requires running on a real Windows PowerShell 5.1 host, not
-  merely a `pwsh` process that happens to satisfy the `#Requires` floor.
-  `Invoke-WebRequest`/`Invoke-RestMethod` there also pass
-  `-UseBasicParsing`, a no-op on newer PowerShell but required on a fresh
-  Windows host that has never launched Internet Explorer.
-- `SyncSql.Git.psm1`'s askpass helper no longer reads the `$IsWindows`
-  automatic variable directly (it doesn't exist before PowerShell 6 - under
-  `Set-StrictMode -Version Latest`, referencing it on 5.1 throws). It
-  short-circuits on `$PSVersionTable.PSVersion.Major -lt 6` instead, which
-  is always true on 5.1 (Windows PowerShell only ever runs on Windows).
+```
+syncsql validate-config --config <path>
+syncsql sync --config <path> [--staging-root] [--metrics-snapshot-root] [--skip-git]
+             [--server-include/--server-exclude]
+             [--history-limit] [--metrics-history-limit]
+             [--push-token] [--dotenv-path]
+syncsql git publish --config <path> --staging-root <path>
+                     [--metrics-snapshot-root] [--history-limit]
+                     [--metrics-history-limit] [--push-token]
+                     [--summary] [--dotenv-path]
+syncsql catalog build --objects-root <path> --output <path>
+                       [--repo-root] [--path-prefix] [--history-limit]
+                       [--max-versions-per-object] [--max-history-content-calls]
+                       [--max-co-change-commit-size] [--metrics-root]
+syncsql metrics update --snapshot-root <path> --history-root <path>
+                        [--history-limit]
+```
 
-Because of the Oracle driver requirement, `validate-config` and
-`sync-database-objects` in `.gitlab-ci.yml` need an actual Windows GitLab
-Runner (`tags: [windows]` there is a placeholder - point it at your real
-runner) with Git for Windows installed, invoking `powershell.exe` rather
-than `pwsh`. The `pages` job is unaffected (plain Node, no PowerShell) and
-stays on Linux.
+`sync` is the umbrella command (extract → catalog → metrics → git publish)
+that a single-job pipeline runs; `git publish` is the same clone/fold-
+metrics/rebuild-catalog/commit/push sequence with no extraction of its
+own, for publishing a tree that one or more `sync --skip-git` runs already
+populated - e.g. one CI job per server extracting in parallel, feeding a
+single `git publish` job (see "Running the pipeline" below). `catalog
+build` and `metrics update` are the same responsibilities split out
+further still as composable, independently usable verbs - handy for local
+preview or rebuilding `catalog.json` against a different history window
+without re-extracting. Install it as a
+[dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools)
+from the project's Nexus feed, or run it straight from source with
+`dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
+install instructions, and exit codes: [`cli/docs/cli.md`](cli/docs/cli.md).
 
 ## Configuration
 
@@ -145,7 +135,7 @@ for the full schema; in short:
   A server that specifies a key fully replaces the default for that key.
 - `serverSelection`: regex filter over which of the listed servers
   actually run in a given pipeline execution (can also be overridden per
-  run with `-ServerNameInclude` / `-ServerNameExclude`).
+  run with `--server-include` / `--server-exclude`).
 
 Filtering is regex-based and works at every level mentioned in the
 config: server, database, schema, and individual object name.
@@ -162,10 +152,12 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. |
 | `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`                                                          |
+| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used to install the published `syncsql` tool (validate-config/extract-server/sync-database-objects) and, on the default branch, to publish new versions of it. |
+| `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by the `cli-publish` job (see `cli/.gitlab-ci.yml`). |
 
-This is only needed if `git.remoteUrl` is left blank (the default,
-self-repo target). If you point `git.remoteUrl` at a different project,
-`CI_JOB_Maintainer_Token` needs Maintainer/`write_repository` access there
+`CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank
+(the default, self-repo target). If you point `git.remoteUrl` at a
+different project, it needs Maintainer/`write_repository` access there
 instead.
 
 Optional: `HISTORY_LIMIT` (default `250`) controls how many commits get
@@ -174,28 +166,51 @@ mined for the heatmap / co-change / point-in-time features baked into
 
 ## Running the pipeline
 
-`.gitlab-ci.yml` defines three jobs across three stages:
+`.gitlab-ci.yml` (which includes `cli/.gitlab-ci.yml`) defines these jobs:
 
+- **cli-lint / cli-test / cli-build / cli-publish**: lint (`dotnet format
+  --verify-no-changes`), test, build, and - on the default branch, when
+  `cli/` changed - pack and publish the `syncsql` tool to Nexus. Only run
+  when `cli/` changes. See `cli/.gitlab-ci.yml` and
+  [`cli/docs/cli.md`](cli/docs/cli.md).
 - **validate-config** (`validate`): runs on merge requests / pushes, just
   checks that `config/servers.json` (or the example file, if you haven't
   added one yet) parses and satisfies the schema. No database or git
   credentials needed.
-- **sync-database-objects** (`sync`): the actual extraction, the only job
-  that touches your databases, and the one that builds and commits
-  `catalog.json` alongside the extracted objects (see "How it works"
-  above) before pushing. Produces the `extracted-objects/` artifact
-  (handy for debugging a run without needing to dig through git history)
-  and a `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job
-  knows where to find `catalog.json` in the checkout.
+- **extract-server** (`extract`): the only jobs that touch your databases -
+  one job **per server**, run in parallel via a GitLab
+  `parallel: matrix:`. Each instance runs `syncsql sync --skip-git
+  --server-include "^<server>$"`, writing to the same
+  `extracted-objects/`/`metrics-snapshot/` artifact paths every instance
+  shares (safe - extraction always writes under `<server>/...` first, so
+  different servers' output never collides), which GitLab then merges
+  together for the job below.
+- **sync-database-objects** (`sync`): publishes the merged output of every
+  extract-server instance in one commit - `syncsql git publish` clones,
+  replaces `config.git.pathPrefix` with the merged tree, folds this run's
+  metrics into the accumulating history, rebuilds `catalog.json` (see "How
+  it works" above), and pushes. No extraction of its own. Produces a
+  `dotenv` report (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job knows
+  where to find `catalog.json` in the checkout.
 - **pages** (`pages`): fetches the branch tip (to see the commit
   sync-database-objects just pushed), builds `site/` (React/Vite) with
   the `catalog.json` it finds there, and publishes it as this project's
   GitLab Pages site.
 
-The last two only run for `schedule` (and manually-triggered `web`/API)
-pipeline sources — create a schedule under **CI/CD > Schedules** pointing
-at this project. Once it's run once, find the site URL under **Settings >
-Pages**.
+`extract-server`'s matrix lists server names literally in `.gitlab-ci.yml`
+and has to be kept in sync by hand with `config/servers.json` - a server
+present in the config but missing from the matrix silently isn't extracted
+by this pipeline. For a small fleet where that upkeep isn't worth the
+parallelism, `.gitlab-ci.yml` documents the one-line swap back to a single
+sequential `syncsql sync` job (drop `extract-server`, give
+`sync-database-objects` a `sync` script instead of `git publish`).
+
+All three run on a portable Linux image (`mcr.microsoft.com/dotnet/sdk:10.0`),
+installing the `syncsql` tool from Nexus - no Windows runner needed.
+`extract`/`sync`/`pages` only run for `schedule` (and manually-triggered
+`web`/API) pipeline sources — create a schedule under **CI/CD >
+Schedules** pointing at this project. Once it's run once, find the site
+URL under **Settings > Pages**.
 
 ## The catalog / lineage site
 
@@ -219,8 +234,8 @@ see "Theme" below):
   index/optimizer-statistics trend graphs for tables (see "Volatile
   metrics" below), an **Access** panel (see "Grant mapping" below), a
   change-history list with a point-in-time viewer, and "depends on" / "used
-  by" lineage lists annotated with best-effort column tags (expandable past
-  the first few) with an embedded neighborhood graph.
+  by" lineage lists annotated with column tags (expandable past the first
+  few) with an embedded neighborhood graph.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
   `@xyflow/react` + `dagre` auto-layout, with two modes (tabs):
   - **Browse** — the object filter bar drives which objects are shown.
@@ -252,16 +267,39 @@ lookups are capped and debounced, and committed filters (not keystrokes)
 are what actually re-filter the object list, so it stays responsive on
 large catalogs.
 
-**Lineage is inferred, not parsed.** `Build-Catalog.ps1` regex-matches
-identifiers found in each object's DDL text (plus its Foreign Keys section,
-which is structural rather than inferred) against every other known object
-name. It is a reasonable starting point for exploration, not a certified
-lineage report — it will miss dynamic SQL, and can occasionally produce a
-false-positive edge when an identifier collides with an unrelated object
-name. Any traversal that crosses a linked-server/DB-link boundary (in the
-"most referenced indirectly" analytics) stops one hop past that boundary
-rather than fanning out across a remote server's own dependency graph. The
-site says as much on its overview page.
+**Lineage inference uses a real parser for each engine, not text
+matching.** `syncsql` tags every extracted object with the engine that
+produced it (a `-- Engine:   mssql`/`oracle` header line written into every
+extracted `.sql` file, alongside `-- Server:`/`-- Database:`/etc.) and
+dispatches to that engine's analyzer when building the catalog:
+
+- **MSSQL** objects are parsed with `Microsoft.SqlServer.TransactSql.ScriptDom`
+  (a direct NuGet dependency of `SyncSql.Lineage.MsSql`, real T-SQL AST, not
+  text matching): table/view references, schema-qualified function calls,
+  `EXEC`/`EXECUTE` targets, `FOREIGN KEY ... REFERENCES` targets, and
+  column references bound to their actual FROM-clause alias are all read
+  straight off the parse tree.
+- **Oracle** objects are parsed with a real ANTLR4 PL/SQL grammar
+  (`SyncSql.Lineage.Oracle` vendors the `.g4` grammar files from
+  [antlr/grammars-v4](https://github.com/antlr/grammars-v4); the
+  lexer/parser is generated at build time, nothing generated is committed)
+  - the same real-AST treatment as MSSQL: table/view references, package/
+    procedure/function calls (including schema-qualified and `call_statement`
+    invocations), `FOREIGN KEY` references, and alias-bound column
+    references are all read off the parse tree.
+
+Neither engine matches identifiers inside string literals or comments
+(including Oracle's `q'...'` alternative quoting), misreads `SELECT *`/
+computed columns as references, or guesses an alias's target from nearby
+text rather than the parser's own binding. Any node missing an `Engine` tag
+(an extraction from before that header field existed) is simply skipped for
+lineage inference rather than guessed at.
+
+None of this is a certified lineage report - it will still miss dynamic SQL
+and anything built at runtime, and a traversal that crosses a linked-server/
+DB-link boundary (in the "most referenced indirectly" analytics) still stops
+one hop past that boundary rather than fanning out across a remote server's
+own dependency graph. The site says as much on its overview page.
 
 ### Explorer replaces the sidebar
 
@@ -288,7 +326,7 @@ with everything else.
 
 ### Grant mapping
 
-`Build-Catalog.ps1` parses a per-object "Grants" section (attached by the
+The catalog builder parses a per-object "Grants" section (attached by the
 extraction backend, best-effort - see "Known limitations" below) into a
 structured `grants` list on each catalog node: grantee, grantee type (MSSQL
 only - `SQL_USER`, `DATABASE_ROLE`, `WINDOWS_GROUP`, ...), permission
@@ -320,9 +358,8 @@ for every table, which defeats the point of versioning the objects at all.
 So this data is tracked as its own accumulating time series instead,
 entirely separate from the object's version history:
 
-- `Get-SyncSqlMsSqlMetricsSnapshot` / `Get-SyncSqlOracleMetricsSnapshot`
-  capture one snapshot per table per run, written to a `-MetricsRoot`
-  staging area that is never mixed into the object's own `.sql` file:
+- Each extraction backend captures one metrics snapshot per table per run,
+  staged separately and never mixed into the object's own `.sql` file:
   - **Volume**: row count and reserved/data/index size in KB (MSSQL:
     `sys.dm_db_partition_stats` + `sys.allocation_units`, the same
     aggregation `sp_spaceused` uses; Oracle: `ALL_TAB_STATISTICS`, size
@@ -346,16 +383,17 @@ entirely separate from the object's version history:
     uses, so this is a single synthetic entry per table, with the
     modification counter summed from `ALL_TAB_MODIFICATIONS` when
     available).
-- `Update-MetricsHistory.ps1` runs inside the same git checkout
-  `Build-Catalog.ps1` uses, but writes to `<repo>/metrics/` - a tree kept
-  entirely outside `config.git.pathPrefix`, so `Publish-SyncSqlToGit`'s
+- `syncsql metrics update` runs inside the same git checkout the catalog
+  builder uses, but writes to `<repo>/metrics/` - a tree kept entirely
+  outside `config.git.pathPrefix`, so the git publish step's
   wipe-and-replace of the object tree never touches it. Each run appends
   this run's snapshot to the existing history array per table and trims it
-  to `-MetricsHistoryLimit` (default 90, override via the
-  `METRICS_HISTORY_LIMIT` CI variable) - so the object's own file stays
-  diff-free while `metrics/` accumulates real history.
-- `Build-Catalog.ps1` reads that same `metrics/` tree and attaches it as
-  `node.metrics` in `catalog.json`, so the site never needs a second fetch.
+  to `--history-limit` (default 90, override via the `METRICS_HISTORY_LIMIT`
+  CI variable / `sync --metrics-history-limit`) - so the object's own file
+  stays diff-free while `metrics/` accumulates real history.
+- `syncsql catalog build` reads that same `metrics/` tree and attaches it
+  as `node.metrics` in `catalog.json`, so the site never needs a second
+  fetch.
 
 Every object's detail page shows this as a **Metrics** panel (row count,
 size, index fragmentation/usage, and optimizer-statistics graphs, plus the
@@ -373,30 +411,52 @@ issue.
 Tables and views get a full structural column list (name + data type),
 independent of whether a column happens to have an
 `sys.extended_properties`/documentation entry - `sys.columns` (MSSQL) /
-`ALL_TAB_COLUMNS` (Oracle). `Build-Catalog.ps1` then re-scans each inferred
-edge's source DDL for qualified `alias.column` references (resolving
-simple `FROM`/`JOIN` aliases, plus the bare/qualified object name itself)
-against the target's column list, and records which of the target's
-columns are actually referenced on that edge. This is the same
-best-effort, regex-based approach the rest of lineage inference uses, not a
-certified column-level lineage report - it will miss dynamic SQL, `SELECT
-*`, and computed/aliased column expressions.
+`ALL_TAB_COLUMNS` (Oracle). The catalog builder then checks each inferred
+edge's source object for `alias.column` references against the target's
+column list, and records which of the target's columns are actually
+referenced on that edge - using each engine's own analyzer for both the
+edge and the alias binding, so `alias.column` resolves to the exact table
+that alias was declared against on the parse tree, not a guess from nearby
+text. This still isn't a certified column-level lineage report - it will
+miss dynamic SQL, `SELECT *`, and computed/aliased column expressions.
 
 This shows up as column tags next to each entry in an object's "depends
 on"/"used by" lists, and as highlighted, labeled edges in the Lineage
 graph.
 
+### Orphaned reference detection
+
+Cheap to compute once lineage inference has run: every reference that
+resolves nowhere in the current catalog's scope (same server+database, or
+bare on the same server) is collected as an **orphaned reference** rather
+than just silently producing no edge. In practice this is almost always a
+real bug worth flagging - the referenced table/view/procedure was renamed
+or dropped and the object still calling it was never updated - though it
+can occasionally be a false positive: dynamic SQL, a genuinely external
+object (a linked-server target, a system object) that was never in scope
+to begin with, or a name built at runtime.
+
+A reference that's merely *ambiguous* - more than one same-named object in
+scope - is deliberately **not** flagged this way; that's a different
+situation (the target clearly exists, it just can't be resolved uniquely
+from a bare name) and conflating the two would bury real orphaned
+references in noise from otherwise-benign naming collisions.
+
+`syncsql catalog build` writes these to `catalog.json`'s
+`orphanedReferences` array (`from`/`schema`/`name`) and logs a summary
+count as a warning.
+
 ### History, heatmap and point-in-time
 
-A static Pages site can't run live `git` queries, so `Build-Catalog.ps1`
+A static Pages site can't run live `git` queries, so the catalog builder
 mines history *during the sync CI stage* instead, right before committing:
-`Export-DatabaseObjects.ps1` clones the target repo deeply enough
-(`-HistoryLimit` commits, default 250 — override via the `HISTORY_LIMIT`
-CI variable) for `Build-Catalog.ps1` to mine it (`-RepoRoot`), and the
-resulting `catalog.json` is written straight into that same checkout and
-committed alongside the objects it describes - so it's versioned in git
-history too, not just a CI artifact that disappears after the job expires.
-Mining history produces:
+`syncsql sync` clones the target repo deeply enough (`--history-limit`
+commits, default 250 — override via the `HISTORY_LIMIT` CI variable) for
+`syncsql catalog build` to mine it (`--repo-root`), and the resulting
+`catalog.json` is written straight into that same checkout and committed
+alongside the objects it describes - so it's versioned in git history too,
+not just a CI artifact that disappears after the job expires. Mining
+history produces:
 
 - a global commit timeline (the History page and Overview's "latest
   changes"),
@@ -413,9 +473,9 @@ re-running the whole analysis per commit, which doesn't fit a scheduled
 CI job. What you get is real historical DDL per object within the mined
 commit window, plus a commit-level view of what changed together, which
 covers the practical "what changed and when" questions without that cost.
-Running with `-SkipGit` (no git publish, so no repo to mine and nowhere to
-commit `catalog.json` into) simply omits all of this — empty history, zero
-change counts — rather than failing.
+Running with `--skip-git` (no git publish, so no repo to mine and nowhere
+to commit `catalog.json` into) simply omits all of this — empty history,
+zero change counts — rather than failing.
 
 To work on the site locally:
 
@@ -431,39 +491,37 @@ with a real one (see below) to preview actual data.
 
 ## Running the extraction locally
 
-Run this from a **Windows PowerShell 5.1** prompt (`powershell.exe`, not
-`pwsh`/PowerShell 7 - see "Windows PowerShell 5.1" below for why that
-matters here, not just as a version-number formality):
-
-```powershell
-.\src\Bootstrap-Dependencies.ps1
-$env:SQLPROD01_DB_USER = '...'
-$env:SQLPROD01_DB_PASSWORD = '...'
-.\src\Export-DatabaseObjects.ps1 -ConfigPath .\config\servers.json -SkipGit
+```bash
+export SQLPROD01_DB_USER='...'
+export SQLPROD01_DB_PASSWORD='...'
+syncsql sync --config ./config/servers.json --skip-git
 ```
 
-`-SkipGit` leaves the extracted files under a temp staging directory
-(printed in the log) instead of publishing them - so no `catalog.json` is
-built in this mode either (there's no git checkout to write it into or
-mine history from), and this run's metrics snapshots (also printed in the
-log) are left in place rather than being folded into a `metrics/` history
-tree. To build a `catalog.json` for local preview, feed the object staging
-directory into
-`Build-Catalog.ps1 -ObjectsRoot <dir> -OutputPath ./site/public/data/catalog.json`
-(add `-RepoRoot`/`-PathPrefix` pointed at a real git checkout of your
-target repo to include history; add `-MetricsRoot <metrics-staging-dir>`
+`--skip-git` leaves the extracted files under `--staging-root` (printed in
+the log, or pass your own path) instead of publishing them - so no
+`catalog.json` is built in this mode either (there's no git checkout to
+write it into or mine history from), and this run's metrics snapshots are
+left in place rather than being folded into a `metrics/` history tree. To
+build a `catalog.json` for local preview, feed the object staging directory
+into:
+
+```bash
+syncsql catalog build \
+  --objects-root <staging-dir> \
+  --output ./site/public/data/catalog.json
+```
+
+(add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
+target repo to include history; add `--metrics-root <metrics-staging-dir>`
 to include that one run's metrics snapshot - real trend graphs need
-several runs' worth of history accumulated in a real `metrics/` tree, so
-a single local run only shows a single data point per chart), then
-`npm run dev` inside `site/`.
+several runs' worth of history accumulated in a real `metrics/` tree, so a
+single local run only shows a single data point per chart), then
+`npm run dev` inside `site/`. See [`cli/docs/cli.md`](cli/docs/cli.md) for
+every option and install instructions (the `syncsql` global tool, or
+`dotnet run --project cli/src/SyncSql.Cli --` straight from source).
 
 ## Known limitations (v2)
 
-- The extraction pipeline requires a real Windows PowerShell 5.1 host (see
-  "Windows PowerShell 5.1" above) - it will not run under PowerShell 6/7
-  ("pwsh") because of the classic (.NET Framework) Oracle driver package,
-  even though the `#Requires -Version 5.1` floor is technically satisfied
-  by both.
 - MSSQL table DDL (columns, identity, defaults, primary key) is
   reconstructed from catalog views since SQL Server doesn't store table
   definitions as text the way it does for procedures/views. Foreign keys,
@@ -488,12 +546,10 @@ a single local run only shows a single data point per chart), then
 - Linked server / database link passwords are never extracted (not
   readable from the catalog) — the generated script has a placeholder
   that must be filled in manually if ever used to recreate the link.
-- Lineage edges are inferred via text/regex matching (plus structural FK
-  data), not a real T-SQL/PL-SQL parser — see "The catalog / lineage
-  site" above.
-- Column dependency tags on lineage edges are likewise regex-based (alias
-  resolution over `FROM`/`JOIN` text), not a real parser — see "Column
-  dependency tracking" above.
+- Lineage inference (both engines - see "Lineage inference uses a real
+  parser" above) will still miss dynamic SQL and anything built at
+  runtime, including four-part cross-linked-server names constructed at
+  runtime rather than written literally.
 - Grant extraction (MSSQL `sys.database_permissions`, Oracle
   `ALL_TAB_PRIVS`/`ALL_COL_PRIVS`) only covers object/column-level grants
   on the extracted objects themselves — server/database-level permissions,

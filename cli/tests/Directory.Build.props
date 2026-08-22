@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- Inherits ../Directory.Build.props (TargetFramework, Nullable, etc.)
+       and relaxes warnings-as-errors for test code specifically - test
+       arrange/act/assert patterns legitimately trip a few analyzer
+       suggestions that aren't worth fighting in test bodies. -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>
