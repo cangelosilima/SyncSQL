@@ -21,8 +21,8 @@ its own `catalog build` command optionally reads git history *from*, via
 read-only `git log`/`git show`, purely to mine the change heatmap/
 co-change/point-in-time features - it never writes to that checkout).
 Publishing results to a git repository is entirely the calling
-pipeline's responsibility - see the root `.gitlab-ci.yml`'s
-`sync-database-objects` job for the reference implementation (clone,
+pipeline's responsibility - see [`.gitlab/README.md`](../../.gitlab/README.md)'s
+`sync-database-objects` section for the reference implementation (clone,
 replace `config.git.pathPrefix`, commit, push, calling `syncsql metrics
 update` and `syncsql catalog build` in between for the non-git steps).
 This keeps the tool a pure, git-agnostic data pipeline you can run and
@@ -90,7 +90,7 @@ Extracts every configured (and selected) server: writes each object as
 its own `.sql` file and each table's metrics as its own snapshot file.
 Purely local - no git operation of any kind. This is the extraction half
 of what a scheduled CI pipeline runs; the other half (publishing the
-result) is the calling pipeline's job - see the root `.gitlab-ci.yml`.
+result) is the calling pipeline's job - see [`.gitlab/README.md`](../../.gitlab/README.md).
 
 ```bash
 syncsql sync --config ./config/servers.json
@@ -112,8 +112,8 @@ failure does not stop the run - other servers still extract.
 out across a fleet as independent parallel jobs, each scoped to one
 server, all writing into the same `--staging-root`/`--metrics-snapshot-root`
 - safe, since extraction always writes under `<server>/...` first, so
-different servers never collide. See the root `.gitlab-ci.yml`'s
-`extract-server` job (a GitLab `parallel: matrix:` over server names)
+different servers never collide. See [`.gitlab/README.md`](../../.gitlab/README.md)'s
+`extract-server` section (a GitLab `parallel: matrix:` over server names)
 for the reference setup.
 
 ### `syncsql catalog build`
@@ -187,7 +187,7 @@ extracted.
   `commitUserEmail`, `commitMessage`. `syncsql` itself never reads or
   acts on this block - it exists purely as part of the config schema
   `validate-config` checks. The calling pipeline resolves and acts on it
-  directly (see the root `.gitlab-ci.yml`, which reads it via `jq`);
+  directly (see [`.gitlab/README.md`](../../.gitlab/README.md), which reads it via `jq`);
   leaving `remoteUrl` blank there means push back into the repository
   identified by the GitLab CI predefined variables
   `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH`.
@@ -217,7 +217,7 @@ environment. A server missing either variable is skipped (logged as an
 error, counted as a failure) rather than aborting the whole run.
 
 The git push token used by the calling pipeline (`CI_JOB_Maintainer_Token`,
-in the reference `.gitlab-ci.yml`) never passes through `syncsql` at
+documented in [`.gitlab/README.md`](../../.gitlab/README.md)) never passes through `syncsql` at
 all - the pipeline hands it to `git` directly via `GIT_ASKPASS` plus a
 process environment variable, never a command-line argument and never
 embedded in the remote URL, so it cannot leak through a process listing,

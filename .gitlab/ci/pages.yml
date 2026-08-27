@@ -1,0 +1,31 @@
+# CI module that builds and publishes the catalog site as GitLab Pages. See
+# ../README.md for the full explanation of this job.
+
+pages:
+  extends: .sync_rules
+  stage: pages
+  image: node:20-alpine
+  dependencies:
+    - sync-database-objects
+  cache:
+    key:
+      files:
+        - site/package-lock.json
+    paths:
+      - site/node_modules/
+  before_script:
+    - command -v git >/dev/null || apk add --no-cache git
+    - git fetch origin "${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
+    - git reset --hard "origin/${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
+  script:
+    - mkdir -p site/public/data
+    - cp "${PATH_PREFIX:-objects}/catalog.json" site/public/data/catalog.json
+    - cd site
+    - npm ci
+    - npm run build
+    - cd ..
+    - rm -rf public
+    - mv site/dist public
+  artifacts:
+    paths:
+      - public

@@ -21,8 +21,8 @@ locally, with no native Oracle client install required
 separate bootstrap step: every dependency, including the real parsers behind
 lineage inference for both engines, is a normal NuGet package reference.
 The CLI itself never touches git - it only reads and writes local files;
-cloning, committing, and pushing are the CI pipeline's own job, done
-directly in `.gitlab-ci.yml` (see "Running the pipeline" below).
+cloning, committing, and pushing are the CI pipeline's own job (see
+"CI/CD pipeline" below).
 
 ## How it works
 
@@ -62,8 +62,8 @@ Extraction fans out across the fleet as independent parallel jobs (safe -
 each always writes under its own server's path first, so different servers
 never collide); a single job downloads the merged result and does the one
 publish, so there's still exactly one commit and one push per run - see
-"Running the pipeline" below for the tradeoff that split buys and the
-one-line fallback to a single sequential job for a small fleet.
+[`.gitlab/README.md`](.gitlab/README.md) for the tradeoff that split buys
+and the one-line fallback to a single sequential job for a small fleet.
 
 Every extracted `.sql` file gets a small static header (server / database /
 type / object name / engine) and nothing else — no timestamps — so
@@ -100,8 +100,8 @@ syncsql metrics update --snapshot-root <path> --history-root <path>
 catalog, fold metrics history) - handy for local preview or rebuilding
 `catalog.json` against a different history window without re-extracting.
 Publishing results to git is entirely the calling pipeline's job, done as
-plain shell (see "Running the pipeline" below) - `syncsql` itself never
-clones, commits, or pushes. Install it as a
+plain shell (see [`.gitlab/README.md`](.gitlab/README.md)) - `syncsql`
+itself never clones, commits, or pushes. Install it as a
 [dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools)
 from the project's Nexus feed, or run it straight from source with
 `dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
@@ -115,10 +115,12 @@ filters that decide what gets extracted. See the field descriptions below
 for the full schema; in short:
 
 - `git`: where extracted objects get pushed. Read and acted on directly by
-  `.gitlab-ci.yml`'s `sync-database-objects` job (via `jq`) - `syncsql`
+  the `sync-database-objects` job (via `jq`) - see
+  [`.gitlab/README.md`](.gitlab/README.md) - `syncsql`
   itself never touches this block. Left blank (the default), objects are
   pushed back into **this same project** using the predefined
-  `CI_SERVER_*` variables — see the token requirement below. Set it to a
+  `CI_SERVER_*` variables — see [`.gitlab/README.md`](.gitlab/README.md)'s
+  "Required CI/CD variables" for the token that requires. Set it to a
   full URL to push into a different project instead.
 - `defaults` / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
@@ -138,76 +140,17 @@ Credentials are **never** stored in the config. Each server entry has a
 `credentialsVariablePrefix`; the pipeline reads
 `<prefix>_DB_USER` / `<prefix>_DB_PASSWORD` from the environment.
 
-## Required CI/CD variables
+## CI/CD pipeline
 
-Set these under **Settings > CI/CD > Variables** (masked + protected):
-
-| Variable                            | Purpose                                                                                                    |
-|--------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. |
-| `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`                                                          |
-| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used to install the published `syncsql` tool (validate-config/extract-server/sync-database-objects) and, on the default branch, to publish new versions of it. |
-| `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by the `cli-publish` job (see `cli/.gitlab-ci.yml`). |
-
-`CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank
-(the default, self-repo target). If you point `git.remoteUrl` at a
-different project, it needs Maintainer/`write_repository` access there
-instead.
-
-Optional: `HISTORY_LIMIT` (default `250`) controls how many commits get
-mined for the heatmap / co-change / point-in-time features baked into
-`catalog.json` — see "History, heatmap and point-in-time" below.
-
-## Running the pipeline
-
-`.gitlab-ci.yml` (which includes `cli/.gitlab-ci.yml`) defines these jobs:
-
-- **cli-lint / cli-test / cli-build / cli-publish**: lint (`dotnet format
-  --verify-no-changes`), test, build, and - on the default branch, when
-  `cli/` changed - pack and publish the `syncsql` tool to Nexus. Only run
-  when `cli/` changes. See `cli/.gitlab-ci.yml` and
-  [`cli/docs/cli.md`](cli/docs/cli.md).
-- **validate-config** (`validate`): runs on merge requests / pushes, just
-  checks that `config/servers.json` (or the example file, if you haven't
-  added one yet) parses and satisfies the schema. No database or git
-  credentials needed.
-- **extract-server** (`extract`): the only jobs that touch your databases -
-  one job **per server**, run in parallel via a GitLab
-  `parallel: matrix:`. Each instance runs `syncsql sync
-  --server-include "^<server>$"` (purely local - no git), writing to the
-  same `extracted-objects/`/`metrics-snapshot/` artifact paths every
-  instance shares (safe - extraction always writes under `<server>/...`
-  first, so different servers' output never collides), which GitLab then
-  merges together for the job below.
-- **sync-database-objects** (`sync`): the only place git actually runs.
-  A plain shell script - not `syncsql` - resolves `config.git.*` (via
-  `jq`), clones the target repo, replaces `config.git.pathPrefix` with the
-  merged extract-server output, calls `syncsql metrics update` to fold
-  this run's metrics into the accumulating history and `syncsql catalog
-  build` to rebuild `catalog.json` (see "How it works" above), then
-  commits everything together and pushes. Writes a `dotenv` report
-  (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job knows where to find
-  `catalog.json` in the checkout.
-- **pages** (`pages`): fetches the branch tip (to see the commit
-  sync-database-objects just pushed), builds `site/` (React/Vite) with
-  the `catalog.json` it finds there, and publishes it as this project's
-  GitLab Pages site.
-
-`extract-server`'s matrix lists server names literally in `.gitlab-ci.yml`
-and has to be kept in sync by hand with `config/servers.json` - a server
-present in the config but missing from the matrix silently isn't extracted
-by this pipeline. For a small fleet where that upkeep isn't worth the
-parallelism, `.gitlab-ci.yml` documents the one-line swap back to a single
-sequential job (drop `extract-server`, give sync-database-objects's script
-a leading `syncsql sync --config "$CONFIG_PATH" ...` call with no
-`--server-include`, ahead of its existing git script).
-
-All three run on a portable Linux image (`mcr.microsoft.com/dotnet/sdk:10.0`),
-installing the `syncsql` tool from Nexus - no Windows runner needed.
-`extract`/`sync`/`pages` only run for `schedule` (and manually-triggered
-`web`/API) pipeline sources — create a schedule under **CI/CD >
-Schedules** pointing at this project. Once it's run once, find the site
-URL under **Settings > Pages**.
+The pipeline (`.gitlab-ci.yml` and the modules it includes under
+`.gitlab/ci/`) is what actually runs the flow described above: validating
+`config/servers.json`, running the extraction jobs, publishing results to
+git, and building/deploying the catalog site. Required CI/CD variables,
+trigger rules, and a job-by-job explanation - including the `syncsql`
+tool's own build/publish pipeline - are documented in
+**[`.gitlab/README.md`](.gitlab/README.md)**; set the required variables
+there before running it, and see it for how to fall back to a single
+sequential extraction job for a small fleet.
 
 ## The catalog / lineage site
 
