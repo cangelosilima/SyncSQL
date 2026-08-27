@@ -1,18 +1,7 @@
-# CI module that publishes extracted database objects back into git.
-# Included from the root .gitlab-ci.yml alongside the cli/extract modules
-# (.gitlab/ci/cli.yml, .gitlab/ci/extract.yml).
+# CI module that publishes extracted database objects back into git. See
+# ../README.md for the full explanation of this job - it's the only place
+# git actually runs in the pipeline.
 
-# Publishes the merged output of every extract-server instance (../extract.yml).
-# This is the ONLY place git actually runs in this pipeline: everything
-# git-shaped - resolving config.git.* (via `jq`, since the CLI itself never
-# reads that block), cloning, replacing config.git.pathPrefix with the merged
-# staged tree, committing, and pushing - is a plain shell script here, calling
-# `syncsql metrics update` and `syncsql catalog build` only for the pure,
-# non-git steps (folding this run's metrics into history, and rebuilding
-# catalog.json - structure, inferred lineage via a real parser per engine,
-# and history/heatmap/point-in-time mined from this repo's own commit
-# history). One commit carries the extracted objects, catalog.json, and the
-# updated metrics/ tree together.
 sync-database-objects:
   extends:
     - .syncsql_cli
@@ -25,9 +14,6 @@ sync-database-objects:
     - |
       set -euo pipefail
 
-      # config.git.* - defaults match what SyncSQL has always used (see
-      # README's Configuration section). The CLI never resolves or acts on
-      # this block itself; this script is the one place that does.
       GIT_CFG=$(jq -c '.git // {}' "$CONFIG_PATH")
       BRANCH=$(echo "$GIT_CFG" | jq -r '.branch // "main"')
       PATH_PREFIX=$(echo "$GIT_CFG" | jq -r '.pathPrefix // "objects"')
@@ -45,10 +31,6 @@ sync-database-objects:
         exit 1
       fi
 
-      # The push token is handed to git only through GIT_ASKPASS plus a
-      # process environment variable - never a CLI argument, never embedded
-      # in the remote URL - so it can't leak via a process listing, `git
-      # remote -v`, or shell history.
       ASKPASS_SCRIPT=$(mktemp)
       cat > "$ASKPASS_SCRIPT" <<'ASKPASS'
       #!/bin/sh
@@ -74,8 +56,6 @@ sync-database-objects:
       git -C "$CLONE_DIR" config user.name "$COMMIT_USER_NAME"
       git -C "$CLONE_DIR" config user.email "$COMMIT_USER_EMAIL"
 
-      # Wipe and repopulate so objects dropped from the source database (or
-      # excluded by an updated filter) show up as deletions in git.
       TARGET_DIR="$CLONE_DIR/$PATH_PREFIX"
       rm -rf "$TARGET_DIR"
       mkdir -p "$TARGET_DIR"

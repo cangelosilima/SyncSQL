@@ -4,9 +4,9 @@ namespace SyncSql.Core.Configuration;
 
 /// <summary>
 /// config.git - where extracted objects get pushed. All fields optional; the CLI never resolves these to
-/// defaults or acts on them itself (see .gitlab/ci/sync.yml, which reads this block directly and
-/// runs the actual clone/commit/push) - this record exists purely so `validate-config` can parse and
-/// validate the block's shape as part of the config schema.
+/// defaults or acts on them itself (see .gitlab/README.md, which documents the sync-database-objects job
+/// that reads this block directly and runs the actual clone/commit/push) - this record exists purely so
+/// `validate-config` can parse and validate the block's shape as part of the config schema.
 /// </summary>
 public sealed record GitConfig
 {

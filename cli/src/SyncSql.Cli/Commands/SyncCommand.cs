@@ -13,7 +13,7 @@ namespace SyncSql.Cli.Commands;
 /// `syncsql sync` - extracts every configured (and selected) server, writing each object as its own
 /// `.sql` file and each table's metrics as its own snapshot file. Purely local: no git operations here -
 /// cloning, staging into config.git.pathPrefix, folding metrics history, rebuilding catalog.json, and
-/// pushing are all orchestrated directly by the CI pipeline (see .gitlab/ci/sync.yml), which calls
+/// pushing are all orchestrated directly by the CI pipeline (see .gitlab/README.md), which calls
 /// `syncsql metrics update` and `syncsql catalog build` for the parts that aren't git itself.
 /// </summary>
 internal static class SyncCommand

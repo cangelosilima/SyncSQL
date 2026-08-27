@@ -1,62 +1,9 @@
 # SyncSQL - scheduled extraction of MSSQL / Oracle database objects into git.
 #
-# Required CI/CD variables (Settings > CI/CD > Variables):
-#   CI_JOB_Maintainer_Token                Project access token with the
-#                                           Maintainer role and
-#                                           write_repository scope, used to
-#                                           push extracted objects back into
-#                                           this project (Protected, Masked).
-#                                           The built-in CI_JOB_TOKEN cannot
-#                                           push, hence a dedicated token.
-#                                           Falls back to GIT_PUSH_TOKEN if
-#                                           unset.
-#   <PREFIX>_DB_USER / <PREFIX>_DB_PASSWORD
-#                                           One pair per server entry in
-#                                           config/servers.json, where <PREFIX>
-#                                           is that server's
-#                                           credentialsVariablePrefix
-#                                           (Protected, Masked).
-#   NEXUS_NUGET_SOURCE_URL / NEXUS_API_KEY  Only needed by .gitlab/ci/cli.yml's
-#                                           cli-publish job and by
-#                                           validate-config/extract-server/
-#                                           sync-database-objects (installed
-#                                           from .gitlab/ci/extract.yml and
-#                                           .gitlab/ci/sync.yml below) to
-#                                           install the published syncsql
-#                                           tool - see cli/docs/cli.md.
-#
-# Trigger a schedule under CI/CD > Schedules pointing at this pipeline; the
-# extract/sync/pages jobs only run for schedule (or manually-triggered
-# "web"/API) pipeline sources, never on ordinary branch pushes.
-#
-# The syncsql .NET CLI (cli/, see cli/docs/cli.md) only ever touches local
-# files - it extracts database objects, folds metrics history, and builds
-# catalog.json, but never clones, commits, or pushes anything itself. All git
-# operations (clone, replace config.git.pathPrefix, commit, push) happen
-# directly in sync-database-objects's own shell script (.gitlab/ci/sync.yml),
-# which reads config.git.* itself via `jq` - a deliberate split: the CLI is a
-# pure, git-agnostic data pipeline you can run and test anywhere, and that
-# job is the one and only place that decides how/where results get
-# published.
-#
-# The pipeline is split into modules under .gitlab/ci/, included below:
-#   - cli.yml:     lints, tests, builds, and publishes the syncsql .NET CLI
-#                  (cli/) to Nexus - see cli/docs/cli.md.
-#   - extract.yml: validates config/servers.json and extracts database
-#                  objects from the fleet (validate-config, extract-server).
-#   - sync.yml:    publishes the merged extraction output back into git
-#                  (sync-database-objects).
-#   - pages.yml:   builds and publishes the catalog site as GitLab Pages
-#                  (pages).
-# validate-config, extract-server, and sync-database-objects all run a
-# portable Linux image (mcr.microsoft.com/dotnet/sdk:10.0), installing the
-# syncsql tool from Nexus - no Windows runner needed. The CLI itself is
-# built, tested, and published to Nexus by .gitlab/ci/cli.yml; these jobs
-# just install whatever version is currently published there. Extraction is
-# fanned out across the fleet as parallel per-server jobs (extract-server)
-# feeding one final sync-database-objects job that publishes everything in a
-# single commit - see extract-server's own comment (.gitlab/ci/extract.yml)
-# for the tradeoff that buys.
+# This file only declares the shared stages/variables and includes the CI
+# modules under .gitlab/ci/. For the full pipeline explanation - what each
+# module/job does, required CI/CD variables, trigger rules, and design
+# rationale - see .gitlab/README.md.
 
 include:
   - local: '.gitlab/ci/cli.yml'
@@ -79,17 +26,6 @@ variables:
   EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
   METRICS_SNAPSHOT_DIR: "$CI_PROJECT_DIR/metrics-snapshot"
   GIT_DEPTH: "1"
-  # How many commits (touching config.git.pathPrefix) get mined for the
-  # change-heatmap / co-change / per-object version history features baked
-  # into catalog.json, and how deep sync-database-objects's own clone of the
-  # target repo goes so that history is actually there to mine. catalog.json
-  # is generated and committed *by* sync-database-objects, alongside the
-  # extracted objects themselves, so it's versioned right along with them
-  # rather than living only as a separate CI artifact.
+  # See .gitlab/README.md's "Required CI/CD variables" for what these control.
   HISTORY_LIMIT: "250"
-  # How many daily volume/index/optimizer-statistics snapshots are kept per
-  # table (metrics/ tree, outside git.pathPrefix - see "syncsql metrics
-  # update" and README's "Volatile metrics"). This data changes every run by
-  # nature, so it's tracked separately from each object's own version
-  # history rather than bloating it.
   METRICS_HISTORY_LIMIT: "90"
