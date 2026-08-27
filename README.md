@@ -1,28 +1,44 @@
 # SyncSQL
 
-Scheduled extraction of database objects (stored procedures, views,
-functions, triggers, tables — with foreign keys, check constraints and
-indexes attached — schemas, synonyms, linked servers / database links, and
-best-effort replication topology) from a fleet of **MSSQL** and **Oracle**
-servers into this repository — one file per object, one commit per run,
-diffable like any other source code — followed by a structure/lineage/
-history analysis published as a browsable **React site on GitLab Pages**.
-Volatile, daily-changing operational data (row counts, index
-fragmentation/usage, the statistics the query optimizer actually uses) is
-tracked separately as a graphable time series rather than bloating that
-version history — see "Volatile metrics" below.
+SyncSQL extracts database objects — stored procedures, views, functions,
+triggers, tables (with foreign keys, check constraints and indexes), schemas,
+synonyms, and linked servers / database links — from a fleet of **MSSQL** and
+**Oracle** servers into a git repository: one file per object, one commit per
+run, diffable like any other source code. On top of that history it builds a
+browsable **structure, lineage and access catalog**, published as a React
+site.
 
-The extraction, lineage inference, and catalog building is a cross-platform
-**.NET 10 CLI** (`cli/`, published as the `syncsql` dotnet global tool - see
-[`cli/docs/cli.md`](cli/docs/cli.md) for the full command reference). It
-runs anywhere .NET 10 runs - Linux, macOS, or Windows - both in CI and
-locally, with no native Oracle client install required
-(`Oracle.ManagedDataAccess.Core` is a fully managed ADO.NET driver) and no
-separate bootstrap step: every dependency, including the real parsers behind
-lineage inference for both engines, is a normal NuGet package reference.
-The CLI itself never touches git - it only reads and writes local files;
-cloning, committing, and pushing are the CI pipeline's own job (see
-"CI/CD pipeline" below).
+Row counts, index fragmentation, and optimizer statistics change on every run
+by nature, so they're tracked separately as a time series (see
+[Volatile metrics](#volatile-metrics)) instead of turning every object's diff
+noisy.
+
+## Screenshots
+
+**Overview** — object counts, recently changed objects, most-referenced
+tables, a change-frequency heatmap, and objects that tend to change together.
+
+![Overview page](docs/screenshots/overview.png)
+
+**Explorer** — a sortable, filterable table of every extracted object, with a
+GitLab-style filter bar (attribute, operator, value).
+
+![Explorer page](docs/screenshots/explorer.png)
+
+**Lineage graph** — an interactive dependency graph with drill-down, built
+from a real SQL parser per engine, not text matching. Edges carrying a known
+column reference are highlighted and labeled.
+
+![Lineage graph](docs/screenshots/lineage.png)
+
+**Object detail** — full column list, DDL, foreign keys / check constraints /
+indexes, and a metrics panel of volume/index/optimizer-statistics trends.
+
+![Object detail page](docs/screenshots/object-detail.png)
+
+**Light and dark themes** — a toggle in the top right, persisted per browser.
+
+![Dark mode](docs/screenshots/dark-mode.png)
 
 ## How it works
 
@@ -171,8 +187,7 @@ see "Theme" below):
   change-frequency heatmap, and objects that tend to change together in
   the same commit.
 - **Explorer** — a sortable, filterable table listing every object; it's the
-  primary way to browse the catalog (there is no separate tree sidebar - see
-  "Explorer replaces the sidebar" below).
+  primary way to browse the catalog.
 - **Object detail** — qualified name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), the DDL, structured panels for any Foreign Keys
@@ -247,14 +262,10 @@ DB-link boundary (in the "most referenced indirectly" analytics) still stops
 one hop past that boundary rather than fanning out across a remote server's
 own dependency graph. The site says as much on its overview page.
 
-### Explorer replaces the sidebar
-
-Earlier versions of the site had an always-open (later toggleable) tree
-sidebar (Server → Database → Schema → Type → Object) alongside Explorer.
-It has been removed: Explorer's filter bar plus sortable columns cover the
-same browsing need with less UI, and every other page (Lineage, Overview,
-History) links directly to object detail pages rather than requiring the
-tree.
+There is no separate tree sidebar (Server → Database → Schema → Type →
+Object) — Explorer's filter bar plus sortable columns cover browsing, and
+every other page (Lineage, Overview, History) links directly to object
+detail pages.
 
 ### Theme
 
@@ -464,7 +475,7 @@ single local run only shows a single data point per chart), then
 every option and install instructions (the `syncsql` global tool, or
 `dotnet run --project cli/src/SyncSql.Cli --` straight from source).
 
-## Known limitations (v2)
+## Known limitations
 
 - MSSQL table DDL (columns, identity, defaults, primary key) is
   reconstructed from catalog views since SQL Server doesn't store table
