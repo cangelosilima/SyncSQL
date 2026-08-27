@@ -15,15 +15,18 @@ noisy.
 
 ## Screenshots
 
-**Overview** — object counts, recently changed objects, most-referenced
-tables, a change-frequency heatmap, and objects that tend to change together.
+**Overview** — a console-style shell (dark chrome topbar, monospace type) around
+a quick-stats row (objects, commits mined, lineage edges, last change), object
+counts by type, recently changed objects, most-referenced tables, a
+change-activity calendar heatmap, and objects that tend to change together.
 
 ![Overview page](docs/screenshots/overview.png)
 
-**Metrics anomalies & orphaned references** — further down the Overview page:
-tables whose latest metrics snapshot swung sharply (a row-count jump or an
-index fragmentation spike), and references that don't resolve to anything in
-the catalog's scope, usually a renamed or dropped target.
+**Metrics anomalies & orphaned references** — flagged as alert cards near the
+top of the Overview page: tables whose latest metrics snapshot swung sharply
+(a row-count jump or an index fragmentation spike), and references that don't
+resolve to anything in the catalog's scope, usually a renamed or dropped
+target.
 
 ![Overview metrics anomalies and orphaned references panels](docs/screenshots/overview-anomalies.png)
 
@@ -46,8 +49,10 @@ state stays live in the URL (**Copy link** for a shareable view), and
 
 ![Lineage graph](docs/screenshots/lineage.png)
 
-**Object detail** — full column list, DDL, foreign keys / check constraints /
-indexes, and a metrics panel of volume/index/optimizer-statistics trends.
+**Object detail** — a breadcrumb trail, a quick-facts bar (modified date,
+deps, used-by, columns) with a jump to the lineage graph, full column list,
+DDL, foreign keys / check constraints / indexes, and a metrics panel of
+volume/index/optimizer-statistics trends.
 
 ![Object detail page](docs/screenshots/object-detail.png)
 
