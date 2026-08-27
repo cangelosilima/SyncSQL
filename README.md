@@ -147,7 +147,7 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. |
 | `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`                                                          |
 | `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used to install the published `syncsql` tool (validate-config/extract-server/sync-database-objects) and, on the default branch, to publish new versions of it. |
-| `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by the `cli-publish` job (see `cli/.gitlab-ci.yml`). |
+| `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by the `cli-publish` job (see `.gitlab/ci/cli.yml`). |
 
 `CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank
 (the default, self-repo target). If you point `git.remoteUrl` at a
@@ -160,18 +160,19 @@ mined for the heatmap / co-change / point-in-time features baked into
 
 ## Running the pipeline
 
-`.gitlab-ci.yml` (which includes `cli/.gitlab-ci.yml`) defines these jobs:
+`.gitlab-ci.yml` includes three modules under `.gitlab/ci/` - `cli.yml`,
+`extract.yml`, and `sync.yml` - which together define these jobs:
 
-- **cli-lint / cli-test / cli-build / cli-publish**: lint (`dotnet format
-  --verify-no-changes`), test, build, and - on the default branch, when
-  `cli/` changed - pack and publish the `syncsql` tool to Nexus. Only run
-  when `cli/` changes. See `cli/.gitlab-ci.yml` and
+- **cli-lint / cli-test / cli-build / cli-publish** (`.gitlab/ci/cli.yml`):
+  lint (`dotnet format --verify-no-changes`), test, build, and - on the
+  default branch, when `cli/` changed - pack and publish the `syncsql` tool
+  to Nexus. Only run when `cli/` changes. See
   [`cli/docs/cli.md`](cli/docs/cli.md).
-- **validate-config** (`validate`): runs on merge requests / pushes, just
+- **validate-config** (`validate`, `.gitlab/ci/extract.yml`): runs on merge requests / pushes, just
   checks that `config/servers.json` (or the example file, if you haven't
   added one yet) parses and satisfies the schema. No database or git
   credentials needed.
-- **extract-server** (`extract`): the only jobs that touch your databases -
+- **extract-server** (`extract`, `.gitlab/ci/extract.yml`): the only jobs that touch your databases -
   one job **per server**, run in parallel via a GitLab
   `parallel: matrix:`. Each instance runs `syncsql sync
   --server-include "^<server>$"` (purely local - no git), writing to the
@@ -179,7 +180,7 @@ mined for the heatmap / co-change / point-in-time features baked into
   instance shares (safe - extraction always writes under `<server>/...`
   first, so different servers' output never collides), which GitLab then
   merges together for the job below.
-- **sync-database-objects** (`sync`): the only place git actually runs.
+- **sync-database-objects** (`sync`, `.gitlab/ci/sync.yml`): the only place git actually runs.
   A plain shell script - not `syncsql` - resolves `config.git.*` (via
   `jq`), clones the target repo, replaces `config.git.pathPrefix` with the
   merged extract-server output, calls `syncsql metrics update` to fold
@@ -193,11 +194,12 @@ mined for the heatmap / co-change / point-in-time features baked into
   the `catalog.json` it finds there, and publishes it as this project's
   GitLab Pages site.
 
-`extract-server`'s matrix lists server names literally in `.gitlab-ci.yml`
-and has to be kept in sync by hand with `config/servers.json` - a server
-present in the config but missing from the matrix silently isn't extracted
-by this pipeline. For a small fleet where that upkeep isn't worth the
-parallelism, `.gitlab-ci.yml` documents the one-line swap back to a single
+`extract-server`'s matrix lists server names literally in
+`.gitlab/ci/extract.yml` and has to be kept in sync by hand with
+`config/servers.json` - a server present in the config but missing from the
+matrix silently isn't extracted by this pipeline. For a small fleet where
+that upkeep isn't worth the parallelism, `.gitlab/ci/extract.yml` documents
+the one-line swap back to a single
 sequential job (drop `extract-server`, give sync-database-objects's script
 a leading `syncsql sync --config "$CONFIG_PATH" ...` call with no
 `--server-include`, ahead of its existing git script).

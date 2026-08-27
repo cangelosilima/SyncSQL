@@ -1,0 +1,75 @@
+# CI module for validating config/servers.json and extracting database
+# objects from the fleet. Included from the root .gitlab-ci.yml alongside the
+# cli/sync modules (.gitlab/ci/cli.yml, .gitlab/ci/sync.yml).
+#
+# .syncsql_cli and .sync_rules below are also extended by
+# sync-database-objects in .gitlab/ci/sync.yml - GitLab's `extends` keyword
+# resolves against the fully-merged config, so this works across included
+# files (unlike plain YAML anchors/aliases, which don't).
+
+# Shared setup for jobs that run the syncsql .NET CLI tool, installed from
+# Nexus, against a portable Linux image - no Windows runner needed. The CLI
+# itself is built, tested, and published to Nexus by .gitlab/ci/cli.yml;
+# these jobs just install whatever version is currently published there.
+.syncsql_cli:
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  before_script:
+    - dotnet tool install --global SyncSql.Cli --add-source "$NEXUS_NUGET_SOURCE_URL"
+    - export PATH="$PATH:$HOME/.dotnet/tools"
+
+# extract-server (below) and sync-database-objects (../sync.yml) only run for
+# schedule (or manually-triggered "web"/API) pipeline sources, never on
+# ordinary branch pushes.
+.sync_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+
+validate-config:
+  extends: .syncsql_cli
+  stage: validate
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - |
+      if [ -f "config/servers.json" ]; then CONFIG_FILE="config/servers.json"; else CONFIG_FILE="config/servers.example.json"; fi
+    - syncsql validate-config --config "$CONFIG_FILE"
+
+# Extracts one server's database objects - in parallel with every other entry
+# in the matrix below, each as its own CI job. Every instance writes to the
+# SAME --staging-root/--metrics-snapshot-root: extraction always writes under
+# <server>/... first (see ExtractedObjectFile.RelativePath), so concurrent
+# instances scoped to different servers never collide, and GitLab merges every
+# instance's artifacts together for the downstream sync-database-objects job
+# (../sync.yml) - a plain job-name in `dependencies:` pulls in *all* instances
+# of a `parallel:` job. Purely local - no git operation happens here or
+# anywhere in the CLI; see sync-database-objects for where that lives.
+#
+# The SERVER_NAME list must match every server config/servers.json's
+# serverSelection would actually run for this pipeline; keep it in sync by
+# hand whenever the fleet changes - a server present in config/servers.json
+# but missing here silently isn't extracted. For a small fleet where that
+# upkeep isn't worth it, drop this job and the matrix, and instead give
+# sync-database-objects (../sync.yml) a first script line of `syncsql sync
+# --config "$CONFIG_PATH" --staging-root "$EXTRACTED_OBJECTS_DIR"
+# --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR"` (no `--server-include`, so
+# every server extracts) ahead of its existing git script - same end result,
+# back to one sequential job doing everything.
+extract-server:
+  extends:
+    - .syncsql_cli
+    - .sync_rules
+  stage: extract
+  timeout: 1h
+  parallel:
+    matrix:
+      - SERVER_NAME: ["SQLPROD01", "SQLPROD02_FINANCE_ONLY", "ORAPROD01"]
+  script:
+    - syncsql sync --config "$CONFIG_PATH" --server-include "^${SERVER_NAME}$" --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR"
+  artifacts:
+    paths:
+      - extracted-objects/
+      - metrics-snapshot/
+    expire_in: 1 day

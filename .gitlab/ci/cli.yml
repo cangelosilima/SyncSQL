@@ -1,8 +1,10 @@
-# CI for the syncsql .NET CLI (this cli/ folder) - lint, test, build, and (on
-# the default branch) pack + publish to Nexus as a dotnet global tool. Included
-# from the root .gitlab-ci.yml, which then just *installs* the published tool
-# for validate-config/sync-database-objects - it never builds this source tree
-# itself. See cli/docs/cli.md for the tool's own usage.
+# CI module for the syncsql .NET CLI (the cli/ folder) - lint, test, build,
+# and (on the default branch) pack + publish to Nexus as a dotnet global tool.
+# Included from the root .gitlab-ci.yml alongside the extract/sync modules
+# (.gitlab/ci/extract.yml, .gitlab/ci/sync.yml), which then just *install*
+# the published tool for validate-config/extract-server/sync-database-objects
+# - this module never builds that source tree itself. See cli/docs/cli.md for
+# the tool's own usage.
 #
 # Required CI/CD variables (Settings > CI/CD > Variables), only needed for the
 # cli-publish job:

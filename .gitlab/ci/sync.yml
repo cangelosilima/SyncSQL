@@ -1,0 +1,107 @@
+# CI module that publishes extracted database objects back into git.
+# Included from the root .gitlab-ci.yml alongside the cli/extract modules
+# (.gitlab/ci/cli.yml, .gitlab/ci/extract.yml).
+
+# Publishes the merged output of every extract-server instance (../extract.yml).
+# This is the ONLY place git actually runs in this pipeline: everything
+# git-shaped - resolving config.git.* (via `jq`, since the CLI itself never
+# reads that block), cloning, replacing config.git.pathPrefix with the merged
+# staged tree, committing, and pushing - is a plain shell script here, calling
+# `syncsql metrics update` and `syncsql catalog build` only for the pure,
+# non-git steps (folding this run's metrics into history, and rebuilding
+# catalog.json - structure, inferred lineage via a real parser per engine,
+# and history/heatmap/point-in-time mined from this repo's own commit
+# history). One commit carries the extracted objects, catalog.json, and the
+# updated metrics/ tree together.
+sync-database-objects:
+  extends:
+    - .syncsql_cli
+    - .sync_rules
+  stage: sync
+  dependencies:
+    - extract-server
+  script:
+    - apt-get update -qq && apt-get install -y --no-install-recommends git jq -qq
+    - |
+      set -euo pipefail
+
+      # config.git.* - defaults match what SyncSQL has always used (see
+      # README's Configuration section). The CLI never resolves or acts on
+      # this block itself; this script is the one place that does.
+      GIT_CFG=$(jq -c '.git // {}' "$CONFIG_PATH")
+      BRANCH=$(echo "$GIT_CFG" | jq -r '.branch // "main"')
+      PATH_PREFIX=$(echo "$GIT_CFG" | jq -r '.pathPrefix // "objects"')
+      COMMIT_USER_NAME=$(echo "$GIT_CFG" | jq -r '.commitUserName // "SyncSQL Bot"')
+      COMMIT_USER_EMAIL=$(echo "$GIT_CFG" | jq -r '.commitUserEmail // "syncsql-bot@example.com"')
+      COMMIT_MESSAGE=$(echo "$GIT_CFG" | jq -r '.commitMessage // "chore(sync): update database objects"')
+      REMOTE_URL=$(echo "$GIT_CFG" | jq -r '.remoteUrl // empty')
+      if [ -z "$REMOTE_URL" ]; then
+        REMOTE_URL="${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      fi
+
+      PUSH_TOKEN="${CI_JOB_Maintainer_Token:-${GIT_PUSH_TOKEN:-}}"
+      if [ -z "$PUSH_TOKEN" ]; then
+        echo "No push token supplied. Set the CI_JOB_Maintainer_Token CI/CD variable (a Maintainer-role token with write_repository scope) or GIT_PUSH_TOKEN." >&2
+        exit 1
+      fi
+
+      # The push token is handed to git only through GIT_ASKPASS plus a
+      # process environment variable - never a CLI argument, never embedded
+      # in the remote URL - so it can't leak via a process listing, `git
+      # remote -v`, or shell history.
+      ASKPASS_SCRIPT=$(mktemp)
+      cat > "$ASKPASS_SCRIPT" <<'ASKPASS'
+      #!/bin/sh
+      case "$1" in
+          Username*) printf '%s' "oauth2" ;;
+          *)         printf '%s' "$SYNCSQL_GIT_PASSWORD" ;;
+      esac
+      ASKPASS
+      chmod 700 "$ASKPASS_SCRIPT"
+      export GIT_ASKPASS="$ASKPASS_SCRIPT"
+      export GIT_TERMINAL_PROMPT=0
+      export SYNCSQL_GIT_PASSWORD="$PUSH_TOKEN"
+
+      CLONE_DIR=$(mktemp -d)
+      echo "Cloning target repository (branch '$BRANCH', depth $HISTORY_LIMIT)"
+      if ! git clone --branch "$BRANCH" --single-branch --depth "$HISTORY_LIMIT" "$REMOTE_URL" "$CLONE_DIR"; then
+        echo "Branch '$BRANCH' not found on remote yet; cloning default branch and creating it."
+        rm -rf "$CLONE_DIR"
+        git clone --depth "$HISTORY_LIMIT" "$REMOTE_URL" "$CLONE_DIR"
+        git -C "$CLONE_DIR" checkout -B "$BRANCH"
+      fi
+
+      git -C "$CLONE_DIR" config user.name "$COMMIT_USER_NAME"
+      git -C "$CLONE_DIR" config user.email "$COMMIT_USER_EMAIL"
+
+      # Wipe and repopulate so objects dropped from the source database (or
+      # excluded by an updated filter) show up as deletions in git.
+      TARGET_DIR="$CLONE_DIR/$PATH_PREFIX"
+      rm -rf "$TARGET_DIR"
+      mkdir -p "$TARGET_DIR"
+      if [ -d "$EXTRACTED_OBJECTS_DIR" ]; then
+        cp -a "$EXTRACTED_OBJECTS_DIR"/. "$TARGET_DIR"/
+      fi
+
+      METRICS_HISTORY_DIR="$CLONE_DIR/metrics"
+      echo "Updating metrics history ($METRICS_HISTORY_LIMIT-snapshot retention) -> $METRICS_HISTORY_DIR"
+      syncsql metrics update --snapshot-root "$METRICS_SNAPSHOT_DIR" --history-root "$METRICS_HISTORY_DIR" --history-limit "$METRICS_HISTORY_LIMIT"
+
+      echo "Building catalog.json ($HISTORY_LIMIT-commit history window) -> $TARGET_DIR/catalog.json"
+      syncsql catalog build --objects-root "$TARGET_DIR" --output "$TARGET_DIR/catalog.json" --repo-root "$CLONE_DIR" --path-prefix "$PATH_PREFIX" --history-limit "$HISTORY_LIMIT" --metrics-root "$METRICS_HISTORY_DIR"
+
+      git -C "$CLONE_DIR" add -A
+      if git -C "$CLONE_DIR" diff --cached --quiet; then
+        echo "No changes detected; nothing to publish."
+      else
+        git -C "$CLONE_DIR" commit -m "$COMMIT_MESSAGE"
+        echo "Pushing to '$BRANCH'"
+        git -C "$CLONE_DIR" push origin "HEAD:$BRANCH"
+      fi
+
+      echo "PATH_PREFIX=$PATH_PREFIX" > "$CI_PROJECT_DIR/sync.env"
+      echo "GIT_BRANCH=$BRANCH" >> "$CI_PROJECT_DIR/sync.env"
+  artifacts:
+    reports:
+      dotenv: sync.env
+    expire_in: 1 day
