@@ -174,6 +174,38 @@ syncsql metrics update --snapshot-root ./metrics-snapshot --history-root ./metri
 | `--history-root`     | *(required)* | Root of the accumulating history tree, e.g. `<target-repo-checkout>/metrics`. Kept outside `config.git.pathPrefix` so a wipe-and-replace of the object tree never touches it. |
 | `--history-limit`    | `90`    | Maximum snapshots retained per object; oldest are trimmed first. |
 
+### `syncsql lint`
+
+Lints T-SQL script(s) with the same real parser (`Microsoft.SqlServer.TransactSql.ScriptDom`)
+`catalog build` uses for lineage - not regex/text matching. Reports:
+
+- actual **syntax errors** from the parser (rule `syntax-error`, always `error` severity), and
+- a small set of style/best-practice findings, run over the parsed AST:
+
+  | Rule            | What it flags |
+  |------------------|----------------|
+  | `select-star`    | `SELECT *` / `SELECT alias.*` - an added/dropped/reordered column silently changes what callers get back. |
+  | `nolock-hint`    | `WITH (NOLOCK)` / `READUNCOMMITTED` table hints - allows dirty reads; often copy-pasted as a perf fix rather than a deliberate isolation-level choice. |
+  | `cursor-usage`   | `DECLARE ... CURSOR` - row-by-row processing that's usually much slower than an equivalent set-based rewrite. |
+
+Touches no database - it only reads files off disk, so it works equally well
+against a fresh `syncsql sync` staging tree or a hand-written `.sql` file
+before it's ever run against a server.
+
+```bash
+syncsql lint --path ./staging
+```
+
+| Option       | Default   | Description |
+|--------------|-----------|-------------|
+| `--path`     | *(required)* | A `.sql` file, or a directory searched recursively for `*.sql` files. Repeatable. |
+| `--fail-on`  | `error`   | Minimum finding severity that makes the command exit non-zero: `warning` or `error`. |
+
+Findings are logged one per line as `path:line:column [rule-id] message`, at
+`ERROR` or `WARN` level depending on severity, followed by a summary line.
+Exit code `0` if nothing at or above `--fail-on` was found; `1` otherwise (or
+if a given `--path` doesn't exist).
+
 ## Configuration
 
 `syncsql` reads the exact same `config/servers.json` schema as the

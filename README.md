@@ -93,12 +93,18 @@ syncsql catalog build --objects-root <path> --output <path>
                        [--max-co-change-commit-size] [--metrics-root]
 syncsql metrics update --snapshot-root <path> --history-root <path>
                         [--history-limit]
+syncsql lint --path <file-or-dir>... [--fail-on warning|error]
 ```
 
 `sync` extracts (purely local - no git of any kind); `catalog build` and
 `metrics update` are the other two pure, composable steps (rebuild the
 catalog, fold metrics history) - handy for local preview or rebuilding
 `catalog.json` against a different history window without re-extracting.
+`lint` is a fourth, database-free step: it parses T-SQL script(s) with the
+same real `ScriptDom` parser `catalog build` uses for lineage and reports
+syntax errors plus a few style/best-practice findings (`SELECT *`, `NOLOCK`
+hints, cursor usage) - see [`cli/docs/cli.md`](cli/docs/cli.md) for the
+full rule list.
 Publishing results to git is entirely the calling pipeline's job, done as
 plain shell (see "Running the pipeline" below) - `syncsql` itself never
 clones, commits, or pushes. Install it as a
