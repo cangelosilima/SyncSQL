@@ -5,8 +5,12 @@ import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
 import LineageGraph from '../components/LineageGraph'
 import MetricsPanels from '../components/MetricsPanels'
+import DiffView from '../components/DiffView'
 import { getEdgeColumns } from '../lib/neighborhood'
-import type { CatalogObjectVersion } from '../types'
+import type { CatalogNode, CatalogObjectVersion } from '../types'
+
+/** Synthetic sha standing in for the object's current (uncommitted-to-history) DDL, selectable in compare mode alongside real revisions. */
+const CURRENT_SHA = '__current__'
 
 export default function ObjectPage() {
   const params = useParams()
@@ -16,9 +20,16 @@ export default function ObjectPage() {
   const node = index?.byId.get(id)
   const outgoing = index?.outgoing.get(id) ?? []
   const incoming = index?.incoming.get(id) ?? []
+  const orphanedRefs = index?.orphanedByFrom.get(id) ?? []
 
   const [viewingVersion, setViewingVersion] = useState<CatalogObjectVersion | null>(null)
-  useEffect(() => setViewingVersion(null), [id])
+  const [compareMode, setCompareMode] = useState(false)
+  const [diffPicks, setDiffPicks] = useState<string[]>([])
+  useEffect(() => {
+    setViewingVersion(null)
+    setCompareMode(false)
+    setDiffPicks([])
+  }, [id])
 
   const neighborhoodIds = useMemo(() => {
     if (!node) return []
@@ -48,6 +59,21 @@ export default function ObjectPage() {
         {node.qualifiedName} <TypeBadge type={node.type} />
       </h1>
       {node.description && <p className="object-description">{node.description}</p>}
+
+      {orphanedRefs.length > 0 && (
+        <div className="orphaned-ref-warning">
+          <strong>
+            {orphanedRefs.length} orphaned reference{orphanedRefs.length === 1 ? '' : 's'}
+          </strong>{' '}
+          - this object&apos;s DDL refers to something that doesn&apos;t resolve in the current catalog&apos;s scope,
+          usually a renamed or dropped target:
+          <ul className="orphaned-ref-list">
+            {orphanedRefs.map((ref, i) => (
+              <li key={`${ref.schema ?? ''}|${ref.name}|${i}`}>{ref.schema ? `${ref.schema}.${ref.name}` : ref.name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {node.columns.length > 0 && (
         <>
@@ -143,28 +169,68 @@ export default function ObjectPage() {
 
       {node.history.length > 0 && (
         <>
-          <h2>Change history</h2>
+          <div className="lineage-graph-header">
+            <h2>Change history</h2>
+            <button
+              type="button"
+              className="lineage-share-btn"
+              onClick={() => {
+                setCompareMode((v) => !v)
+                setDiffPicks([])
+                setViewingVersion(null)
+              }}
+            >
+              {compareMode ? 'Cancel comparison' : 'Compare two revisions'}
+            </button>
+          </div>
           <p className="muted overview-panel-hint">
-            {node.changeCount} change{node.changeCount === 1 ? '' : 's'} in the mined commit window. Click a revision to
-            view its definition as of that commit.
+            {compareMode
+              ? 'Pick two revisions (including "Current") to see a side-by-side diff.'
+              : `${node.changeCount} change${node.changeCount === 1 ? '' : 's'} in the mined commit window. Click a revision to view its definition as of that commit.`}
           </p>
           <ul className="history-list">
-            {node.history.map((version) => (
-              <li key={version.sha}>
-                <button
-                  type="button"
-                  className={viewingVersion?.sha === version.sha ? 'history-entry active' : 'history-entry'}
-                  onClick={() => setViewingVersion(version)}
-                  disabled={!version.ddl}
-                  title={version.ddl ? 'View this revision' : 'Content not available for this revision'}
-                >
-                  <span className="history-date">{new Date(version.date).toLocaleDateString()}</span>
-                  <span className="history-message">{version.message}</span>
-                  <span className="history-sha">{version.sha.slice(0, 7)}</span>
-                </button>
-              </li>
-            ))}
+            {[{ sha: CURRENT_SHA, date: new Date().toISOString(), message: 'Current definition', ddl: node.ddl }, ...node.history].map(
+              (version) => {
+                const available = Boolean(version.ddl)
+                const picked = diffPicks.includes(version.sha)
+                return (
+                  <li key={version.sha}>
+                    <button
+                      type="button"
+                      className={
+                        (compareMode ? picked : viewingVersion?.sha === version.sha) ? 'history-entry active' : 'history-entry'
+                      }
+                      onClick={() => {
+                        if (compareMode) {
+                          if (!available) return
+                          setDiffPicks((prev) => {
+                            if (prev.includes(version.sha)) return prev.filter((s) => s !== version.sha)
+                            if (prev.length >= 2) return [prev[1], version.sha]
+                            return [...prev, version.sha]
+                          })
+                        } else {
+                          setViewingVersion(version.sha === CURRENT_SHA ? null : version)
+                        }
+                      }}
+                      disabled={!available}
+                      title={available ? (compareMode ? 'Select for comparison' : 'View this revision') : 'Content not available for this revision'}
+                    >
+                      {compareMode && <span className="history-entry-check">{picked ? '✓' : ''}</span>}
+                      <span className="history-date">
+                        {version.sha === CURRENT_SHA ? '' : new Date(version.date).toLocaleDateString()}
+                      </span>
+                      <span className="history-message">{version.message}</span>
+                      <span className="history-sha">{version.sha === CURRENT_SHA ? '' : version.sha.slice(0, 7)}</span>
+                    </button>
+                  </li>
+                )
+              },
+            )}
           </ul>
+
+          {compareMode && diffPicks.length === 2 && (
+            <DiffCompare node={node} shas={diffPicks} />
+          )}
         </>
       )}
 
@@ -194,6 +260,37 @@ export default function ObjectPage() {
         </>
       )}
     </div>
+  )
+}
+
+function resolveDiffPick(node: CatalogNode, sha: string): { date: string; label: string; ddl: string | null } {
+  if (sha === CURRENT_SHA) {
+    return { date: new Date().toISOString(), label: 'Current definition', ddl: node.ddl }
+  }
+  const version = node.history.find((v) => v.sha === sha)
+  return {
+    date: version?.date ?? '',
+    label: version ? `${new Date(version.date).toLocaleDateString()} (${version.sha.slice(0, 7)}) - ${version.message}` : sha,
+    ddl: version?.ddl ?? null,
+  }
+}
+
+/** Orders the two picked revisions old-to-new regardless of click order, then renders the diff between them. */
+function DiffCompare({ node, shas }: { node: CatalogNode; shas: string[] }) {
+  const [shaA, shaB] = shas
+  const a = resolveDiffPick(node, shaA)
+  const b = resolveDiffPick(node, shaB)
+  const [older, newer] = a.date <= b.date ? [a, b] : [b, a]
+
+  if (older.ddl === null || newer.ddl === null) {
+    return <p className="muted">Content not available for one of the selected revisions.</p>
+  }
+
+  return (
+    <>
+      <h3>Diff</h3>
+      <DiffView oldText={older.ddl} newText={newer.ddl} oldLabel={older.label} newLabel={newer.label} />
+    </>
   )
 }
 

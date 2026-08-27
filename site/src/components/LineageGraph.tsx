@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge } from '@xyflow/react'
+import { ReactFlow, Background, Controls, MiniMap, Panel, useReactFlow, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useNavigate } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import { useTheme } from '../lib/ThemeContext'
 import { layoutGraph } from '../lib/layout'
 import { colorForType } from '../lib/typeColors'
+import { buildLineageGraphSvg, downloadPng, downloadSvg } from '../lib/graphExport'
 
 interface EdgeColumnData extends Record<string, unknown> {
   from: string
@@ -117,6 +118,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         <Background />
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable maskColor={theme === 'dark' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.75)'} />
+        <ExportControls />
       </ReactFlow>
 
       {selectedData && selectedData.columns.length > 0 && (
@@ -140,5 +142,41 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         </div>
       )}
     </div>
+  )
+}
+
+function timestampForFilename(): string {
+  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+}
+
+/**
+ * Export-as-image toolbar for the current graph view, for incident write-ups
+ * or design docs referencing a specific dependency chain. Reads live
+ * measured node dimensions via useReactFlow() rather than the pre-render
+ * `nodes`/`edges` this component computed, so the export matches what's
+ * actually on screen.
+ */
+function ExportControls() {
+  const { getNodes, getEdges } = useReactFlow()
+
+  function handleExport(format: 'svg' | 'png') {
+    const svg = buildLineageGraphSvg(getNodes(), getEdges())
+    const stamp = timestampForFilename()
+    if (format === 'svg') {
+      downloadSvg(svg, `syncsql-lineage-${stamp}.svg`)
+    } else {
+      downloadPng(svg, `syncsql-lineage-${stamp}.png`)
+    }
+  }
+
+  return (
+    <Panel position="top-right" className="lineage-export-panel">
+      <button type="button" className="lineage-export-btn" onClick={() => handleExport('svg')}>
+        Export SVG
+      </button>
+      <button type="button" className="lineage-export-btn" onClick={() => handleExport('png')}>
+        Export PNG
+      </button>
+    </Panel>
   )
 }

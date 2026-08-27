@@ -1,4 +1,4 @@
-import type { Catalog, CatalogNode } from '../types'
+import type { Catalog, CatalogNode, CatalogOrphanedReference } from '../types'
 
 export interface CatalogIndex {
   catalog: Catalog
@@ -8,6 +8,8 @@ export interface CatalogIndex {
   /** "from|to" -> the target's columns detected as referenced by the source (see CatalogEdge.columns). */
   edgeColumns: Map<string, string[]>
   tree: TreeServer[]
+  /** Node id -> orphaned references found in that node's own DDL. */
+  orphanedByFrom: Map<string, CatalogOrphanedReference[]>
 }
 
 export interface TreeServer {
@@ -62,7 +64,13 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
 
   const tree = buildTree(catalog.nodes)
 
-  return { catalog, byId, outgoing, incoming, edgeColumns, tree }
+  const orphanedByFrom = new Map<string, CatalogOrphanedReference[]>()
+  for (const ref of catalog.orphanedReferences ?? []) {
+    if (!orphanedByFrom.has(ref.from)) orphanedByFrom.set(ref.from, [])
+    orphanedByFrom.get(ref.from)!.push(ref)
+  }
+
+  return { catalog, byId, outgoing, incoming, edgeColumns, tree, orphanedByFrom }
 }
 
 function buildTree(nodes: CatalogNode[]): TreeServer[] {

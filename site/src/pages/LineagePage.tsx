@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import LineageGraph from '../components/LineageGraph'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
+import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import { getNeighborhoodIds } from '../lib/neighborhood'
 import { findObjectsForGrantee, getSuggestedGrantees } from '../lib/grants'
+import { filterByContent } from '../lib/contentSearch'
 import { useDebouncedValue } from '../lib/useDebouncedValue'
-import type { FilterToken } from '../lib/filters'
+import { decodeTokensFromUrl, encodeTokensForUrl, type FilterToken } from '../lib/filters'
 
 const GRAPH_CAP = 300
 const HOP_OPTIONS = [1, 2, 3] as const
@@ -18,19 +20,29 @@ export default function LineagePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialFocus = searchParams.get('focus') ?? undefined
   const initialGrantee = searchParams.get('grantee') ?? ''
+  const initialFilterParam = searchParams.get('filter')
+  const initialHops = Number(searchParams.get('hops') ?? '1')
   const [mode, setMode] = useState<Mode>(searchParams.get('tab') === 'access' || initialGrantee ? 'access' : 'browse')
+  const [copied, setCopied] = useState(false)
 
-  // Browse-mode state. Arriving with ?focus=<id> (from an object page's
-  // "Open in full lineage explorer" link) both focuses that object AND
-  // seeds a real filter token for it, so clearing focus lands on "just this
-  // object" rather than dumping back out to the whole unfiltered catalog.
+  // Browse-mode state. A ?filter=<encoded tokens> param (from a copied
+  // shareable link - see the URL-sync effect below) takes precedence.
+  // Otherwise, arriving with just ?focus=<id> (from an object page's "Open
+  // in full lineage explorer" link) both focuses that object AND seeds a
+  // real filter token for it, so clearing focus lands on "just this object"
+  // rather than dumping back out to the whole unfiltered catalog.
   const [tokens, setTokens] = useState<FilterToken[]>(() => {
+    if (initialFilterParam) return decodeTokensFromUrl(initialFilterParam)
     if (!initialFocus) return []
     const node = index?.byId.get(initialFocus)
     return node ? [{ id: 'seed-focus', attribute: 'name', operator: 'is', values: [node.qualifiedName] }] : []
   })
   const [focusStack, setFocusStack] = useState<string[]>(initialFocus ? [initialFocus] : [])
-  const [hops, setHops] = useState<(typeof HOP_OPTIONS)[number]>(1)
+  const [hops, setHops] = useState<(typeof HOP_OPTIONS)[number]>(
+    (HOP_OPTIONS as readonly number[]).includes(initialHops) ? (initialHops as (typeof HOP_OPTIONS)[number]) : 1,
+  )
+  const [contentQuery, setContentQuery] = useState(searchParams.get('q') ?? '')
+  const debouncedContentQuery = useDebouncedValue(contentQuery, 150)
 
   // Access-mode state (merged from the standalone Access page - "what can
   // this grantee touch", now visualized in the same lineage graph).
@@ -40,7 +52,8 @@ export default function LineagePage() {
   const debouncedGrantee = useDebouncedValue(granteeQuery, 120)
 
   const allNodes = index?.catalog.nodes ?? []
-  const filtered = useFilteredNodes(allNodes, tokens)
+  const attrFiltered = useFilteredNodes(allNodes, tokens)
+  const filtered = useMemo(() => filterByContent(attrFiltered, debouncedContentQuery), [attrFiltered, debouncedContentQuery])
   const currentFocus = focusStack[focusStack.length - 1]
 
   const neighborhoodIds = useMemo(() => {
@@ -60,6 +73,32 @@ export default function LineagePage() {
 
   const baseIds = mode === 'access' ? grantMatches.map((m) => m.node.id) : filtered.map((n) => n.id)
   const nodeIds = currentFocus ? neighborhoodIds : baseIds
+
+  // Keeps the URL a live, shareable snapshot of the current Browse-mode
+  // view (filter tokens, drill-down focus, hop radius, content search) -
+  // copying the address bar reproduces this exact filtered graph for
+  // incident write-ups or design docs. Access mode manages its own params
+  // (tab/grantee) directly where it changes them.
+  useEffect(() => {
+    if (mode !== 'browse') return
+    const params: Record<string, string> = {}
+    if (tokens.length > 0) params.filter = encodeTokensForUrl(tokens)
+    if (currentFocus) params.focus = currentFocus
+    if (hops !== 1) params.hops = String(hops)
+    if (debouncedContentQuery.trim()) params.q = debouncedContentQuery
+    setSearchParams(params, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, tokens, currentFocus, hops, debouncedContentQuery])
+
+  function copyShareableLink() {
+    navigator.clipboard
+      .writeText(window.location.href)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => {})
+  }
 
   if (!index) return null
 
@@ -89,7 +128,12 @@ export default function LineagePage() {
 
   return (
     <div className="page page--wide">
-      <h1>Lineage explorer</h1>
+      <div className="lineage-header-row">
+        <h1>Lineage explorer</h1>
+        <button type="button" className="lineage-share-btn" onClick={copyShareableLink}>
+          {copied ? 'Copied!' : 'Copy link'}
+        </button>
+      </div>
 
       <div className="lineage-mode-tabs">
         <button type="button" className={mode === 'browse' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('browse')}>
@@ -101,15 +145,24 @@ export default function LineagePage() {
       </div>
 
       {mode === 'browse' ? (
-        <FilterBar
-          nodes={allNodes}
-          tokens={tokens}
-          onChange={(next) => {
-            setTokens(next)
-            setFocusStack([])
-          }}
-          placeholder="Filter the graph... (server, database, schema, type, name)"
-        />
+        <>
+          <FilterBar
+            nodes={allNodes}
+            tokens={tokens}
+            onChange={(next) => {
+              setTokens(next)
+              setFocusStack([])
+            }}
+            placeholder="Filter the graph... (server, database, schema, type, name)"
+          />
+          <ContentSearchBar
+            value={contentQuery}
+            onChange={(v) => {
+              setContentQuery(v)
+              setFocusStack([])
+            }}
+          />
+        </>
       ) : (
         <>
           <p className="muted" style={{ margin: '0.5rem 0' }}>

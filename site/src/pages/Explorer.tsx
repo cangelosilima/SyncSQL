@@ -2,7 +2,10 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
+import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
+import { filterByContent } from '../lib/contentSearch'
+import { useDebouncedValue } from '../lib/useDebouncedValue'
 import type { CatalogNode } from '../types'
 import type { FilterToken } from '../lib/filters'
 
@@ -13,11 +16,14 @@ const ROW_CAP = 500
 export default function Explorer() {
   const { index } = useCatalog()
   const [tokens, setTokens] = useState<FilterToken[]>([])
+  const [contentQuery, setContentQuery] = useState('')
+  const debouncedContentQuery = useDebouncedValue(contentQuery, 150)
   const [sortKey, setSortKey] = useState<SortKey>('qualifiedName')
   const [sortDir, setSortDir] = useState<1 | -1>(1)
 
   const nodes = index?.catalog.nodes ?? []
-  const filtered = useFilteredNodes(nodes, tokens)
+  const attrFiltered = useFilteredNodes(nodes, tokens)
+  const filtered = useMemo(() => filterByContent(attrFiltered, debouncedContentQuery), [attrFiltered, debouncedContentQuery])
 
   const sorted = useMemo(() => {
     const copy = [...filtered]
@@ -48,9 +54,11 @@ export default function Explorer() {
     <div className="page page--wide">
       <h1>Explorer</h1>
       <p className="muted">
-        {filtered.length} of {nodes.length} object(s) match{tokens.length > 0 ? ' the current filter' : ''}.
+        {filtered.length} of {nodes.length} object(s) match
+        {tokens.length > 0 || debouncedContentQuery.trim() ? ' the current filter' : ''}.
       </p>
       <FilterBar nodes={nodes} tokens={tokens} onChange={setTokens} placeholder="Filter objects... (server, database, schema, type, name, description)" />
+      <ContentSearchBar value={contentQuery} onChange={setContentQuery} matchCount={debouncedContentQuery.trim() ? filtered.length : undefined} />
 
       {sorted.length > ROW_CAP && (
         <p className="lineage-warning" style={{ marginTop: '0.75rem' }}>

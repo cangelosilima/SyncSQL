@@ -280,6 +280,11 @@ a {
   white-space: nowrap;
 }
 
+.ranked-list-meta--wrap {
+  white-space: normal;
+  text-align: right;
+}
+
 .heatmap-swatch {
   width: 0.9rem;
   height: 0.9rem;
@@ -295,6 +300,24 @@ a {
   background: var(--surface);
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+.orphaned-ref-warning {
+  margin: 0.75rem 0 1.25rem;
+  padding: 0.6rem 0.9rem;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 0.85rem;
+}
+
+.orphaned-ref-list {
+  margin: 0.3rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.orphaned-ref-list li {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
 }
 
 .code-block {
@@ -379,6 +402,29 @@ a {
   font-size: 0.85rem;
 }
 
+.lineage-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.lineage-share-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.7rem;
+  white-space: nowrap;
+}
+
+.lineage-share-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .lineage-graph-header {
   display: flex;
   justify-content: space-between;
@@ -444,6 +490,27 @@ a {
 }
 
 .lineage-edge-panel-close:hover {
+  color: var(--accent);
+}
+
+.lineage-export-panel {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.lineage-export-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.55rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.lineage-export-btn:hover {
+  border-color: var(--accent);
   color: var(--accent);
 }
 
@@ -928,6 +995,53 @@ a {
   color: var(--accent);
 }
 
+/* DDL content search (search-as-you-type over object bodies) */
+
+.content-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 2px;
+  padding: 0.4rem 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.content-search-input {
+  flex: 1;
+  min-width: 160px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 0.2rem;
+}
+
+.content-search-input:focus {
+  outline: none;
+}
+
+.content-search-count {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.content-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.content-search-clear:hover {
+  color: var(--accent);
+}
+
 /* Explorer */
 
 .explorer-table-wrap {
@@ -1065,6 +1179,90 @@ a {
 .history-sha {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--text-muted);
+}
+
+.history-entry-check {
+  width: 1.1em;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Side-by-side DDL revision diff */
+
+.diff-view {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0.5rem 0 1.5rem;
+  font-size: 0.8rem;
+}
+
+.diff-view-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.diff-view-col-label {
+  padding: 0.4rem 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-view-col-label--old {
+  border-right: 1px solid var(--border);
+}
+
+.diff-view-body {
+  max-height: 480px;
+  overflow: auto;
+  background: var(--surface);
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.diff-cell {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.diff-cell--old {
+  border-right: 1px solid var(--border);
+}
+
+.diff-cell--del {
+  background: color-mix(in srgb, #ef4444 16%, transparent);
+}
+
+.diff-cell--ins {
+  background: color-mix(in srgb, #10b981 16%, transparent);
+}
+
+.diff-cell--blank {
+  background: var(--surface-alt);
+}
+
+.diff-line-no {
+  flex-shrink: 0;
+  width: 2.5rem;
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.diff-line-text {
+  flex: 1;
 }
 
 /* Global history / commit timeline */

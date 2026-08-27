@@ -122,3 +122,21 @@ export function newTokenId(): string {
   tokenSeq += 1
   return `tok-${Date.now()}-${tokenSeq}`
 }
+
+/** Compact JSON encoding of filter tokens for a shareable URL query param - drops the ephemeral `id`. */
+export function encodeTokensForUrl(tokens: FilterToken[]): string {
+  return JSON.stringify(tokens.map((t) => [t.attribute, t.operator, t.values]))
+}
+
+export function decodeTokensFromUrl(raw: string | null): FilterToken[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as [FilterAttribute | null, FilterOperator, string[]][]
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((entry): entry is [FilterAttribute | null, FilterOperator, string[]] => Array.isArray(entry) && entry.length === 3)
+      .map(([attribute, operator, values]) => ({ id: newTokenId(), attribute, operator, values }))
+  } catch {
+    return []
+  }
+}
