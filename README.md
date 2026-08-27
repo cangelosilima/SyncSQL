@@ -20,14 +20,29 @@ tables, a change-frequency heatmap, and objects that tend to change together.
 
 ![Overview page](docs/screenshots/overview.png)
 
+**Metrics anomalies & orphaned references** — further down the Overview page:
+tables whose latest metrics snapshot swung sharply (a row-count jump or an
+index fragmentation spike), and references that don't resolve to anything in
+the catalog's scope, usually a renamed or dropped target.
+
+![Overview metrics anomalies and orphaned references panels](docs/screenshots/overview-anomalies.png)
+
 **Explorer** — a sortable, filterable table of every extracted object, with a
 GitLab-style filter bar (attribute, operator, value).
 
 ![Explorer page](docs/screenshots/explorer.png)
 
+**DDL content search** — a separate search-as-you-type box live-filters
+across every object's full DDL body, not just its metadata — e.g. "which
+procs reference this column".
+
+![Explorer DDL content search](docs/screenshots/explorer-search.png)
+
 **Lineage graph** — an interactive dependency graph with drill-down, built
 from a real SQL parser per engine, not text matching. Edges carrying a known
-column reference are highlighted and labeled.
+column reference are highlighted and labeled. The current filter/focus/hop
+state stays live in the URL (**Copy link** for a shareable view), and
+**Export SVG**/**Export PNG** render the visible graph to a standalone image.
 
 ![Lineage graph](docs/screenshots/lineage.png)
 
@@ -35,6 +50,16 @@ column reference are highlighted and labeled.
 indexes, and a metrics panel of volume/index/optimizer-statistics trends.
 
 ![Object detail page](docs/screenshots/object-detail.png)
+
+**Orphaned reference warning** — flagged directly on the referencing
+object's own page, in addition to the Overview panel above.
+
+![Object detail orphaned reference warning](docs/screenshots/object-orphaned.png)
+
+**Side-by-side revision diff** — compare mode in the change-history list
+picks any two revisions (including the current definition) for a diff.
+
+![Object detail side-by-side diff](docs/screenshots/object-diff.png)
 
 **Light and dark themes** — a toggle in the top right, persisted per browser.
 
