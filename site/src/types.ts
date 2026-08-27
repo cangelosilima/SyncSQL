@@ -108,6 +108,20 @@ export interface CoChangePair {
   count: number
 }
 
+/**
+ * A reference in `from`'s DDL that couldn't be resolved to anything in the
+ * current catalog's scope (same server+database, or bare on the same
+ * server) - almost always a real bug (renamed/dropped target), occasionally
+ * a false positive (dynamic SQL, a genuinely external object). See
+ * README's "Orphaned reference detection".
+ */
+export interface CatalogOrphanedReference {
+  /** Node id of the object whose DDL contains the unresolved reference. */
+  from: string
+  schema: string | null
+  name: string
+}
+
 export interface Catalog {
   generatedAt: string
   servers: string[]
@@ -116,4 +130,6 @@ export interface Catalog {
   edges: CatalogEdge[]
   recentChanges: CatalogCommit[]
   coChangePairs: CoChangePair[]
+  /** Absent on catalogs built before this field existed - treat as empty. */
+  orphanedReferences?: CatalogOrphanedReference[]
 }

@@ -168,30 +168,46 @@ see "Theme" below):
 - **Overview** — object counts, the 10 most recently changed objects, the
   most-referenced tables (direct incoming edges and indirect/transitive
   reachability, capped to one hop across a linked-server boundary), a
-  change-frequency heatmap, and objects that tend to change together in
-  the same commit.
+  change-frequency heatmap, objects that tend to change together in the same
+  commit, a **metrics anomalies** panel flagging tables whose latest metrics
+  snapshot swung sharply versus the previous one (a row-count jump/drop or
+  an index fragmentation spike — see "Volatile metrics" below), and an
+  **orphaned references** panel (see "Orphaned reference detection" below).
 - **Explorer** — a sortable, filterable table listing every object; it's the
   primary way to browse the catalog (there is no separate tree sidebar - see
-  "Explorer replaces the sidebar" below).
+  "Explorer replaces the sidebar" below). A separate DDL content search box
+  live-filters (search-as-you-type, debounced) across every object's full
+  DDL body plus its appended sections (Foreign Keys, Check Constraints,
+  Indexes, ...) — e.g. "which procs reference this column" — distinct from
+  the attribute filter bar above it, which only matches server/database/
+  schema/type/name/description.
 - **Object detail** — qualified name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
-  data types (Tables/Views), the DDL, structured panels for any Foreign Keys
+  data types (Tables/Views), an **orphaned reference** warning when this
+  object's own DDL refers to something unresolved (see "Orphaned reference
+  detection" below), the DDL, structured panels for any Foreign Keys
   / Check Constraints / Indexes sections, a **Metrics** panel of volume/
   index/optimizer-statistics trend graphs for tables (see "Volatile
   metrics" below), an **Access** panel (see "Grant mapping" below), a
-  change-history list with a point-in-time viewer, and "depends on" / "used
-  by" lineage lists annotated with column tags (expandable past the first
-  few) with an embedded neighborhood graph.
+  change-history list with a point-in-time viewer plus a **compare mode**
+  that picks any two revisions (including the current definition) for a
+  side-by-side diff, and "depends on" / "used by" lineage lists annotated
+  with column tags (expandable past the first few) with an embedded
+  neighborhood graph.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
   `@xyflow/react` + `dagre` auto-layout, with two modes (tabs):
-  - **Browse** — the object filter bar drives which objects are shown.
-    Clicking a node drills the graph into that object's own neighborhood in
-    place (breadcrumb trail, Back button, adjustable 1/2/3-hop radius)
-    rather than leaving the page; double-click opens that object's full
-    detail page. An object page's "Open in full lineage explorer" link
-    lands here with an actual filter token seeded for that object, so
-    clearing the drill-down focus narrows back to it instead of dumping out
-    to the whole catalog.
+  - **Browse** — the object filter bar and a DDL content search box (same
+    as Explorer's) together drive which objects are shown. Clicking a node
+    drills the graph into that object's own neighborhood in place
+    (breadcrumb trail, Back button, adjustable 1/2/3-hop radius) rather than
+    leaving the page; double-click opens that object's full detail page. An
+    object page's "Open in full lineage explorer" link lands here with an
+    actual filter token seeded for that object, so clearing the drill-down
+    focus narrows back to it instead of dumping out to the whole catalog.
+    The current filter tokens, drill-down focus, hop radius, and content
+    search are all kept live in the URL, so **Copy link** hands over an
+    exact, shareable snapshot of the current view — handy for incident
+    write-ups or design docs referencing a specific dependency chain.
   - **Access** — search by grantee (user, role or group) to see every
     object they have a GRANT or DENY permission on, down to the column when
     scoped that way (see "Grant mapping" below); matches are listed in a
@@ -201,7 +217,11 @@ see "Theme" below):
   Edges carrying a known column-level reference (see "Column dependency
   tracking" below) are highlighted, labeled with up to 3 referenced column
   names, and clickable — click one to open a detail panel with the full
-  column list for that edge.
+  column list for that edge. **Export SVG**/**Export PNG** render the
+  currently visible graph to a standalone image (built directly from node
+  positions rather than rasterizing the live page, so it renders correctly
+  outside the site and matches whichever theme is active) for dropping into
+  an incident write-up or design doc.
 - **History** — a global commit timeline of everything the pipeline has
   changed, expandable per commit.
 
@@ -211,7 +231,10 @@ description), pick an operator (is / is not / contains / is in / is not
 in), then pick from suggested values pulled from the catalog. Suggestion
 lookups are capped and debounced, and committed filters (not keystrokes)
 are what actually re-filter the object list, so it stays responsive on
-large catalogs.
+large catalogs. The DDL content search box next to it is separate and
+lighter-weight by design: it live-filters as you type (no attribute/operator
+to pick, no commit step) since it's meant for a quick "does this term appear
+in any object's body" pass rather than a precise structured filter.
 
 **Lineage inference uses a real parser for each engine, not text
 matching.** `syncsql` tags every extracted object with the engine that
@@ -390,7 +413,9 @@ references in noise from otherwise-benign naming collisions.
 
 `syncsql catalog build` writes these to `catalog.json`'s
 `orphanedReferences` array (`from`/`schema`/`name`) and logs a summary
-count as a warning.
+count as a warning. The site surfaces them in two places: an Overview panel
+listing every orphaned reference across the catalog, and a warning banner on
+the referencing object's own detail page.
 
 ### History, heatmap and point-in-time
 

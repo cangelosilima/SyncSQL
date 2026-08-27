@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
 import { getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
+import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
 
 export default function Home() {
@@ -18,6 +19,8 @@ export default function Home() {
   const mostChanged = getMostChanged(index, 10)
   const coChanges = getCoChangePairs(index, 10)
   const maxChangeCount = mostChanged[0]?.value ?? 0
+  const orphanedReferences = catalog.orphanedReferences ?? []
+  const metricAnomalies = detectMetricAnomalies(catalog.nodes, 10)
 
   return (
     <div className="page">
@@ -112,6 +115,55 @@ export default function Home() {
                 </li>
               ))}
             </ol>
+          )}
+        </section>
+
+        <section className="overview-panel">
+          <h2>Metrics anomalies</h2>
+          <p className="muted overview-panel-hint">
+            Tables whose latest metrics snapshot swung sharply versus the previous one - a row-count jump/drop or an
+            index fragmentation spike - flagged for a look, not a certified alert.
+          </p>
+          {metricAnomalies.length === 0 ? (
+            <p className="muted">No anomalies in the latest metrics snapshots.</p>
+          ) : (
+            <ol className="ranked-list">
+              {metricAnomalies.map((a, i) => (
+                <li key={`${a.node.id}|${a.kind}|${i}`}>
+                  <Link to={`/object/${a.node.id}`}>{a.node.qualifiedName}</Link>
+                  <span className="ranked-list-meta ranked-list-meta--wrap">{a.message}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        <section className="overview-panel">
+          <h2>Orphaned references</h2>
+          <p className="muted overview-panel-hint">
+            References that don&apos;t resolve to anything in the catalog&apos;s scope - usually a renamed or dropped
+            target the caller was never updated for.
+          </p>
+          {orphanedReferences.length === 0 ? (
+            <p className="muted">No orphaned references detected.</p>
+          ) : (
+            <ol className="ranked-list">
+              {orphanedReferences.slice(0, 10).map((ref, i) => {
+                const fromNode = index.byId.get(ref.from)
+                const target = ref.schema ? `${ref.schema}.${ref.name}` : ref.name
+                return (
+                  <li key={`${ref.from}|${ref.schema ?? ''}|${ref.name}|${i}`}>
+                    {fromNode ? <Link to={`/object/${fromNode.id}`}>{fromNode.qualifiedName}</Link> : ref.from}
+                    <span className="ranked-list-meta">&rarr; {target}</span>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+          {orphanedReferences.length > 10 && (
+            <p className="muted overview-panel-hint">
+              +{orphanedReferences.length - 10} more not shown.
+            </p>
           )}
         </section>
       </div>
