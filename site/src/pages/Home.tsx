@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
-import { getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
+import ChangeActivityHeatmap from '../components/ChangeActivityHeatmap'
+import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
 
@@ -21,27 +22,132 @@ export default function Home() {
   const maxChangeCount = mostChanged[0]?.value ?? 0
   const orphanedReferences = catalog.orphanedReferences ?? []
   const metricAnomalies = detectMetricAnomalies(catalog.nodes, 10)
+  const lastChangedNode = recentlyChanged[0]?.node
+  const typeCounts = Object.entries(catalog.typeCounts).sort(([, a], [, b]) => b - a)
+  const maxTypeCount = typeCounts[0]?.[1] ?? 0
 
   return (
     <div className="page">
-      <h1>SyncSQL Catalog</h1>
-      <p className="muted">
-        Generated {new Date(catalog.generatedAt).toLocaleString()} from {totalServers} server(s), {totalDatabases}{' '}
-        database(s), {totalObjects} object(s).
-      </p>
-
-      <div className="stat-cards">
-        {Object.entries(catalog.typeCounts)
-          .sort(([, a], [, b]) => b - a)
-          .map(([type, count]) => (
-            <div key={type} className="stat-card">
-              <TypeBadge type={type} />
-              <div className="stat-card-count">{count}</div>
-            </div>
-          ))}
+      <h1>Overview</h1>
+      <div className="sync-line">
+        <span className="sync-line-badge">
+          <span className="status-dot" /> Synced
+        </span>
+        <span>
+          Last sync: {new Date(catalog.generatedAt).toLocaleString()} &middot; {totalServers} server(s) &middot;{' '}
+          {totalDatabases} database(s)
+        </span>
       </div>
 
+      <div className="quick-stats">
+        <div className="quick-stat">
+          <div className="quick-stat-label">Total objects</div>
+          <div className="quick-stat-value">{totalObjects}</div>
+          <div className="quick-stat-sub">across {totalDatabases} database(s)</div>
+        </div>
+        <div className="quick-stat">
+          <div className="quick-stat-label">Commits mined</div>
+          <div className="quick-stat-value">{catalog.recentChanges.length}</div>
+          <div className="quick-stat-sub">in the mined commit window</div>
+        </div>
+        <div className="quick-stat">
+          <div className="quick-stat-label">Lineage edges</div>
+          <div className="quick-stat-value">{catalog.edges.length}</div>
+          <div className="quick-stat-sub">resolved references</div>
+        </div>
+        <div className="quick-stat">
+          <div className="quick-stat-label">Last change</div>
+          <div className="quick-stat-value">{lastChangedNode ? formatRelative(lastChangedNode.lastChangedAt!) : '-'}</div>
+          <div className="quick-stat-sub">{lastChangedNode ? lastChangedNode.qualifiedName : 'no history mined'}</div>
+        </div>
+      </div>
+
+      <h2 className="section-label">
+        Metric anomalies{metricAnomalies.length > 0 ? ` - ${metricAnomalies.length} detected` : ''}
+      </h2>
+      {metricAnomalies.length === 0 ? (
+        <p className="muted">No anomalies in the latest metrics snapshots.</p>
+      ) : (
+        <div className="alert-cards">
+          {metricAnomalies.map((a, i) => (
+            <div key={`${a.node.id}|${a.kind}|${i}`} className="alert-card">
+              <span className="alert-card-icon">!</span>
+              <div className="alert-card-body">
+                <div className="alert-card-title">
+                  <Link to={`/object/${a.node.id}`}>{a.node.qualifiedName}</Link>
+                  <TypeBadge type={a.node.type} />
+                </div>
+                <div className="alert-card-detail">{a.message}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h2 className="section-label">
+        Orphaned references{orphanedReferences.length > 0 ? ` - ${orphanedReferences.length} detected` : ''}
+      </h2>
+      <p className="muted overview-panel-hint">
+        References that don&apos;t resolve to anything in the catalog&apos;s scope - usually a renamed or dropped
+        target the caller was never updated for.
+      </p>
+      {orphanedReferences.length === 0 ? (
+        <p className="muted">No orphaned references detected.</p>
+      ) : (
+        <div className="alert-cards">
+          {orphanedReferences.slice(0, 10).map((ref, i) => {
+            const fromNode = index.byId.get(ref.from)
+            const target = ref.schema ? `${ref.schema}.${ref.name}` : ref.name
+            return (
+              <div key={`${ref.from}|${ref.schema ?? ''}|${ref.name}|${i}`} className="alert-card">
+                <span className="alert-card-icon">!</span>
+                <div className="alert-card-body">
+                  <div className="alert-card-title">
+                    {fromNode ? <Link to={`/object/${fromNode.id}`}>{fromNode.qualifiedName}</Link> : ref.from}
+                  </div>
+                  <div className="alert-card-detail">references {target}</div>
+                </div>
+              </div>
+            )
+          })}
+          {orphanedReferences.length > 10 && (
+            <p className="muted overview-panel-hint">+{orphanedReferences.length - 10} more not shown.</p>
+          )}
+        </div>
+      )}
+
       <div className="overview-grid">
+        <section className="overview-panel">
+          <h2>Object breakdown</h2>
+          <ul className="type-bar-list">
+            {typeCounts.map(([type, count]) => (
+              <li key={type} className="type-bar-row">
+                <TypeBadge type={type} />
+                <span className="type-bar-track">
+                  <span
+                    className="type-bar-fill"
+                    style={{
+                      width: `${Math.round(intensity(count, maxTypeCount) * 100)}%`,
+                      background: colorForType(type),
+                    }}
+                  />
+                </span>
+                <span className="type-bar-count">{count}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="overview-panel">
+          <h2>Change activity</h2>
+          <p className="muted overview-panel-hint">Commits touching tracked objects, by day, across the mined history.</p>
+          {catalog.recentChanges.length === 0 ? (
+            <p className="muted">No change history mined for this run (analyze-catalog ran without -RepoRoot).</p>
+          ) : (
+            <ChangeActivityHeatmap commits={catalog.recentChanges} />
+          )}
+        </section>
+
         <section className="overview-panel">
           <h2>Latest changes</h2>
           {recentlyChanged.length === 0 ? (
@@ -79,7 +185,7 @@ export default function Home() {
         </section>
 
         <section className="overview-panel">
-          <h2>Change heatmap</h2>
+          <h2>Most changed objects</h2>
           <p className="muted overview-panel-hint">Objects changed most often across the mined commit history.</p>
           {mostChanged.length === 0 ? (
             <p className="muted">No change history mined for this run.</p>
@@ -115,55 +221,6 @@ export default function Home() {
                 </li>
               ))}
             </ol>
-          )}
-        </section>
-
-        <section className="overview-panel">
-          <h2>Metrics anomalies</h2>
-          <p className="muted overview-panel-hint">
-            Tables whose latest metrics snapshot swung sharply versus the previous one - a row-count jump/drop or an
-            index fragmentation spike - flagged for a look, not a certified alert.
-          </p>
-          {metricAnomalies.length === 0 ? (
-            <p className="muted">No anomalies in the latest metrics snapshots.</p>
-          ) : (
-            <ol className="ranked-list">
-              {metricAnomalies.map((a, i) => (
-                <li key={`${a.node.id}|${a.kind}|${i}`}>
-                  <Link to={`/object/${a.node.id}`}>{a.node.qualifiedName}</Link>
-                  <span className="ranked-list-meta ranked-list-meta--wrap">{a.message}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-
-        <section className="overview-panel">
-          <h2>Orphaned references</h2>
-          <p className="muted overview-panel-hint">
-            References that don&apos;t resolve to anything in the catalog&apos;s scope - usually a renamed or dropped
-            target the caller was never updated for.
-          </p>
-          {orphanedReferences.length === 0 ? (
-            <p className="muted">No orphaned references detected.</p>
-          ) : (
-            <ol className="ranked-list">
-              {orphanedReferences.slice(0, 10).map((ref, i) => {
-                const fromNode = index.byId.get(ref.from)
-                const target = ref.schema ? `${ref.schema}.${ref.name}` : ref.name
-                return (
-                  <li key={`${ref.from}|${ref.schema ?? ''}|${ref.name}|${i}`}>
-                    {fromNode ? <Link to={`/object/${fromNode.id}`}>{fromNode.qualifiedName}</Link> : ref.from}
-                    <span className="ranked-list-meta">&rarr; {target}</span>
-                  </li>
-                )
-              })}
-            </ol>
-          )}
-          {orphanedReferences.length > 10 && (
-            <p className="muted overview-panel-hint">
-              +{orphanedReferences.length - 10} more not shown.
-            </p>
           )}
         </section>
       </div>

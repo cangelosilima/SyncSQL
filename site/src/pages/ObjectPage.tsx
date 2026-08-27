@@ -52,13 +52,42 @@ export default function ObjectPage() {
   return (
     <div className="page">
       <p className="breadcrumb">
-        {node.server} / {node.database}
-        {node.schema ? ` / ${node.schema}` : ''}
+        <Link to="/explorer">Explorer</Link> / {node.qualifiedName}
       </p>
       <h1>
         {node.qualifiedName} <TypeBadge type={node.type} />
       </h1>
+      <p className="breadcrumb">
+        {node.server} &rarr; {node.database}
+        {node.schema ? ` → ${node.schema}` : ''}
+      </p>
       {node.description && <p className="object-description">{node.description}</p>}
+
+      <div className="object-quick-facts">
+        {node.lastChangedAt && (
+          <div>
+            <span className="quick-stat-label">Modified</span>
+            <span>{new Date(node.lastChangedAt).toLocaleDateString()}</span>
+          </div>
+        )}
+        <div>
+          <span className="quick-stat-label">Deps</span>
+          <span>{outgoing.length}</span>
+        </div>
+        <div>
+          <span className="quick-stat-label">Used by</span>
+          <span>{incoming.length}</span>
+        </div>
+        {node.columns.length > 0 && (
+          <div>
+            <span className="quick-stat-label">Columns</span>
+            <span>{node.columns.length}</span>
+          </div>
+        )}
+        <Link className="lineage-share-btn" to={`/lineage?focus=${encodeURIComponent(node.id)}`}>
+          Open in Lineage &rarr;
+        </Link>
+      </div>
 
       {orphanedRefs.length > 0 && (
         <div className="orphaned-ref-warning">
