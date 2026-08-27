@@ -1,0 +1,45 @@
+# CI module that publishes the catalog site as GitLab Pages. Included from
+# the root .gitlab-ci.yml alongside the cli/extract/sync modules
+# (.gitlab/ci/cli.yml, .gitlab/ci/extract.yml, .gitlab/ci/sync.yml).
+#
+# Extends .sync_rules (defined in ../extract.yml) - GitLab's `extends`
+# keyword resolves against the fully-merged config, so this works across
+# included files (unlike plain YAML anchors/aliases, which don't).
+
+# Builds site/ (React/Vite) and publishes it as a GitLab Pages site. Reads
+# catalog.json straight out of the git checkout (sync-database-objects just
+# committed it there) rather than via a separate CI artifact. The "pages"
+# job name is what makes GitLab treat this as a Pages deployment; its
+# artifacts must be a directory named exactly "public" at the project root.
+pages:
+  extends: .sync_rules
+  stage: pages
+  image: node:20-alpine
+  dependencies:
+    - sync-database-objects
+  cache:
+    key:
+      files:
+        - site/package-lock.json
+    paths:
+      - site/node_modules/
+  before_script:
+    # sync-database-objects just pushed a new commit (with catalog.json in
+    # it); this job's own checkout was taken from the pipeline's original
+    # commit, so bring the branch tip back in first. PATH_PREFIX/GIT_BRANCH
+    # come from sync-database-objects's dotenv report above.
+    - command -v git >/dev/null || apk add --no-cache git
+    - git fetch origin "${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
+    - git reset --hard "origin/${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
+  script:
+    - mkdir -p site/public/data
+    - cp "${PATH_PREFIX:-objects}/catalog.json" site/public/data/catalog.json
+    - cd site
+    - npm ci
+    - npm run build
+    - cd ..
+    - rm -rf public
+    - mv site/dist public
+  artifacts:
+    paths:
+      - public

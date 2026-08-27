@@ -46,6 +46,8 @@
 #                  objects from the fleet (validate-config, extract-server).
 #   - sync.yml:    publishes the merged extraction output back into git
 #                  (sync-database-objects).
+#   - pages.yml:   builds and publishes the catalog site as GitLab Pages
+#                  (pages).
 # validate-config, extract-server, and sync-database-objects all run a
 # portable Linux image (mcr.microsoft.com/dotnet/sdk:10.0), installing the
 # syncsql tool from Nexus - no Windows runner needed. The CLI itself is
@@ -60,6 +62,7 @@ include:
   - local: '.gitlab/ci/cli.yml'
   - local: '.gitlab/ci/extract.yml'
   - local: '.gitlab/ci/sync.yml'
+  - local: '.gitlab/ci/pages.yml'
 
 stages:
   - cli-lint
@@ -90,41 +93,3 @@ variables:
   # nature, so it's tracked separately from each object's own version
   # history rather than bloating it.
   METRICS_HISTORY_LIMIT: "90"
-
-# Builds site/ (React/Vite) and publishes it as a GitLab Pages site. Reads
-# catalog.json straight out of the git checkout (sync-database-objects just
-# committed it there) rather than via a separate CI artifact. The "pages"
-# job name is what makes GitLab treat this as a Pages deployment; its
-# artifacts must be a directory named exactly "public" at the project root.
-pages:
-  extends: .sync_rules
-  stage: pages
-  image: node:20-alpine
-  dependencies:
-    - sync-database-objects
-  cache:
-    key:
-      files:
-        - site/package-lock.json
-    paths:
-      - site/node_modules/
-  before_script:
-    # sync-database-objects just pushed a new commit (with catalog.json in
-    # it); this job's own checkout was taken from the pipeline's original
-    # commit, so bring the branch tip back in first. PATH_PREFIX/GIT_BRANCH
-    # come from sync-database-objects's dotenv report above.
-    - command -v git >/dev/null || apk add --no-cache git
-    - git fetch origin "${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
-    - git reset --hard "origin/${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
-  script:
-    - mkdir -p site/public/data
-    - cp "${PATH_PREFIX:-objects}/catalog.json" site/public/data/catalog.json
-    - cd site
-    - npm ci
-    - npm run build
-    - cd ..
-    - rm -rf public
-    - mv site/dist public
-  artifacts:
-    paths:
-      - public

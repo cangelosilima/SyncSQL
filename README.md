@@ -189,7 +189,7 @@ mined for the heatmap / co-change / point-in-time features baked into
   commits everything together and pushes. Writes a `dotenv` report
   (`PATH_PREFIX`/`GIT_BRANCH`) so the `pages` job knows where to find
   `catalog.json` in the checkout.
-- **pages** (`pages`): fetches the branch tip (to see the commit
+- **pages** (`pages`, `.gitlab/ci/pages.yml`): fetches the branch tip (to see the commit
   sync-database-objects just pushed), builds `site/` (React/Vite) with
   the `catalog.json` it finds there, and publishes it as this project's
   GitLab Pages site.
