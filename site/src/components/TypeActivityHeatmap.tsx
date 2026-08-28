@@ -70,6 +70,7 @@ export default function TypeActivityHeatmap({
         return (
           <li key={type} className="type-heatmap-row">
             <TypeBadge type={type} />
+            <span className="type-heatmap-count">{total}</span>
             <span className="type-heatmap-cells">
               {row.map((count, i) => (
                 <span
@@ -80,7 +81,6 @@ export default function TypeActivityHeatmap({
                 />
               ))}
             </span>
-            <span className="type-heatmap-count">{total}</span>
           </li>
         )
       })}

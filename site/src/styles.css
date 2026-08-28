@@ -457,7 +457,7 @@ a {
 
 .type-heatmap-row {
   display: grid;
-  grid-template-columns: 7.5rem 1fr 2rem;
+  grid-template-columns: 7.5rem 2rem 1fr;
   align-items: center;
   gap: 0.6rem;
   padding: 0.28rem 0;
@@ -481,7 +481,7 @@ a {
 }
 
 .type-heatmap-count {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
