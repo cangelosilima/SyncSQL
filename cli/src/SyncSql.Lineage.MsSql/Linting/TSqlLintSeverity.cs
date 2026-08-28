@@ -1,4 +1,4 @@
-namespace SyncSql.Lineage.MsSql.Linting;
+﻿namespace SyncSql.Lineage.MsSql.Linting;
 
 public enum TSqlLintSeverity
 {

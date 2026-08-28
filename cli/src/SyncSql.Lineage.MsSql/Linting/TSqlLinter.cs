@@ -1,4 +1,4 @@
-using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SyncSql.Lineage.MsSql.Linting.Rules;
 
 namespace SyncSql.Lineage.MsSql.Linting;

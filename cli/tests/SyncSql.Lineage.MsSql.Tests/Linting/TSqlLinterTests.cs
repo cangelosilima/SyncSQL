@@ -1,4 +1,4 @@
-using SyncSql.Lineage.MsSql.Linting;
+﻿using SyncSql.Lineage.MsSql.Linting;
 
 namespace SyncSql.Lineage.MsSql.Tests.Linting;
 
