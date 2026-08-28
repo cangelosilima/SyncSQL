@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
-import ChangeActivityHeatmap from '../components/ChangeActivityHeatmap'
+import ChangeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/ChangeActivityHeatmap'
 import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
@@ -139,8 +139,7 @@ export default function Home() {
         </section>
 
         <section className="overview-panel">
-          <h2>Change activity</h2>
-          <p className="muted overview-panel-hint">Commits touching tracked objects, by day, across the mined history.</p>
+          <h2 className="panel-title-divided">Change activity &mdash; last {CHANGE_ACTIVITY_WEEKS} weeks</h2>
           {catalog.recentChanges.length === 0 ? (
             <p className="muted">No change history mined for this run (analyze-catalog ran without -RepoRoot).</p>
           ) : (
@@ -238,13 +237,6 @@ export default function Home() {
           </li>
         ))}
       </ul>
-
-      <p className="disclaimer">
-        Data lineage on the <Link to="/lineage">Lineage</Link> page is inferred by regex-matching object names inside
-        each object&apos;s DDL text - not a real SQL parser. Treat it as a starting point for exploration, not a
-        certified lineage report: it can miss dynamic SQL and cross-linked-server references, and can occasionally
-        produce a false-positive edge when an identifier collides with an unrelated object name.
-      </p>
     </div>
   )
 }

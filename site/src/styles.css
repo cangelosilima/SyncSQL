@@ -538,6 +538,12 @@ a {
   color: var(--text-muted);
 }
 
+.overview-panel h2.panel-title-divided {
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .section-label {
   font-size: 0.85rem;
   text-transform: uppercase;
@@ -601,15 +607,6 @@ a {
   border-radius: 1px;
   flex-shrink: 0;
   border: 1px solid var(--border);
-}
-
-.disclaimer {
-  margin-top: 2rem;
-  padding: 0.75rem 1rem;
-  border-left: 3px solid var(--accent);
-  background: var(--surface);
-  font-size: 0.85rem;
-  color: var(--text-muted);
 }
 
 .orphaned-ref-warning {

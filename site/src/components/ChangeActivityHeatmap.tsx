@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import type { CatalogCommit } from '../types'
 import { intensity } from '../lib/analytics'
 
-const WINDOW_DAYS = 70
+export const CHANGE_ACTIVITY_WEEKS = 30
 
 interface Cell {
   key: string
@@ -12,7 +12,7 @@ interface Cell {
 }
 
 /** GitHub-style contribution calendar over the mined commit history, grouped by day. */
-export default function ChangeActivityHeatmap({ commits }: { commits: CatalogCommit[] }) {
+export default function ChangeActivityHeatmap({ commits, weeks = CHANGE_ACTIVITY_WEEKS }: { commits: CatalogCommit[]; weeks?: number }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -26,14 +26,14 @@ export default function ChangeActivityHeatmap({ commits }: { commits: CatalogCom
   }
 
   const start = new Date(today)
-  start.setDate(start.getDate() - (WINDOW_DAYS - 1))
+  start.setDate(start.getDate() - (weeks * 7 - 1))
   start.setDate(start.getDate() - start.getDay()) // pad back to the preceding Sunday
 
   const totalDays = Math.round((today.getTime() - start.getTime()) / 86400000) + 1
-  const weeks = Math.ceil(totalDays / 7)
+  const columnWeeks = Math.ceil(totalDays / 7)
 
   const cells: Cell[] = []
-  for (let i = 0; i < weeks * 7; i++) {
+  for (let i = 0; i < columnWeeks * 7; i++) {
     const d = new Date(start)
     d.setDate(d.getDate() + i)
     cells.push({ key: dayKey(d), date: d, count: counts.get(dayKey(d)) ?? 0, future: d > today })
