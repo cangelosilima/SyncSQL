@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
-import ChangeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/ChangeActivityHeatmap'
+import TypeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/TypeActivityHeatmap'
 import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
@@ -24,7 +24,8 @@ export default function Home() {
   const metricAnomalies = detectMetricAnomalies(catalog.nodes, 10)
   const lastChangedNode = recentlyChanged[0]?.node
   const typeCounts = Object.entries(catalog.typeCounts).sort(([, a], [, b]) => b - a)
-  const maxTypeCount = typeCounts[0]?.[1] ?? 0
+  const typeOrder = typeCounts.map(([type]) => type)
+  const nodeTypeById = new Map(catalog.nodes.map((n) => [n.id, n.type]))
 
   return (
     <div className="page">
@@ -118,32 +119,11 @@ export default function Home() {
 
       <div className="overview-grid">
         <section className="overview-panel">
-          <h2>Object breakdown</h2>
-          <ul className="type-bar-list">
-            {typeCounts.map(([type, count]) => (
-              <li key={type} className="type-bar-row">
-                <TypeBadge type={type} />
-                <span className="type-bar-track">
-                  <span
-                    className="type-bar-fill"
-                    style={{
-                      width: `${Math.round(intensity(count, maxTypeCount) * 100)}%`,
-                      background: colorForType(type),
-                    }}
-                  />
-                </span>
-                <span className="type-bar-count">{count}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="overview-panel">
           <h2 className="panel-title-divided">Change activity &mdash; last {CHANGE_ACTIVITY_WEEKS} weeks</h2>
           {catalog.recentChanges.length === 0 ? (
             <p className="muted">No change history mined for this run (analyze-catalog ran without -RepoRoot).</p>
           ) : (
-            <ChangeActivityHeatmap commits={catalog.recentChanges} />
+            <TypeActivityHeatmap commits={catalog.recentChanges} typeById={nodeTypeById} types={typeOrder} />
           )}
         </section>
 
@@ -223,20 +203,6 @@ export default function Home() {
           )}
         </section>
       </div>
-
-      <h2>Servers</h2>
-      <ul className="server-list">
-        {index.tree.map((server) => (
-          <li key={server.name}>
-            <strong>{server.name}</strong>
-            <ul>
-              {server.databases.map((db) => (
-                <li key={db.name}>{db.name}</li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

@@ -444,15 +444,18 @@ a {
   padding: 0.6rem 0;
 }
 
-/* Object breakdown - horizontal bar list (Overview page) */
+/* Change activity by type - one heatmap row per object type, one cell per
+   week, combining what used to be separate "object breakdown" and "change
+   activity" panels (Overview page). Each row's cells are tinted with that
+   type's own color (lib/typeColors.ts) rather than a single shared color. */
 
-.type-bar-list {
+.type-heatmap-list {
   list-style: none;
   margin: 0.5rem 0 0;
   padding: 0;
 }
 
-.type-bar-row {
+.type-heatmap-row {
   display: grid;
   grid-template-columns: 7.5rem 1fr 2rem;
   align-items: center;
@@ -461,59 +464,26 @@ a {
   font-size: 0.8rem;
 }
 
-.type-bar-track {
-  height: 0.5rem;
-  border-radius: 1px;
-  background: var(--surface-alt);
-  overflow: hidden;
-}
-
-.type-bar-fill {
-  height: 100%;
-}
-
-.type-bar-count {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-}
-
-/* Change activity calendar heatmap (Overview page) */
-
-.cal-heatmap-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, 1fr);
-  gap: 3px;
-  margin-top: 0.5rem;
+.type-heatmap-cells {
+  display: flex;
+  gap: 2px;
   overflow-x: auto;
-  padding-bottom: 0.25rem;
+  padding-bottom: 0.15rem;
 }
 
-.cal-cell {
-  width: 0.68rem;
-  height: 0.68rem;
+.type-heatmap-cell {
+  width: 0.55rem;
+  height: 0.55rem;
   border-radius: 1px;
   background: var(--surface-alt);
   border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-.cal-heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.5rem;
-  font-size: 0.7rem;
+.type-heatmap-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-}
-
-.cal-heatmap-legend .cal-cell {
-  width: 0.6rem;
-  height: 0.6rem;
-}
-
-.server-list ul {
-  margin: 0.2rem 0 0.6rem;
 }
 
 .overview-grid {
