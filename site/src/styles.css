@@ -10,9 +10,8 @@
   deliberate exception - always rendered in the Midnight palette regardless
   of site theme, since that's where the syntax highlighting theme
   (components/midnight-hljs.css) lives. The top "chrome" bar (.topbar) is a
-  second such exception - a fixed near-black console shell that houses the
-  brand mark, nav and connection status, independent of the light/dark
-  toggle below it (like a terminal/ops-console title bar).
+  second such exception - a fixed light shell that houses the brand mark,
+  nav and connection status, independent of the light/dark toggle below it.
 */
 :root {
   --bg: #f5f5f7;
@@ -26,11 +25,11 @@
   --ok: #10b981;
   --warn: #f59e0b;
 
-  --chrome-bg: #0a0a0c;
-  --chrome-surface: #17171b;
-  --chrome-border: #232327;
-  --chrome-text: #f2f2f4;
-  --chrome-text-muted: #83838d;
+  --chrome-bg: #ffffff;
+  --chrome-surface: #f2f2f4;
+  --chrome-border: #e2e2e6;
+  --chrome-text: #16161a;
+  --chrome-text-muted: #6b6b76;
   --chrome-accent: #e2001a;
 
   color-scheme: light;
@@ -89,7 +88,7 @@ a {
   align-items: center;
   gap: 1.75rem;
   padding: 0.5rem 1.25rem;
-  border-bottom: 1px solid var(--chrome-border);
+  border-bottom: 2px solid var(--chrome-accent);
   background: var(--chrome-bg);
   color: var(--chrome-text);
   flex-shrink: 0;
