@@ -15,15 +15,19 @@ noisy.
 
 ## Screenshots
 
-**Overview** — object counts, recently changed objects, most-referenced
-tables, a change-frequency heatmap, and objects that tend to change together.
+**Overview** — a console-style shell (dark chrome topbar, monospace type) around
+a quick-stats row (objects, commits mined, lineage edges, last change), a
+per-type change-activity heatmap (one row per object type, one cell per
+week, each row tinted with that type's own color), recently changed
+objects, most-referenced tables, and objects that tend to change together.
 
 ![Overview page](docs/screenshots/overview.png)
 
-**Metrics anomalies & orphaned references** — further down the Overview page:
-tables whose latest metrics snapshot swung sharply (a row-count jump or an
-index fragmentation spike), and references that don't resolve to anything in
-the catalog's scope, usually a renamed or dropped target.
+**Metrics anomalies & orphaned references** — flagged as alert cards near the
+top of the Overview page: tables whose latest metrics snapshot swung sharply
+(a row-count jump or an index fragmentation spike), and references that don't
+resolve to anything in the catalog's scope, usually a renamed or dropped
+target.
 
 ![Overview metrics anomalies and orphaned references panels](docs/screenshots/overview-anomalies.png)
 
@@ -46,8 +50,10 @@ state stays live in the URL (**Copy link** for a shareable view), and
 
 ![Lineage graph](docs/screenshots/lineage.png)
 
-**Object detail** — full column list, DDL, foreign keys / check constraints /
-indexes, and a metrics panel of volume/index/optimizer-statistics trends.
+**Object detail** — a breadcrumb trail, a quick-facts bar (modified date,
+deps, used-by, columns) with a jump to the lineage graph, full column list,
+DDL, foreign keys / check constraints / indexes, and a metrics panel of
+volume/index/optimizer-statistics trends.
 
 ![Object detail page](docs/screenshots/object-detail.png)
 
@@ -206,14 +212,17 @@ built fresh by the `pages` job on every scheduled run), styled as a dense
 data-terminal with a light/dark toggle (top right; light is the default -
 see "Theme" below):
 
-- **Overview** — object counts, the 10 most recently changed objects, the
-  most-referenced tables (direct incoming edges and indirect/transitive
-  reachability, capped to one hop across a linked-server boundary), a
-  change-frequency heatmap, objects that tend to change together in the same
-  commit, a **metrics anomalies** panel flagging tables whose latest metrics
-  snapshot swung sharply versus the previous one (a row-count jump/drop or
-  an index fragmentation spike — see "Volatile metrics" below), and an
-  **orphaned references** panel (see "Orphaned reference detection" below).
+- **Overview** — a quick-stats row (objects, commits mined, lineage edges,
+  last change), a per-type change-activity heatmap (one row per object type
+  with its own color, one cell per week over the mined history, doubling as
+  the object-count-by-type breakdown), the 10 most recently changed objects,
+  the most-referenced tables (direct incoming edges and indirect/transitive
+  reachability, capped to one hop across a linked-server boundary), objects
+  that tend to change together in the same commit, a **metrics anomalies**
+  panel flagging tables whose latest metrics snapshot swung sharply versus
+  the previous one (a row-count jump/drop or an index fragmentation spike —
+  see "Volatile metrics" below), and an **orphaned references** panel (see
+  "Orphaned reference detection" below).
 - **Explorer** — a sortable, filterable table listing every object; it's the
   primary way to browse the catalog. A separate DDL content search box
   live-filters (search-as-you-type, debounced) across every object's full

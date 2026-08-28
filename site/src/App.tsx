@@ -6,6 +6,7 @@ import ObjectPage from './pages/ObjectPage'
 import LineagePage from './pages/LineagePage'
 import Explorer from './pages/Explorer'
 import History from './pages/History'
+import pkg from '../package.json'
 
 export default function App() {
   return (
@@ -16,7 +17,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { loading, error } = useCatalog()
+  const { loading, error, index } = useCatalog()
 
   if (loading) {
     return (
@@ -40,7 +41,11 @@ function Shell() {
   return (
     <div className="layout">
       <header className="topbar">
-        <span className="brand">SyncSQL</span>
+        <span className="brand">
+          <span className="brand-mark">SQL</span>
+          <span className="brand-name">SyncSQL</span>
+          <span className="brand-version">v{pkg.version}</span>
+        </span>
         <nav>
           <NavLink to="/" end>
             Overview
@@ -49,7 +54,19 @@ function Shell() {
           <NavLink to="/lineage">Lineage</NavLink>
           <NavLink to="/history">History</NavLink>
         </nav>
-        <ThemeToggle />
+        <div className="topbar-status">
+          {(index?.catalog.servers ?? []).map((server) => (
+            <span key={server} className="status-pill" title={`Server: ${server}`}>
+              <span className="status-dot" />
+              <span className="status-pill-name">{server}</span>
+            </span>
+          ))}
+          <span className="status-pill" title="Catalog data is a static snapshot published by the analyze-catalog CI job">
+            <span className="status-dot" />
+            Synced
+          </span>
+          <ThemeToggle />
+        </div>
       </header>
       <div className="body">
         <main className="content">
@@ -70,7 +87,7 @@ function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
   return (
     <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
-      {theme === 'light' ? '☾ Dark' : '☀ Light'}
+      {theme === 'light' ? '☀ Light' : '☾ Dark'}
     </button>
   )
 }
