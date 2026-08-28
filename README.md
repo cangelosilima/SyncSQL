@@ -403,7 +403,7 @@ entirely separate from the object's version history:
   wipe-and-replace of the object tree never touches it. Each run appends
   this run's snapshot to the existing history array per table and trims it
   to `--history-limit` (default 90, override via the `METRICS_HISTORY_LIMIT`
-  CI variable / `sync --metrics-history-limit`) - so the object's own file
+  CI variable / `metrics update --history-limit`) - so the object's own file
   stays diff-free while `metrics/` accumulates real history.
 - `syncsql catalog build` reads that same `metrics/` tree and attaches it
   as `node.metrics` in `catalog.json`, so the site never needs a second

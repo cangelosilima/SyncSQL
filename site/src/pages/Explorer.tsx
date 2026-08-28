@@ -5,6 +5,7 @@ import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import { filterByContent } from '../lib/contentSearch'
+import { epochOf } from '../lib/analytics'
 import { useDebouncedValue } from '../lib/useDebouncedValue'
 import type { CatalogNode } from '../types'
 import type { FilterToken } from '../lib/filters'
@@ -118,7 +119,7 @@ function sortValue(node: CatalogNode, key: SortKey): string | number {
     case 'schema':
       return (node.schema ?? '').toLowerCase()
     case 'lastChangedAt':
-      return node.lastChangedAt ?? ''
+      return epochOf(node.lastChangedAt)
     case 'changeCount':
       return node.changeCount
   }

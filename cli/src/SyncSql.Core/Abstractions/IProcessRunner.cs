@@ -65,6 +65,12 @@ public sealed class SystemProcessRunner : IProcessRunner
         process.BeginErrorReadLine();
         await process.WaitForExitAsync(cancellationToken);
 
+        // WaitForExitAsync is documented to potentially return before the redirected-output event
+        // handlers have processed everything; the parameterless WaitForExit() is the documented way
+        // to drain them, and is instant here since the process has already exited. Without it, large
+        // `git log` output can come back silently truncated.
+        process.WaitForExit();
+
         return new ProcessResult(process.ExitCode, stdout.ToString(), stderr.ToString());
     }
 }

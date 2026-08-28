@@ -14,10 +14,10 @@ export function getSuggestedGrantees(nodes: CatalogNode[], query: string, limit 
   const needle = query.trim().toLowerCase()
   const set = new Set<string>()
   const scanCap = limit * 20
-  for (const node of nodes) {
+  outer: for (const node of nodes) {
     for (const grant of node.grants) {
       if (!needle || grant.grantee.toLowerCase().includes(needle)) set.add(grant.grantee)
-      if (set.size >= scanCap) break
+      if (set.size >= scanCap) break outer
     }
   }
   return [...set].sort((a, b) => a.localeCompare(b)).slice(0, limit)

@@ -7,10 +7,22 @@ export interface RankedNode {
   value: number
 }
 
+/**
+ * Epoch millis for an ISO timestamp, NaN-safe. Commit dates carry each
+ * committer's local UTC offset (git log --date=iso-strict), so comparing
+ * the raw strings lexicographically does NOT order them chronologically -
+ * always compare through this instead.
+ */
+export function epochOf(dateStr: string | null | undefined): number {
+  if (!dateStr) return 0
+  const t = new Date(dateStr).getTime()
+  return Number.isNaN(t) ? 0 : t
+}
+
 export function getRecentlyChanged(index: CatalogIndex, limit = 10): RankedNode[] {
   return index.catalog.nodes
     .filter((n) => n.lastChangedAt)
-    .sort((a, b) => (b.lastChangedAt! < a.lastChangedAt! ? -1 : b.lastChangedAt! > a.lastChangedAt! ? 1 : 0))
+    .sort((a, b) => epochOf(b.lastChangedAt) - epochOf(a.lastChangedAt))
     .slice(0, limit)
     .map((node) => ({ node, value: 0 }))
 }
