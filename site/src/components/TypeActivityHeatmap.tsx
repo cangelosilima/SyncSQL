@@ -29,9 +29,12 @@ export default function TypeActivityHeatmap({
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  // Anchor the last cell to the CURRENT (partial) week: back to this week's
+  // Sunday, then (weeks - 1) whole weeks further. Anchoring off `today -
+  // weeks*7` instead would leave this week's commits past the final cell -
+  // i.e. the most recent changes silently missing from the heatmap.
   const start = new Date(today)
-  start.setDate(start.getDate() - (weeks * 7 - 1))
-  start.setDate(start.getDate() - start.getDay()) // pad back to the preceding Sunday
+  start.setDate(start.getDate() - start.getDay() - (weeks - 1) * 7)
 
   const weekStarts: Date[] = []
   for (let w = 0; w < weeks; w++) {

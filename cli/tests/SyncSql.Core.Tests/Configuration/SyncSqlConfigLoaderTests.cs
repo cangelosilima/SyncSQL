@@ -23,6 +23,49 @@ public class SyncSqlConfigLoaderTests
     }
 
     [Fact]
+    public async Task LoadAsync_DuplicateServerNames_Throws()
+    {
+        string path = await WriteTempConfigAsync("""
+            {"servers":[
+              {"name":"SQLPROD01","type":"mssql","host":"h1","credentialsVariablePrefix":"A"},
+              {"name":"sqlprod01","type":"mssql","host":"h2","credentialsVariablePrefix":"B"}
+            ]}
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(
+            () => SyncSqlConfigLoader.LoadAsync(path));
+        Assert.Contains("more than once", ex.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_OracleServerWithoutServiceName_Throws()
+    {
+        string path = await WriteTempConfigAsync("""
+            {"servers":[{"name":"ORAPROD01","type":"oracle","host":"h","credentialsVariablePrefix":"ORA"}]}
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(
+            () => SyncSqlConfigLoader.LoadAsync(path));
+        Assert.Contains("serviceName", ex.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_InvalidRegexInFilter_Throws()
+    {
+        string path = await WriteTempConfigAsync("""
+            {
+              "defaults": { "objectNames": { "include": ["[unclosed"] } },
+              "servers":[{"name":"SQLPROD01","type":"mssql","host":"h","credentialsVariablePrefix":"A"}]
+            }
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(
+            () => SyncSqlConfigLoader.LoadAsync(path));
+        Assert.Contains("invalid regex", ex.Message);
+        Assert.Contains("[unclosed", ex.Message);
+    }
+
+    [Fact]
     public async Task LoadAsync_UnknownEngineType_Throws()
     {
         string path = await WriteTempConfigAsync("""

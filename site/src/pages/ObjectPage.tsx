@@ -7,6 +7,7 @@ import LineageGraph from '../components/LineageGraph'
 import MetricsPanels from '../components/MetricsPanels'
 import DiffView from '../components/DiffView'
 import { getEdgeColumns } from '../lib/neighborhood'
+import { epochOf } from '../lib/analytics'
 import type { CatalogNode, CatalogObjectVersion } from '../types'
 
 /** Synthetic sha standing in for the object's current (uncommitted-to-history) DDL, selectable in compare mode alongside real revisions. */
@@ -309,7 +310,7 @@ function DiffCompare({ node, shas }: { node: CatalogNode; shas: string[] }) {
   const [shaA, shaB] = shas
   const a = resolveDiffPick(node, shaA)
   const b = resolveDiffPick(node, shaB)
-  const [older, newer] = a.date <= b.date ? [a, b] : [b, a]
+  const [older, newer] = epochOf(a.date) <= epochOf(b.date) ? [a, b] : [b, a]
 
   if (older.ddl === null || newer.ddl === null) {
     return <p className="muted">Content not available for one of the selected revisions.</p>

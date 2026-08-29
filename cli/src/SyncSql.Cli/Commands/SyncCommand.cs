@@ -78,6 +78,7 @@ internal static class SyncCommand
             IDatabaseObjectExtractorResolver extractorResolver = services.GetRequiredService<IDatabaseObjectExtractorResolver>();
 
             List<string> failedServers = [];
+            int attemptedServers = 0;
             int totalFiles = 0;
 
             foreach (ServerConfig server in config.Servers)
@@ -95,6 +96,7 @@ internal static class SyncCommand
                     continue;
                 }
 
+                attemptedServers++;
                 DatabaseCredentials credentials;
                 try
                 {
@@ -127,7 +129,7 @@ internal static class SyncCommand
 
             logger.LogInformation(
                 "Extraction complete: {TotalFiles} object file(s) across {ServerCount} server(s); {FailureCount} failure(s).",
-                totalFiles, config.Servers.Count - failedServers.Count, failedServers.Count);
+                totalFiles, attemptedServers - failedServers.Count, failedServers.Count);
 
             if (failedServers.Count > 0)
             {

@@ -43,11 +43,16 @@ public static class SyncSqlConfigLoader
             throw new ConfigValidationException($"Config file '{path}' does not define any servers.");
         }
 
+        HashSet<string> seenNames = new(StringComparer.OrdinalIgnoreCase);
         foreach (ServerConfig server in config.Servers)
         {
             if (string.IsNullOrWhiteSpace(server.Name))
             {
                 throw new ConfigValidationException($"Config file '{path}' has a server entry missing required key 'name'.");
+            }
+            if (!seenNames.Add(server.Name))
+            {
+                throw new ConfigValidationException($"Config file '{path}' defines server '{server.Name}' more than once - server names must be unique (they become the top-level output path segment).");
             }
             if (string.IsNullOrWhiteSpace(server.Host))
             {
@@ -56,6 +61,40 @@ public static class SyncSqlConfigLoader
             if (string.IsNullOrWhiteSpace(server.CredentialsVariablePrefix))
             {
                 throw new ConfigValidationException($"Config file '{path}' has server '{server.Name}' missing required key 'credentialsVariablePrefix'.");
+            }
+            if (server.Type == Domain.DatabaseEngine.Oracle && string.IsNullOrWhiteSpace(server.ServiceName))
+            {
+                throw new ConfigValidationException($"Config file '{path}' has Oracle server '{server.Name}' missing required key 'serviceName'.");
+            }
+
+            ValidateFilterPatterns(server.Databases, path, $"server '{server.Name}' databases");
+            ValidateFilterPatterns(server.Schemas, path, $"server '{server.Name}' schemas");
+            ValidateFilterPatterns(server.ObjectNames, path, $"server '{server.Name}' objectNames");
+        }
+
+        ValidateFilterPatterns(config.Defaults?.Databases, path, "defaults.databases");
+        ValidateFilterPatterns(config.Defaults?.Schemas, path, "defaults.schemas");
+        ValidateFilterPatterns(config.Defaults?.ObjectNames, path, "defaults.objectNames");
+        ValidateFilterPatterns(config.ServerSelection, path, "serverSelection");
+    }
+
+    /// <summary>Every include/exclude entry is a regex evaluated at extraction time - compile each here so a typo fails validate-config instead of mid-extraction.</summary>
+    private static void ValidateFilterPatterns(NameFilter? filter, string path, string location)
+    {
+        if (filter is null)
+        {
+            return;
+        }
+
+        foreach (string pattern in filter.Include.Concat(filter.Exclude))
+        {
+            try
+            {
+                _ = new System.Text.RegularExpressions.Regex(pattern);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new ConfigValidationException($"Config file '{path}' has an invalid regex '{pattern}' in {location}: {ex.Message}");
             }
         }
     }

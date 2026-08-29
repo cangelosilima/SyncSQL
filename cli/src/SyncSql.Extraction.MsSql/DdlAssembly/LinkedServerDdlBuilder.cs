@@ -15,12 +15,12 @@ internal static class LinkedServerDdlBuilder
         List<string> lines =
         [
             "EXEC sp_addlinkedserver",
-            $"    @server = N'{name}',",
-            $"    @srvproduct = N'{product}',",
-            $"    @provider = N'{provider}',",
-            $"    @datasrc = N'{dataSource}',",
-            $"    @provstr = N'{providerString}',",
-            $"    @catalog = N'{catalog}';",
+            $"    @server = N'{Quote(name)}',",
+            $"    @srvproduct = N'{Quote(product)}',",
+            $"    @provider = N'{Quote(provider)}',",
+            $"    @datasrc = N'{Quote(dataSource)}',",
+            $"    @provstr = N'{Quote(providerString)}',",
+            $"    @catalog = N'{Quote(catalog)}';",
             "GO",
         ];
 
@@ -33,9 +33,12 @@ internal static class LinkedServerDdlBuilder
 
             string useSelf = usesSelfCredential == true ? "TRUE" : "FALSE";
             lines.Add("-- Remote login mapping (password not extracted; re-set manually after restore):");
-            lines.Add($"EXEC sp_addlinkedsrvlogin @rmtsrvname = N'{name}', @useself = N'{useSelf}', @rmtuser = N'{remoteLoginName}', @rmtpassword = N'########';");
+            lines.Add($"EXEC sp_addlinkedsrvlogin @rmtsrvname = N'{Quote(name)}', @useself = N'{useSelf}', @rmtuser = N'{Quote(remoteLoginName)}', @rmtpassword = N'########';");
         }
 
         return string.Join('\n', lines);
     }
+
+    /// <summary>T-SQL string-literal escaping: a single quote inside an N'...' literal is doubled.</summary>
+    private static string? Quote(string? value) => value?.Replace("'", "''", StringComparison.Ordinal);
 }

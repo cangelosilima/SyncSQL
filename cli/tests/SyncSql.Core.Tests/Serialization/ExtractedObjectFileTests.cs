@@ -50,6 +50,29 @@ public class ExtractedObjectFileTests
     }
 
     [Fact]
+    public void Write_MultiLineDescription_IsCollapsedToOneLineAndStillParses()
+    {
+        ExtractedObject original = new()
+        {
+            Server = "SQLPROD01",
+            Database = "AppDb",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "Orders",
+            Ddl = "CREATE TABLE [dbo].[Orders] ([OrderId] INT NOT NULL);",
+            Engine = DatabaseEngine.MsSql,
+            Description = "First line.\r\nSecond line.",
+            Columns = [new ExtractedColumn("OrderId", "int", "Line A\nLine B")],
+        };
+
+        string fileContent = ExtractedObjectFile.Write(original);
+        ParsedObjectFile parsed = ExtractedObjectFile.Parse(fileContent.Split('\n'));
+
+        Assert.Equal("First line. Second line.", parsed.Description);
+        Assert.Equal("Line A Line B", parsed.Columns.Single(c => c.Name == "OrderId").Description);
+    }
+
+    [Fact]
     public void Parse_FileWithoutEngineHeader_LeavesEngineNull()
     {
         string[] lines =

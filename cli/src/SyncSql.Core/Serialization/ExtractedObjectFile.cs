@@ -110,14 +110,14 @@ public static class ExtractedObjectFile
             List<string> propertyLines = [];
             if (!string.IsNullOrWhiteSpace(obj.Description))
             {
-                propertyLines.Add($"-- [object] MS_Description = {obj.Description}");
+                propertyLines.Add($"-- [object] MS_Description = {SingleLine(obj.Description)}");
             }
 
             foreach (ExtractedColumn column in obj.Columns)
             {
                 if (!string.IsNullOrWhiteSpace(column.Description))
                 {
-                    propertyLines.Add($"-- [column: {column.Name}] MS_Description = {column.Description}");
+                    propertyLines.Add($"-- [column: {column.Name}] MS_Description = {SingleLine(column.Description)}");
                 }
             }
 
@@ -126,6 +126,14 @@ public static class ExtractedObjectFile
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// The property-line format is strictly one line per property - a multi-line MS_Description written
+    /// raw would push its continuation lines outside the "-- " comment format (dropped by Parse, and
+    /// left as stray non-comment text in a .sql file), so newlines are collapsed to single spaces.
+    /// </summary>
+    private static string SingleLine(string value) =>
+        value.ReplaceLineEndings(" ").Trim();
 
     private static void AppendSection(StringBuilder builder, string title, IEnumerable<string> contentLines)
     {

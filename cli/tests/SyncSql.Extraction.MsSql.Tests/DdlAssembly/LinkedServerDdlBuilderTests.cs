@@ -28,6 +28,18 @@ public class LinkedServerDdlBuilderTests
     }
 
     [Fact]
+    public void Build_ValuesContainingSingleQuotes_AreEscapedInLiterals()
+    {
+        string ddl = LinkedServerDdlBuilder.Build(
+            "O'BRIEN01", "Oracle", "OraOLEDB.Oracle", "ora'src", "provstr", "cat",
+            [("o'connor_svc", false)]);
+
+        Assert.Contains("@server = N'O''BRIEN01'", ddl);
+        Assert.Contains("@datasrc = N'ora''src'", ddl);
+        Assert.Contains("@rmtuser = N'o''connor_svc'", ddl);
+    }
+
+    [Fact]
     public void Build_LoginWithNoRemoteName_IsSkipped()
     {
         string ddl = LinkedServerDdlBuilder.Build("S", "P", "Pr", "D", "PS", "C", [(null, true)]);
