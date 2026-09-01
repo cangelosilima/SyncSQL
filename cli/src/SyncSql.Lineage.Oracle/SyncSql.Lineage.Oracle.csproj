@@ -1,11 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- Single source of truth for the ANTLR version: the runtime package below and the Java
+         tool jar AntlrTool.targets resolves have to be the same version, or Antlr4BuildTasks
+         refuses to run. Declared before the import below, which reads it. -->
+    <AntlrVersion>4.13.1</AntlrVersion>
+  </PropertyGroup>
+
+  <!-- Resolves the ANTLR4 tool jar (and checks for a JRE) before the codegen below runs.
+       See that file's header for the overrides available on an offline/mirrored build. -->
+  <Import Project="AntlrTool.targets" />
+
   <ItemGroup>
     <ProjectReference Include="..\SyncSql.Core\SyncSql.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="$(AntlrVersion)" />
     <!-- Build-time only: generates+compiles PlSqlLexer/PlSqlParser from Grammar/*.g4 as part of
          `dotnet build` (needs a `java` on PATH - see Grammar/NOTICE.md). Nothing generated is
          committed; PrivateAssets keeps this tool out of this project's own published dependency list. -->
@@ -17,11 +28,21 @@
        upstream and reference the generated PlSqlLexer/PlSqlParser types unqualified from the global
        namespace, so the generated code needs to land in the global namespace too - matches how the
        upstream grammar's own C# target is built. -->
+  <!-- AntlrToolJar/AntlrToolJarDownloadDir/JavaExec are set as item metadata rather than through an
+       ItemDefinitionGroup: Antlr4BuildTasks' own .targets is imported after this project body and
+       its ItemDefinitionGroup would otherwise reset them back to the defaults. -->
   <ItemGroup>
-    <Antlr4 Include="Grammar\PlSqlLexer.g4" />
+    <Antlr4 Include="Grammar\PlSqlLexer.g4">
+      <AntlrToolJar>$(AntlrToolJar)</AntlrToolJar>
+      <AntlrToolJarDownloadDir>$(AntlrToolJarDir)</AntlrToolJarDownloadDir>
+      <JavaExec>$(AntlrJavaExec)</JavaExec>
+    </Antlr4>
     <Antlr4 Include="Grammar\PlSqlParser.g4">
       <Visitor>true</Visitor>
       <Listener>false</Listener>
+      <AntlrToolJar>$(AntlrToolJar)</AntlrToolJar>
+      <AntlrToolJarDownloadDir>$(AntlrToolJarDir)</AntlrToolJarDownloadDir>
+      <JavaExec>$(AntlrJavaExec)</JavaExec>
     </Antlr4>
   </ItemGroup>
 

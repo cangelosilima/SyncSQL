@@ -115,6 +115,15 @@ that `Antlr4BuildTasks` generates a lexer/parser from at `dotnet build` time
 `before_script` installs alongside the .NET SDK image; nothing generated is
 ever committed to source control.
 
+It also needs the ANTLR4 tool jar itself, which `AntlrTool.targets` in that
+project downloads from Maven Central into `$AntlrToolJarDir` (set to
+`$CI_PROJECT_DIR/.antlr` so the jobs' shared cache keeps it between
+pipelines). If the runner can't reach Maven Central, add an `AntlrToolJarUrl`
+variable pointing at the same `antlr4-<version>-complete.jar` on the Nexus
+mirror - without one of those, the ANTLR tool's own probe fails with the
+opaque `Went through the complete probe list looking for an Antlr4 tool jar`.
+See [`cli/docs/cli.md`](../cli/docs/cli.md)'s "Build prerequisites".
+
 None of these jobs touch git, databases, or the fleet - they only build and
 publish the CLI tool itself. See [`cli/docs/cli.md`](../cli/docs/cli.md) for
 what the tool does once installed.
@@ -237,6 +246,12 @@ root README's "History, heatmap and point-in-time" section. `catalog.json`
 is generated and committed *by* `sync-database-objects`, alongside the
 extracted objects themselves, so it's versioned right along with them
 rather than living only as a separate CI artifact.
+
+Optional: `AntlrToolJarUrl` - only needed if the runner can't reach Maven
+Central to fetch the ANTLR4 tool jar `cli-test`/`cli-build` need (see
+`cli-lint`/`cli-test`/`cli-build`/`cli-publish` above). Point it at
+`antlr4-4.13.1-complete.jar` on the Nexus mirror. The version has to match
+`SyncSql.Lineage.Oracle.csproj`'s `$(AntlrVersion)`.
 
 Optional: `METRICS_HISTORY_LIMIT` (default `90`, set in `.gitlab-ci.yml`)
 controls how many daily volume/index/optimizer-statistics snapshots are kept

@@ -57,6 +57,40 @@ dotnet pack src/SyncSql.Cli -c Release
 dotnet tool install --global --add-source ./nupkg SyncSql.Cli
 ```
 
+#### Build prerequisites
+
+Building from source needs two things beyond the .NET 10 SDK, both only for
+`SyncSql.Lineage.Oracle`, which generates its PL/SQL lexer and parser from the
+vendored `Grammar/*.g4` files on every build (nothing generated is committed):
+
+- **A JRE, 11 or newer, on `PATH`** - the ANTLR4 tool is a Java program
+  (`apt-get install -y default-jre-headless`, `brew install openjdk`, or
+  `winget install Microsoft.OpenJDK.21`).
+- **The ANTLR4 tool jar.** The build downloads `antlr4-4.13.1-complete.jar`
+  from Maven Central into `~/.m2` the first time and reuses it after that.
+
+On a machine that can't reach Maven Central, that download is the one step
+that fails. Any of these gets you past it (each is an MSBuild property, so an
+environment variable of the same name works too):
+
+```bash
+# a jar you already have - no download at all
+dotnet build -p:AntlrToolJar=/path/to/antlr4-4.13.1-complete.jar
+
+# an internal mirror (Nexus/Artifactory) instead of Maven Central
+dotnet build -p:AntlrToolJarUrl=https://nexus.example/repository/maven/org/antlr/antlr4/4.13.1/antlr4-4.13.1-complete.jar
+
+# somewhere other than ~/.m2 to cache the download
+dotnet build -p:AntlrToolJarDir=/var/cache/antlr
+```
+
+If the jar goes missing and none of the above is set, the build fails with a
+message naming all three - see
+[`cli/src/SyncSql.Lineage.Oracle/AntlrTool.targets`](../src/SyncSql.Lineage.Oracle/AntlrTool.targets),
+which resolves the jar and hands the finished path to `Antlr4BuildTasks`. Letting
+`Antlr4BuildTasks` do its own probing instead is what produces the unhelpful
+`Went through the complete probe list looking for an Antlr4 tool jar` failure.
+
 ### Running without installing
 
 Any command below also works as `dotnet run --project cli/src/SyncSql.Cli --`

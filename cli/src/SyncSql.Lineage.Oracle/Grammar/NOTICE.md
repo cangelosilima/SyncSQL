@@ -14,3 +14,12 @@ tens of thousands of lines of pre-generated code nobody can review or independen
 
 To pick up a newer upstream grammar revision, replace these three files with the current versions from
 the same paths in that repository.
+
+## Build prerequisites
+
+Because the parser is generated rather than committed, building this project needs a JRE (11+) on
+`PATH` - the ANTLR4 tool is a Java program - and the `antlr4-<version>-complete.jar` itself. The
+sibling `AntlrTool.targets` resolves that jar (downloading it from Maven Central into `~/.m2` on
+first build) and hands the path straight to `Antlr4BuildTasks`; see that file's header for the
+`AntlrToolJar` / `AntlrToolJarUrl` / `AntlrToolJarDir` overrides an offline or mirror-only build
+needs, and `../../../docs/cli.md`'s "Build prerequisites" for the same thing in prose.

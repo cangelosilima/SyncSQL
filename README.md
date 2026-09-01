@@ -160,6 +160,14 @@ from the project's Nexus feed, or run it straight from source with
 `dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
 install instructions, and exit codes: [`cli/docs/cli.md`](cli/docs/cli.md).
 
+Building from source needs the .NET 10 SDK plus a JRE (11+) on `PATH`:
+`SyncSql.Lineage.Oracle` generates its PL/SQL parser from the vendored ANTLR4
+grammar on every build, and the ANTLR4 tool is a Java program. That tool's jar
+is downloaded from Maven Central into `~/.m2` on the first build - on a machine
+that can't reach it, pass `-p:AntlrToolJar=<path>` (a copy you already have) or
+`-p:AntlrToolJarUrl=<mirror>`. See [`cli/docs/cli.md`](cli/docs/cli.md)'s
+"Build prerequisites".
+
 ## Configuration
 
 Copy `config/servers.example.json` to `config/servers.json` and edit it.

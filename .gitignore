@@ -16,3 +16,7 @@ cli/**/bin/
 cli/**/obj/
 cli/**/*.nupkg
 cli/nupkg/
+
+# ANTLR4 tool jar cache, when AntlrToolJarDir points here (the CI jobs set it - see
+# .gitlab/ci/cli.yml; locally it defaults to ~/.m2 instead)
+/.antlr/
