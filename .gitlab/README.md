@@ -13,18 +13,20 @@ schema, the catalog site) see the root [`README.md`](../README.md); for the
 ## Modules
 
 `.gitlab-ci.yml` only declares the shared `stages`, shared `variables`, and
-an `include:` of four modules under `.gitlab/ci/`:
+an `include:` of five modules under `.gitlab/ci/`:
 
 | Module         | Stages                                              | Jobs |
 |----------------|------------------------------------------------------|------|
+| `grammar.yml`  | `grammar-publish`                                   | `grammar-publish` (manual) |
 | `cli.yml`      | `cli-lint`, `cli-test`, `cli-build`, `cli-publish`   | `cli-lint`, `cli-test`, `cli-build`, `cli-publish` |
 | `extract.yml`  | `validate`, `extract`                               | `validate-config`, `extract-server` |
 | `sync.yml`     | `sync`                                              | `sync-database-objects` |
 | `pages.yml`    | `pages`                                             | `pages` |
 
-Splitting this way keeps each concern - building the CLI, extracting from
-the fleet, publishing to git, and building/deploying the site - in its own
-file, while the root file stays a short table of contents.
+Splitting this way keeps each concern - regenerating the PL/SQL parser,
+building the CLI, extracting from the fleet, publishing to git, and
+building/deploying the site - in its own file, while the root file stays a
+short table of contents.
 
 ### Sharing job config across modules: `extends`, not YAML anchors
 
@@ -52,6 +54,10 @@ duplicating the config or trying to share a YAML anchor across files.
 
 ```mermaid
 flowchart LR
+    subgraph grammar["grammar.yml — regenerates the PL/SQL parser"]
+        gp["grammar-publish\n(manual, on grammar/ changes)"]
+    end
+
     subgraph cli["cli.yml — builds the tool"]
         direction LR
         clint[cli-lint] --> ctest[cli-test] --> cbuild[cli-build] --> cpub["cli-publish\n(default branch only)"]
@@ -99,6 +105,24 @@ mark that indirect, Nexus-mediated dependency, not a same-pipeline `needs:`.
 
 ## Job-by-job
 
+### `grammar-publish` (`grammar.yml`)
+
+The only job in the pipeline that needs Java. It runs the ANTLR4 tool over
+`grammar/src/SyncSql.Grammar.PlSql/Grammar/*.g4` and pushes the result to Nexus
+as the `SyncSql.Grammar.PlSql` package, which `SyncSql.Lineage.Oracle` then
+consumes like any other dependency.
+
+Manual, on the default branch, and only when `grammar/**/*` changed - the
+grammar moves roughly never, and every run publishes a package version. The
+full regenerate-and-publish walkthrough, including the version bump the CLI
+side needs afterwards, is in [`grammar/README.md`](../grammar/README.md).
+
+If the runner can't reach Maven Central for the ANTLR4 tool jar, set an
+`AntlrToolJarUrl` variable pointing at `antlr4-<version>-complete.jar` on the
+Nexus mirror; without it the job fails with a message naming that and two other
+ways out. The jar is cached between pipelines under `$AntlrToolJarDir`
+(`$CI_PROJECT_DIR/.antlr`).
+
 ### `cli-lint` / `cli-test` / `cli-build` / `cli-publish` (`cli.yml`)
 
 Lint (`dotnet format --verify-no-changes`, excluding the two vendored
@@ -109,20 +133,12 @@ the Nexus feed named by `NEXUS_NUGET_SOURCE_URL`, authenticated with
 `NEXUS_API_KEY`; `Directory.Build.props`' `<Version>` is the single source of
 truth for the published version number - bump it there to cut a new release.
 
-`SyncSql.Lineage.Oracle` vendors a real ANTLR4 PL/SQL grammar (`.g4` files)
-that `Antlr4BuildTasks` generates a lexer/parser from at `dotnet build` time
-- that codegen step needs a JRE on `PATH`, which `.cli_dotnet`'s
-`before_script` installs alongside the .NET SDK image; nothing generated is
-ever committed to source control.
-
-It also needs the ANTLR4 tool jar itself, which `AntlrTool.targets` in that
-project downloads from Maven Central into `$AntlrToolJarDir` (set to
-`$CI_PROJECT_DIR/.antlr` so the jobs' shared cache keeps it between
-pipelines). If the runner can't reach Maven Central, add an `AntlrToolJarUrl`
-variable pointing at the same `antlr4-<version>-complete.jar` on the Nexus
-mirror - without one of those, the ANTLR tool's own probe fails with the
-opaque `Went through the complete probe list looking for an Antlr4 tool jar`.
-See [`cli/docs/cli.md`](../cli/docs/cli.md)'s "Build prerequisites".
+`SyncSql.Lineage.Oracle` analyzes Oracle DDL with a real ANTLR4 PL/SQL parser,
+but none of these jobs generate it: it is restored from Nexus as the prebuilt
+`SyncSql.Grammar.PlSql` package (see `grammar-publish` below), which is why
+`.cli_dotnet`'s `before_script` adds `$NEXUS_NUGET_SOURCE_URL` as a NuGet
+source and why none of these jobs install a JRE. Nothing generated, and no
+`.jar`, is anywhere in source control.
 
 None of these jobs touch git, databases, or the fleet - they only build and
 publish the CLI tool itself. See [`cli/docs/cli.md`](../cli/docs/cli.md) for
@@ -230,8 +246,8 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used by `sync-database-objects` to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. Falls back to `GIT_PUSH_TOKEN` if unset. |
 | `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`, where `<PREFIX>` is that server's `credentialsVariablePrefix`. |
-| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used by `validate-config`/`extract-server`/`sync-database-objects` to install the published `syncsql` tool, and by `cli-publish` to publish new versions of it. |
-| `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by `cli-publish`. |
+| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used by `validate-config`/`extract-server`/`sync-database-objects` to install the published `syncsql` tool, by the `cli-*` jobs to *restore* the prebuilt `SyncSql.Grammar.PlSql` parser package, and by `cli-publish`/`grammar-publish` to publish new versions of both. |
+| `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by `cli-publish` and `grammar-publish`. |
 
 `CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank in
 `config/servers.json` (the default, self-repo target). If you point
@@ -247,11 +263,11 @@ is generated and committed *by* `sync-database-objects`, alongside the
 extracted objects themselves, so it's versioned right along with them
 rather than living only as a separate CI artifact.
 
-Optional: `AntlrToolJarUrl` - only needed if the runner can't reach Maven
-Central to fetch the ANTLR4 tool jar `cli-test`/`cli-build` need (see
-`cli-lint`/`cli-test`/`cli-build`/`cli-publish` above). Point it at
-`antlr4-4.13.1-complete.jar` on the Nexus mirror. The version has to match
-`SyncSql.Lineage.Oracle.csproj`'s `$(AntlrVersion)`.
+Optional: `AntlrToolJarUrl` - only ever used by the manual `grammar-publish`
+job, and only if the runner can't reach Maven Central for the ANTLR4 tool jar.
+Point it at `antlr4-4.13.1-complete.jar` on the Nexus mirror; the version has to
+match `SyncSql.Grammar.PlSql.csproj`'s `$(AntlrVersion)`. No other job needs it,
+or Java at all.
 
 Optional: `METRICS_HISTORY_LIMIT` (default `90`, set in `.gitlab-ci.yml`)
 controls how many daily volume/index/optimizer-statistics snapshots are kept

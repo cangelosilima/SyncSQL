@@ -13,12 +13,6 @@ variables:
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
   NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
-  # SyncSql.Lineage.Oracle generates its PL/SQL lexer/parser from Grammar/*.g4 at build time
-  # using the Java ANTLR4 tool. cli/src/SyncSql.Lineage.Oracle/AntlrTool.targets fetches that
-  # jar into this directory (default ~/.m2, which isn't cacheable here) so the cache below
-  # keeps it between pipelines. Set AntlrToolJarUrl too if Maven Central isn't reachable from
-  # the runner - point it at the antlr4-<version>-complete.jar on the Nexus mirror.
-  AntlrToolJarDir: "$CI_PROJECT_DIR/.antlr"
 
 .cli_dotnet: &cli_dotnet
   image: mcr.microsoft.com/dotnet/sdk:10.0
@@ -30,20 +24,21 @@ variables:
       changes:
         - cli/**/*
   before_script:
-    - apt-get update -qq && apt-get install -y --no-install-recommends default-jre-headless -qq
+    # SyncSql.Lineage.Oracle restores the prebuilt PL/SQL parser (SyncSql.Grammar.PlSql) from
+    # Nexus, so the feed has to be a restore source and not just a push target. Nothing here
+    # needs Java: generating that parser is grammar-publish's job, not this pipeline's.
+    - if [ -n "$NEXUS_NUGET_SOURCE_URL" ]; then dotnet nuget add source "$NEXUS_NUGET_SOURCE_URL" --name nexus; fi
     - cd cli
   cache:
-    key: cli-deps-v2
+    key: cli-deps-v3
     paths:
       - .nuget/packages/
-      - .antlr/
 
 cli-lint:
   <<: *cli_dotnet
   stage: cli-lint
   script:
     - dotnet format SyncSql.slnx --verify-no-changes
-        --exclude src/SyncSql.Lineage.Oracle/Grammar/PlSqlLexerBase.cs src/SyncSql.Lineage.Oracle/Grammar/PlSqlParserBase.cs
 
 cli-test:
   <<: *cli_dotnet

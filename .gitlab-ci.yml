@@ -6,12 +6,14 @@
 # rationale - see .gitlab/README.md.
 
 include:
+  - local: '.gitlab/ci/grammar.yml'
   - local: '.gitlab/ci/cli.yml'
   - local: '.gitlab/ci/extract.yml'
   - local: '.gitlab/ci/sync.yml'
   - local: '.gitlab/ci/pages.yml'
 
 stages:
+  - grammar-publish
   - cli-lint
   - cli-test
   - cli-build

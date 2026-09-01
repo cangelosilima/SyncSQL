@@ -17,6 +17,13 @@ cli/**/obj/
 cli/**/*.nupkg
 cli/nupkg/
 
-# ANTLR4 tool jar cache, when AntlrToolJarDir points here (the CI jobs set it - see
-# .gitlab/ci/cli.yml; locally it defaults to ~/.m2 instead)
+# Prebuilt PL/SQL parser package build output. The generated lexer/parser lands in obj/
+# and is never committed - it ships only inside the published SyncSql.Grammar.PlSql package.
+grammar/**/bin/
+grammar/**/obj/
+grammar/**/*.nupkg
+/nupkg/
+
+# ANTLR4 tool jar cache, when AntlrToolJarDir points here (the grammar-publish job sets it -
+# see .gitlab/ci/grammar.yml; locally it defaults to ~/.m2 instead)
 /.antlr/
