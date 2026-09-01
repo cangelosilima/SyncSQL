@@ -27,3 +27,71 @@ grammar/**/*.nupkg
 # ANTLR4 tool jar cache, when AntlrToolJarDir points here (the grammar-publish job sets it -
 # see .gitlab/ci/grammar.yml; locally it defaults to ~/.m2 instead)
 /.antlr/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.userprefs
+*.sln.docstates
+*.sln.iml
+*.dbmdl
+*.jfm
+*.psess
+*.vsp
+*.vspx
+*.pidb
+*.svclog
+*.VC.db
+*.VC.VC.opendb
+.builds/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# .NET / MSBuild output that isn't under cli/ or grammar/ (test results, publish
+# profiles, restore leftovers, crash dumps)
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+*.coverage
+*.coverlet.json
+coverage*.json
+coverage*.xml
+coverage*.info
+*.trx
+*.binlog
+*.nuget.props
+*.nuget.targets
+PublishProfiles/
+*.pubxml.user
+
+# Node / npm / pnpm / yarn
+node_modules/
+dist/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/install-state.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.tsbuildinfo
+.eslintcache
+.vite/
+.turbo/
+.cache/
+
+# Local environment overrides - never commit credentials
+.env
+.env.*
+!.env.example
+
+# OS cruft
+.DS_Store
+Thumbs.db
