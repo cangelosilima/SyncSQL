@@ -1,98 +1,62 @@
 # `SyncSql.Grammar.PlSql`
 
-The PL/SQL lexer and parser that `SyncSql.Lineage.Oracle` analyzes Oracle DDL with, built
-once and published to the Nexus feed as an ordinary NuGet package.
+The complete Oracle SQL and PL/SQL parser used by `SyncSql.Lineage.Oracle`.
 
-## Why this is a separate package
+## Java-free build design
 
-Generating a parser from an ANTLR4 `.g4` grammar means running the ANTLR4 tool, which is a
-Java program. Nobody wants a JRE, a downloaded jar, or 300k lines of generated code standing
-between them and `dotnet build`.
+The human-readable grammar remains the Apache-2.0 `sql/plsql` grammar from
+[`antlr/grammars-v4`](https://github.com/antlr/grammars-v4). ANTLR 4.13.1 generated the C# lexer,
+parser, and visitor once; those generated `.cs` files are committed under `Generated/`.
 
-So the Java step lives here and only here, and it runs roughly never - only when the grammar
-itself changes. Everything downstream consumes the result as a package:
+Normal development is therefore an ordinary .NET build:
 
-```
-grammar/src/SyncSql.Grammar.PlSql   .g4 grammar -> ANTLR4 (Java) -> SyncSql.Grammar.PlSql.nupkg
-                                     |  built by hand, published to Nexus
-                                     v
-cli/src/SyncSql.Lineage.Oracle       <PackageReference Include="SyncSql.Grammar.PlSql" />
+```text
+Grammar/*.g4 ── documents the grammar and supports future upgrades
+Generated/*.cs ── compiled directly by the .NET SDK
+Antlr4.Runtime.Standard ── the only ANTLR package required
 ```
 
-This project is deliberately **not** in `cli/SyncSql.slnx`. `dotnet build cli/SyncSql.slnx`,
-`dotnet test`, and the whole `cli-*` CI pipeline need the .NET SDK and nothing else - no Java,
-no jar, and no generated code in source control.
+`dotnet build cli/SyncSql.slnx`, tests, CI, and `dotnet pack` do not run a generator and do not
+need Java, an ANTLR tool JAR, a private `SyncSql.Grammar.PlSql` package, or a Nexus restore source.
+The thin `cli/src/SyncSql.Grammar.PlSql` compile project links these sources and is referenced
+directly by `SyncSql.Lineage.Oracle`; the resulting assembly is included in the `SyncSql.Cli` tool
+package.
 
-## What's in `Grammar/`
+This deliberately favors a larger source checkout over a hidden build-time toolchain. It preserves
+the mature Oracle/PLSQL coverage already exercised by the lineage visitor, while pure-C# SQL parser
+libraries currently omit substantial Oracle procedural syntax and Tree-sitter grammars prioritize
+error-tolerant editor parsing rather than complete validation/analysis coverage.
 
-`PlSqlLexer.g4`, `PlSqlParser.g4`, and `PlSqlParserBase.cs`/`PlSqlLexerBase.cs` are vendored
-unmodified from [antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s `sql/plsql`
-grammar, Apache-2.0. See [`src/SyncSql.Grammar.PlSql/Grammar/NOTICE.md`](src/SyncSql.Grammar.PlSql/Grammar/NOTICE.md)
-for the full attribution and how to pick up a newer upstream revision.
+## Layout
 
-The generated `PlSqlLexer.cs`/`PlSqlParser.cs`/visitors are build output. They are never
-committed - they exist only inside `obj/` on whoever's machine last built this, and inside
-the published package.
+- `Grammar/PlSqlLexer.g4` and `Grammar/PlSqlParser.g4`: vendored grammar source.
+- `Grammar/PlSqlLexerBase.cs` and `Grammar/PlSqlParserBase.cs`: vendored C# target support.
+- `Generated/PlSqlLexer.cs`: generated lexer.
+- `Generated/PlSqlParser.cs`: generated parser.
+- `Generated/PlSqlParserVisitor.cs` and `Generated/PlSqlParserBaseVisitor.cs`: generated visitor API.
+- `../cli/src/SyncSql.Grammar.PlSql/`: Java-free compile project that links the files above.
 
-## Prerequisites (only for building *this* project)
+Generated types intentionally remain in the global namespace. The upstream base classes reference
+them without qualification, and the existing Oracle lineage analyzer consumes the same API.
 
-- **.NET SDK.** The project targets `netstandard2.0` so it isn't tied to the CLI's framework.
-- **A JRE, 11 or newer, on `PATH`** - the ANTLR4 tool is a Java program.
-  (`apt-get install -y default-jre-headless`, `brew install openjdk`, or
-  `winget install Microsoft.OpenJDK.21`.)
-- **The ANTLR4 tool jar.** [`src/SyncSql.Grammar.PlSql/AntlrTool.targets`](src/SyncSql.Grammar.PlSql/AntlrTool.targets)
-  downloads `antlr4-4.13.1-complete.jar` from Maven Central into `~/.m2` on the first build
-  and reuses it afterwards.
+## Updating the upstream grammar
 
-On a machine that can't reach Maven Central, that download is the step that fails. Any of
-these gets you past it (each is an MSBuild property, so an environment variable of the same
-name works too):
+Java is not a repository build dependency. A maintainer only needs the ANTLR generator when choosing
+to import a newer upstream grammar revision. In that exceptional maintenance workflow:
 
-```bash
-# a jar you already have - no download at all
-dotnet build -p:AntlrToolJar=/path/to/antlr4-4.13.1-complete.jar
-
-# an internal mirror (Nexus/Artifactory) instead of Maven Central
-dotnet build -p:AntlrToolJarUrl=https://nexus.example/repository/maven/org/antlr/antlr4/4.13.1/antlr4-4.13.1-complete.jar
-
-# somewhere other than ~/.m2 to cache the download
-dotnet build -p:AntlrToolJarDir=/var/cache/antlr
-```
-
-Without one of those the build stops with a message naming all three. Letting
-`Antlr4BuildTasks` fall back to its own probing instead is what produces the unhelpful
-`Went through the complete probe list looking for an Antlr4 tool jar` failure.
-
-## Publishing a new version
-
-Only needed when `Grammar/*.g4` changes.
-
-1. Bump `<Version>` in
-   [`src/SyncSql.Grammar.PlSql/SyncSql.Grammar.PlSql.csproj`](src/SyncSql.Grammar.PlSql/SyncSql.Grammar.PlSql.csproj).
-   It versions independently of the CLI - this package only moves when the grammar does.
-2. Run the **`grammar-publish`** job (manual, on the default branch - see
-   [`.gitlab/ci/grammar.yml`](../.gitlab/ci/grammar.yml)). It installs a JRE, packs, and
-   pushes to `$NEXUS_NUGET_SOURCE_URL`.
-
-   Or locally, if you have Java and push rights:
+1. Replace the four vendored files in `Grammar/` with a reviewed upstream revision.
+2. Generate the C# artifacts with ANTLR 4.13.1 (visitor enabled, listener disabled):
 
    ```bash
-   dotnet pack grammar/src/SyncSql.Grammar.PlSql -c Release -o ./nupkg
-   dotnet nuget push "./nupkg/*.nupkg" --source <nexus-nuget-feed-url> --api-key <key>
+   java -jar antlr4-4.13.1-complete.jar \
+     -Dlanguage=CSharp -visitor -no-listener -Xexact-output-dir \
+     -o Generated Grammar/PlSqlLexer.g4 Grammar/PlSqlParser.g4
    ```
-3. Bump `<PlSqlGrammarVersion>` in
-   [`cli/src/SyncSql.Lineage.Oracle/SyncSql.Lineage.Oracle.csproj`](../cli/src/SyncSql.Lineage.Oracle/SyncSql.Lineage.Oracle.csproj)
-   to match, and let the `cli-test` job confirm the CLI still builds and its lineage tests
-   still pass against the new parser.
 
-Steps 1-2 and step 3 are separate commits' worth of work on purpose: the package has to exist
-on the feed before anything referencing that version can restore.
+3. Commit only the four generated `.cs` files. `.interp` and `.tokens` are generator diagnostics and
+   are ignored.
+4. Run `dotnet test cli/SyncSql.slnx --configuration Release` and review the generated diff together
+   with the grammar change.
 
-## A note on namespaces
-
-The generated types (`PlSqlLexer`, `PlSqlParser`, `PlSqlParserBaseVisitor<T>`, ...) live in the
-**global namespace**, not under `SyncSql.Grammar.PlSql`. That is not an oversight: the vendored
-`PlSqlLexerBase`/`PlSqlParserBase` reference the generated types unqualified, so putting the
-generated code in a namespace would mean editing files we deliberately keep byte-identical to
-upstream. It matches how the upstream grammar's own C# target builds, and how
-`SyncSql.Lineage.Oracle` already referred to these types back when they were generated in place.
+Keeping generation explicit prevents an unreviewed grammar update from silently changing hundreds
+of thousands of generated lines during an unrelated build.

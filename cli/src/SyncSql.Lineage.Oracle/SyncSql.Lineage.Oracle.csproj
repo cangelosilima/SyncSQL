@@ -1,24 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <!-- The PL/SQL lexer/parser this project analyzes with arrives prebuilt, as an ordinary
-         package from the Nexus feed. Generating it from the .g4 grammar needs the ANTLR4 tool
-         (a Java program), so that step lives entirely in grammar/src/SyncSql.Grammar.PlSql,
-         which is outside this solution and rebuilt only when the grammar changes - see
-         grammar/README.md. Building this solution needs the .NET SDK and nothing else.
-
-         Bump this after publishing a new grammar package version. -->
-    <PlSqlGrammarVersion>1.0.0</PlSqlGrammarVersion>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\SyncSql.Core\SyncSql.Core.csproj" />
+    <!-- The complete PL/SQL parser is generated C# checked into this repository. The project
+         reference keeps source builds and the CLI tool package self-contained. -->
+    <ProjectReference Include="..\SyncSql.Grammar.PlSql\SyncSql.Grammar.PlSql.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SyncSql.Grammar.PlSql" Version="$(PlSqlGrammarVersion)" />
-    <!-- Referenced explicitly as well as transitively: the analyzer and visitor below use the
-         ANTLR runtime types (AntlrInputStream, BaseErrorListener, ...) directly. -->
+    <!-- Referenced explicitly because the analyzer and visitor use ANTLR runtime types directly. -->
     <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>

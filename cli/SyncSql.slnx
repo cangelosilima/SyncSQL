@@ -5,6 +5,7 @@
     <Project Path="src/SyncSql.Core/SyncSql.Core.csproj" />
     <Project Path="src/SyncSql.Extraction.MsSql/SyncSql.Extraction.MsSql.csproj" />
     <Project Path="src/SyncSql.Extraction.Oracle/SyncSql.Extraction.Oracle.csproj" />
+    <Project Path="src/SyncSql.Grammar.PlSql/SyncSql.Grammar.PlSql.csproj" />
     <Project Path="src/SyncSql.Lineage.MsSql/SyncSql.Lineage.MsSql.csproj" />
     <Project Path="src/SyncSql.Lineage.Oracle/SyncSql.Lineage.Oracle.csproj" />
   </Folder>

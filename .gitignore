@@ -17,16 +17,14 @@ cli/**/obj/
 cli/**/*.nupkg
 cli/nupkg/
 
-# Prebuilt PL/SQL parser package build output. The generated lexer/parser lands in obj/
-# and is never committed - it ships only inside the published SyncSql.Grammar.PlSql package.
+# PL/SQL parser project build output. Generated/*.cs is intentionally versioned so compiling the
+# complete Oracle grammar never requires the ANTLR generator or Java.
 grammar/**/bin/
 grammar/**/obj/
 grammar/**/*.nupkg
+grammar/**/Generated/*.interp
+grammar/**/Generated/*.tokens
 /nupkg/
-
-# ANTLR4 tool jar cache, when AntlrToolJarDir points here (the grammar-publish job sets it -
-# see .gitlab/ci/grammar.yml; locally it defaults to ~/.m2 instead)
-/.antlr/
 
 # Visual Studio / Rider / VS Code
 .vs/

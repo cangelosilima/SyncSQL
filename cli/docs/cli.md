@@ -61,19 +61,11 @@ dotnet tool install --global --add-source ./nupkg SyncSql.Cli
 
 The .NET 10 SDK, and nothing else. No Java, no ANTLR toolchain, no native Oracle client.
 
-`SyncSql.Lineage.Oracle` analyzes Oracle DDL with a real ANTLR4 PL/SQL parser, but that parser
-arrives prebuilt as the `SyncSql.Grammar.PlSql` package from the same Nexus feed the CLI itself
-is published to - generating it from the `.g4` grammar is a Java job that lives entirely in
-[`grammar/`](../../grammar/README.md) and runs only when the grammar changes.
-
-So restoring `cli/` needs that feed as a NuGet source:
-
-```bash
-dotnet nuget add source <nexus-nuget-feed-url> --name nexus
-```
-
-You only do that once per machine (CI does it in `before_script`). Without it, restore fails on
-`SyncSql.Grammar.PlSql` with NU1101.
+`SyncSql.Lineage.Oracle` analyzes Oracle DDL with the full ANTLR4 PL/SQL grammar. Its generated C#
+lexer/parser/visitor is committed under [`grammar/`](../../grammar/README.md) and referenced as a
+normal project, so restore uses only public NuGet dependencies. Builds, tests, CI, and tool packaging
+do not invoke Java, download an ANTLR tool JAR, or require a separately published
+`SyncSql.Grammar.PlSql` package.
 
 ### Running without installing
 

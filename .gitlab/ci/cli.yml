@@ -20,14 +20,12 @@ variables:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - cli/**/*
+        - grammar/**/*
     - if: '$CI_PIPELINE_SOURCE == "push"'
       changes:
         - cli/**/*
+        - grammar/**/*
   before_script:
-    # SyncSql.Lineage.Oracle restores the prebuilt PL/SQL parser (SyncSql.Grammar.PlSql) from
-    # Nexus, so the feed has to be a restore source and not just a push target. Nothing here
-    # needs Java: generating that parser is grammar-publish's job, not this pipeline's.
-    - if [ -n "$NEXUS_NUGET_SOURCE_URL" ]; then dotnet nuget add source "$NEXUS_NUGET_SOURCE_URL" --name nexus; fi
     - cd cli
   cache:
     key: cli-deps-v3
@@ -59,6 +57,7 @@ cli-publish:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
         - cli/**/*
+        - grammar/**/*
   script:
     - dotnet pack src/SyncSql.Cli --configuration Release --output ./nupkg
     - dotnet nuget push "./nupkg/*.nupkg" --source "$NEXUS_NUGET_SOURCE_URL" --api-key "$NEXUS_API_KEY" --skip-duplicate

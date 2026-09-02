@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The generated C# lexer/parser is intentionally committed under the repository's grammar/
+         directory. Building this project is ordinary C# compilation: no Java runtime, ANTLR tool
+         jar, code-generation task, private package feed, or network access is required. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS3021</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\grammar\src\SyncSql.Grammar.PlSql\Grammar\PlSqlLexerBase.cs"
+             Link="Grammar\PlSqlLexerBase.cs">
+      <AutoGen>true</AutoGen>
+      <DesignTime>true</DesignTime>
+    </Compile>
+    <Compile Include="..\..\..\grammar\src\SyncSql.Grammar.PlSql\Grammar\PlSqlParserBase.cs"
+             Link="Grammar\PlSqlParserBase.cs">
+      <AutoGen>true</AutoGen>
+      <DesignTime>true</DesignTime>
+    </Compile>
+    <Compile Include="..\..\..\grammar\src\SyncSql.Grammar.PlSql\Generated\*.cs"
+             Link="Generated\%(Filename)%(Extension)">
+      <AutoGen>true</AutoGen>
+      <DesignTime>true</DesignTime>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Runtime only. The parser generator is not a build dependency. -->
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+  </ItemGroup>
+
+</Project>
