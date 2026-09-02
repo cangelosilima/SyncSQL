@@ -20,14 +20,15 @@ variables:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - cli/**/*
+        - grammar/**/*
     - if: '$CI_PIPELINE_SOURCE == "push"'
       changes:
         - cli/**/*
+        - grammar/**/*
   before_script:
-    - apt-get update -qq && apt-get install -y --no-install-recommends default-jre-headless -qq
     - cd cli
   cache:
-    key: cli-nuget-v1
+    key: cli-deps-v3
     paths:
       - .nuget/packages/
 
@@ -36,7 +37,6 @@ cli-lint:
   stage: cli-lint
   script:
     - dotnet format SyncSql.slnx --verify-no-changes
-        --exclude src/SyncSql.Lineage.Oracle/Grammar/PlSqlLexerBase.cs src/SyncSql.Lineage.Oracle/Grammar/PlSqlParserBase.cs
 
 cli-test:
   <<: *cli_dotnet
@@ -57,6 +57,7 @@ cli-publish:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
         - cli/**/*
+        - grammar/**/*
   script:
     - dotnet pack src/SyncSql.Cli --configuration Release --output ./nupkg
     - dotnet nuget push "./nupkg/*.nupkg" --source "$NEXUS_NUGET_SOURCE_URL" --api-key "$NEXUS_API_KEY" --skip-duplicate

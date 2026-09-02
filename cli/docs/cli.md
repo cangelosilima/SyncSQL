@@ -57,6 +57,16 @@ dotnet pack src/SyncSql.Cli -c Release
 dotnet tool install --global --add-source ./nupkg SyncSql.Cli
 ```
 
+#### Build prerequisites
+
+The .NET 10 SDK, and nothing else. No Java, no ANTLR toolchain, no native Oracle client.
+
+`SyncSql.Lineage.Oracle` analyzes Oracle DDL with the full ANTLR4 PL/SQL grammar. Its generated C#
+lexer/parser/visitor is committed under [`grammar/`](../../grammar/README.md) and referenced as a
+normal project, so restore uses only public NuGet dependencies. Builds, tests, CI, and tool packaging
+do not invoke Java, download an ANTLR tool JAR, or require a separately published
+`SyncSql.Grammar.PlSql` package.
+
 ### Running without installing
 
 Any command below also works as `dotnet run --project cli/src/SyncSql.Cli --`

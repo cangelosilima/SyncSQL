@@ -160,6 +160,12 @@ from the project's Nexus feed, or run it straight from source with
 `dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
 install instructions, and exit codes: [`cli/docs/cli.md`](cli/docs/cli.md).
 
+Building from source needs the .NET 10 SDK and nothing else. The complete Oracle
+PL/SQL parser is generated C# committed under [`grammar/`](grammar/README.md), so
+`dotnet build cli/SyncSql.slnx` neither runs Java nor restores a private parser
+package. Details:
+[`cli/docs/cli.md`](cli/docs/cli.md)'s "Build prerequisites".
+
 ## Configuration
 
 Copy `config/servers.example.json` to `config/servers.json` and edit it.
@@ -299,8 +305,10 @@ dispatches to that engine's analyzer when building the catalog:
   straight off the parse tree.
 - **Oracle** objects are parsed with a real ANTLR4 PL/SQL grammar
   (`SyncSql.Lineage.Oracle` vendors the `.g4` grammar files from
-  [antlr/grammars-v4](https://github.com/antlr/grammars-v4); the
-  lexer/parser is generated at build time, nothing generated is committed)
+  [antlr/grammars-v4](https://github.com/antlr/grammars-v4); its generated C#
+  lexer/parser/visitor is committed and compiled directly, so building and
+  testing need no Java toolchain or private parser feed - see
+  [`grammar/README.md`](grammar/README.md))
   - the same real-AST treatment as MSSQL: table/view references, package/
     procedure/function calls (including schema-qualified and `call_statement`
     invocations), `FOREIGN KEY` references, and alias-bound column

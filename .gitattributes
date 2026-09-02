@@ -1,0 +1,3 @@
+# ANTLR emits trailing spaces in generated C#. Preserve byte-for-byte reproducibility with the
+# documented generator command and keep whitespace checks focused on maintained source files.
+grammar/**/Generated/*.cs -whitespace

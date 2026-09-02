@@ -8,7 +8,8 @@ namespace SyncSql.Lineage.Oracle;
 
 /// <summary>
 /// Real PL/SQL-grammar-based lineage inference for Oracle objects (the vendored antlr/grammars-v4
-/// PlSqlLexer/PlSqlParser - see Grammar/NOTICE.md), replacing the comment/string-scrubbing-plus-regex
+/// PlSqlLexer/PlSqlParser, compiled from the generated C# checked into grammar/ - see
+/// grammar/README.md at the repository root), replacing the comment/string-scrubbing-plus-regex
 /// approach the original PowerShell pipeline used as an interim fix. A real parse tree naturally can't
 /// mistake string-literal or comment content for identifiers (the lexer simply never tokenizes it as
 /// one), including Oracle's q'...' alternative quoting, which the old regex-based approach had no way

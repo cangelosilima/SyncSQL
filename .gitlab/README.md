@@ -22,9 +22,9 @@ an `include:` of four modules under `.gitlab/ci/`:
 | `sync.yml`     | `sync`                                              | `sync-database-objects` |
 | `pages.yml`    | `pages`                                             | `pages` |
 
-Splitting this way keeps each concern - building the CLI, extracting from
-the fleet, publishing to git, and building/deploying the site - in its own
-file, while the root file stays a short table of contents.
+Splitting this way keeps each concern - building the CLI, extracting from the
+fleet, publishing to git, and building/deploying the site - in its own file,
+while the root file stays a short table of contents.
 
 ### Sharing job config across modules: `extends`, not YAML anchors
 
@@ -85,9 +85,9 @@ mark that indirect, Nexus-mediated dependency, not a same-pipeline `needs:`.
 ## Trigger rules
 
 - `cli-lint`/`cli-test`/`cli-build`: run on merge requests and pushes, but
-  only when `cli/**/*` changed.
-- `cli-publish`: runs only on the default branch, only when `cli/**/*`
-  changed.
+  only when `cli/**/*` or `grammar/**/*` changed.
+- `cli-publish`: runs only on the default branch, only when `cli/**/*` or
+  `grammar/**/*` changed.
 - `validate-config`: runs on merge requests and pushes (any change) - it's
   cheap and has no database/git credential requirements, so it's a useful
   fast check even outside `cli/` changes.
@@ -101,19 +101,17 @@ mark that indirect, Nexus-mediated dependency, not a same-pipeline `needs:`.
 
 ### `cli-lint` / `cli-test` / `cli-build` / `cli-publish` (`cli.yml`)
 
-Lint (`dotnet format --verify-no-changes`, excluding the two vendored
-`Grammar/*Base.cs` files under `SyncSql.Lineage.Oracle` - see that folder's
-`NOTICE.md` - so formatting never diverges them from upstream), test, and
-build the `cli/` solution. `cli-publish` packs `SyncSql.Cli` and pushes it to
+Lint (`dotnet format --verify-no-changes`), test, and build the `cli/` solution.
+`cli-publish` packs `SyncSql.Cli` and pushes it to
 the Nexus feed named by `NEXUS_NUGET_SOURCE_URL`, authenticated with
 `NEXUS_API_KEY`; `Directory.Build.props`' `<Version>` is the single source of
 truth for the published version number - bump it there to cut a new release.
 
-`SyncSql.Lineage.Oracle` vendors a real ANTLR4 PL/SQL grammar (`.g4` files)
-that `Antlr4BuildTasks` generates a lexer/parser from at `dotnet build` time
-- that codegen step needs a JRE on `PATH`, which `.cli_dotnet`'s
-`before_script` installs alongside the .NET SDK image; nothing generated is
-ever committed to source control.
+`SyncSql.Lineage.Oracle` analyzes Oracle DDL with a real ANTLR4 PL/SQL parser,
+but none of these jobs generate it: the generated C# parser is committed under
+`grammar/`, built through a project reference, and included in the CLI tool
+package. CI needs neither Java nor an ANTLR tool JAR, and there is no separately
+published parser package to coordinate.
 
 None of these jobs touch git, databases, or the fleet - they only build and
 publish the CLI tool itself. See [`cli/docs/cli.md`](../cli/docs/cli.md) for
@@ -221,7 +219,7 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used by `sync-database-objects` to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. Falls back to `GIT_PUSH_TOKEN` if unset. |
 | `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`, where `<PREFIX>` is that server's `credentialsVariablePrefix`. |
-| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used by `validate-config`/`extract-server`/`sync-database-objects` to install the published `syncsql` tool, and by `cli-publish` to publish new versions of it. |
+| `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used by `validate-config`/`extract-server`/`sync-database-objects` to install the published `syncsql` tool and by `cli-publish` to publish it. |
 | `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by `cli-publish`. |
 
 `CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank in
