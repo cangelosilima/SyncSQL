@@ -13,24 +13,23 @@ internal static class CatalogCommand
 {
     public static Command Build(IServiceProvider services)
     {
-        Option<DirectoryInfo> objectsRootOption = new("--objects-root")
+        Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
+        Option<string?> objectsRootOption = new("--objects-root")
         {
-            Description = "Root of the extracted tree (server/database/type/[schema/]object.sql).",
-            Required = true,
+            Description = $"Root of the extracted tree (server/database/type/[schema/]object.sql). Default: <output-root>/{SyncSqlPaths.ObjectsDirectoryName}, i.e. what `syncsql sync` just wrote.",
         };
-        Option<FileInfo> outputOption = new("--output")
+        Option<string?> outputOption = new("--output")
         {
-            Description = "File path the catalog JSON is written to.",
-            Required = true,
+            Description = $"File path the catalog JSON is written to. Default: <output-root>/{SyncSqlPaths.CatalogFileName}.",
         };
-        Option<DirectoryInfo?> repoRootOption = new("--repo-root")
+        Option<string?> repoRootOption = new("--repo-root")
         {
             Description = "Git checkout containing --path-prefix, mined for history/heatmap/point-in-time data. Omit to skip all of that.",
         };
         Option<string> pathPrefixOption = new("--path-prefix")
         {
             Description = "Folder inside --repo-root holding the extracted tree.",
-            DefaultValueFactory = _ => "objects",
+            DefaultValueFactory = _ => SyncSqlPaths.ObjectsDirectoryName,
         };
         Option<int> historyLimitOption = new("--history-limit")
         {
@@ -52,13 +51,14 @@ internal static class CatalogCommand
             Description = "Commits touching more files than this are excluded from co-change pair counting.",
             DefaultValueFactory = _ => 40,
         };
-        Option<DirectoryInfo?> metricsRootOption = new("--metrics-root")
+        Option<string?> metricsRootOption = new("--metrics-root")
         {
-            Description = "Root of the accumulating metrics history tree. Omit to skip - node.metrics is left empty.",
+            Description = $"Root of the accumulating metrics history tree (`metrics update`'s --history-root, e.g. <output-root>/{SyncSqlPaths.MetricsHistoryDirectoryName}). Omit to skip - node.metrics is left empty.",
         };
 
         Command buildCommand = new("build", "Build catalog.json from an extracted-objects tree.")
         {
+            outputRootOption,
             objectsRootOption,
             outputOption,
             repoRootOption,
@@ -75,32 +75,35 @@ internal static class CatalogCommand
             ILogger logger = services.GetLogger(nameof(CatalogCommand));
             ICatalogBuilder catalogBuilder = services.GetRequiredService<ICatalogBuilder>();
 
+            string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
+            string objectsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(objectsRootOption), outputRoot, SyncSqlPaths.ObjectsDirectoryName);
+            string outputPath = SyncSqlPaths.Resolve(parseResult.GetValue(outputOption), outputRoot, SyncSqlPaths.CatalogFileName);
+
             CatalogBuildRequest request = new()
             {
-                ObjectsRoot = parseResult.GetRequiredValue(objectsRootOption).FullName,
-                RepoRoot = parseResult.GetValue(repoRootOption)?.FullName,
-                PathPrefix = parseResult.GetValue(pathPrefixOption) ?? "objects",
+                ObjectsRoot = objectsRoot,
+                RepoRoot = ToFullPathOrNull(parseResult.GetValue(repoRootOption)),
+                PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.ObjectsDirectoryName,
                 HistoryLimit = parseResult.GetValue(historyLimitOption),
                 MaxVersionsPerObject = parseResult.GetValue(maxVersionsOption),
                 MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
                 MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
-                MetricsRoot = parseResult.GetValue(metricsRootOption)?.FullName,
+                MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
             };
 
             try
             {
                 Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(request, cancellationToken);
 
-                FileInfo outputFile = parseResult.GetRequiredValue(outputOption);
-                if (outputFile.DirectoryName is { Length: > 0 } outputDirectory)
+                if (Path.GetDirectoryName(outputPath) is { Length: > 0 } outputDirectory)
                 {
                     Directory.CreateDirectory(outputDirectory);
                 }
-                await File.WriteAllTextAsync(outputFile.FullName, JsonSerializer.Serialize(catalog, SyncSqlJsonOptions.Default), cancellationToken);
+                await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(catalog, SyncSqlJsonOptions.Default), cancellationToken);
 
                 logger.LogInformation(
                     "Wrote catalog.json ({NodeCount} node(s), {EdgeCount} edge(s)) -> {Path}",
-                    catalog.Nodes.Count, catalog.Edges.Count, outputFile.FullName);
+                    catalog.Nodes.Count, catalog.Edges.Count, outputPath);
                 return 0;
             }
             catch (DirectoryNotFoundException ex)
@@ -112,4 +115,7 @@ internal static class CatalogCommand
 
         return new Command("catalog", "Catalog-related commands.") { buildCommand };
     }
+
+    private static string? ToFullPathOrNull(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
 }

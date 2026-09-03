@@ -20,14 +20,24 @@ files: extracted objects, metrics snapshots, and `catalog.json` (which
 its own `catalog build` command optionally reads git history *from*, via
 read-only `git log`/`git show`, purely to mine the change heatmap/
 co-change/point-in-time features - it never writes to that checkout).
-Publishing results to a git repository is entirely the calling
-pipeline's responsibility - see [`.gitlab/README.md`](../../.gitlab/README.md)'s
-`sync-database-objects` section for the reference implementation (clone,
-replace `config.git.pathPrefix`, commit, push, calling `syncsql metrics
-update` and `syncsql catalog build` in between for the non-git steps).
-This keeps the tool a pure, git-agnostic data pipeline you can run and
-test anywhere, with exactly one place deciding how and where results get
-published.
+Publishing results to a git repository is
+[`scripts/Publish-SyncSqlObjects.ps1`](../../scripts/Publish-SyncSqlObjects.ps1)'s
+job (clone, replace `config.git.pathPrefix`, commit, push, calling
+`syncsql metrics update` and `syncsql catalog build` in between for the
+non-git steps) - a plain PowerShell script the CI `sync` stage invokes
+with parameters, and that you can run by hand exactly the same way; see
+[`.gitlab/README.md`](../../.gitlab/README.md)'s `sync-database-objects`
+section. This keeps the tool a pure, git-agnostic data pipeline you can
+run and test anywhere, with exactly one place deciding how and where
+results get published.
+
+**Nothing about a run comes from the environment.** Every input - the
+config path, the credentials for each server, every output path, and
+every tuning limit - is a command-line parameter with a sensible local
+default, so the same commands work identically on a workstation and in a
+pipeline. The only environment fallback left is the pre-existing
+`<prefix>_DB_USER`/`<prefix>_DB_PASSWORD` credential pair, kept as the
+last-resort layer so an existing CI setup keeps working unchanged.
 
 ## Install
 
@@ -87,9 +97,9 @@ no database and no git remote.
 syncsql validate-config --config ./config/servers.json
 ```
 
-| Option     | Required | Description                          |
-|------------|----------|---------------------------------------|
-| `--config` | yes      | Path to the `config/servers.json` file to validate. |
+| Option     | Default                  | Description                          |
+|------------|--------------------------|---------------------------------------|
+| `--config` | `./config/servers.json`  | Path to the `config/servers.json` file to validate. |
 
 Exit code `0` on success, `1` with an error message on a validation
 failure (missing/invalid field, no servers defined, malformed JSON).
@@ -106,13 +116,17 @@ result) is the calling pipeline's job - see [`.gitlab/README.md`](../../.gitlab/
 syncsql sync --config ./config/servers.json
 ```
 
-| Option                     | Default                          | Description |
-|----------------------------|-----------------------------------|-------------|
-| `--config`                 | *(required)*                      | Path to `config/servers.json`. |
-| `--staging-root`           | a fresh temp directory            | Local directory each extracted object is written to. |
-| `--metrics-snapshot-root`  | a fresh temp directory            | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - one JSON file per table, meant to be folded into history later via `syncsql metrics update`). |
-| `--server-include`         | `config.serverSelection.include`  | Regex a server name must match to run. Repeatable. Overrides the config value entirely when passed. |
-| `--server-exclude`         | `config.serverSelection.exclude`  | Regex that excludes a server. Repeatable. Overrides the config value entirely when passed. |
+| Option                     | Default                            | Description |
+|----------------------------|-------------------------------------|-------------|
+| `--config`                 | `./config/servers.json`             | Path to `config/servers.json`. |
+| `--output-root`            | `./syncsql-output`                  | Directory the two paths below default to a folder inside. |
+| `--staging-root`           | `<output-root>/objects`             | Local directory each extracted object is written to. |
+| `--metrics-snapshot-root`  | `<output-root>/metrics-snapshot`    | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - one JSON file per table, meant to be folded into history later via `syncsql metrics update`). |
+| `--db-user`                | `--credentials-file`, then the environment | Database username for one server, as `PREFIX=value` (`PREFIX` = that server's `credentialsVariablePrefix`). Repeatable. |
+| `--db-password`            | `--credentials-file`, then the environment | Database password for one server, as `PREFIX=value`. Repeatable. Only the first `=` separates, so a password containing `=` needs no escaping. |
+| `--credentials-file`       | *(none)*                            | JSON file of credentials keyed by `credentialsVariablePrefix` - see [Credentials](#credentials). |
+| `--server-include`         | `config.serverSelection.include`    | Regex a server name must match to run. Repeatable. Overrides the config value entirely when passed. |
+| `--server-exclude`         | `config.serverSelection.exclude`    | Regex that excludes a server. Repeatable. Overrides the config value entirely when passed. |
 
 Exit code `0` if every selected server extracted successfully; `1` if
 any server failed (extraction error or missing credentials). A partial
@@ -139,15 +153,16 @@ syncsql catalog build --objects-root ./staging --output ./catalog.json
 
 | Option                          | Default   | Description |
 |----------------------------------|-----------|-------------|
-| `--objects-root`                 | *(required)* | Root of the extracted tree (`server/database/type/[schema/]object.sql`). |
-| `--output`                       | *(required)* | File path the catalog JSON is written to. |
+| `--output-root`                  | `./syncsql-output` | Directory the two paths below default to a folder inside. |
+| `--objects-root`                 | `<output-root>/objects` | Root of the extracted tree (`server/database/type/[schema/]object.sql`) - i.e. what `syncsql sync` just wrote. |
+| `--output`                       | `<output-root>/catalog.json` | File path the catalog JSON is written to. |
 | `--repo-root`                    | *(none)*  | Git checkout containing `--path-prefix`, mined **read-only** (`git log`/`git show`) for history/heatmap/point-in-time data - never written to. Omit to skip all of that (empty history, zero change counts) rather than failing. |
 | `--path-prefix`                  | `objects` | Folder inside `--repo-root` holding the extracted tree. |
 | `--history-limit`                | `250`     | Maximum number of commits (touching `--path-prefix`) to mine. |
 | `--max-versions-per-object`      | `15`      | Maximum historical versions kept (and content-fetched via `git show`) per object, most recent first. |
 | `--max-history-content-calls`    | `1500`    | Hard cap on total `git show` invocations across the whole mining pass, so a large/old repo can't turn this into an unbounded job. |
 | `--max-co-change-commit-size`    | `40`      | Commits touching more files than this are excluded from co-change pair counting (almost always a bulk/initial sync, not a meaningful signal). |
-| `--metrics-root`                 | *(none)*  | Root of the accumulating metrics history tree (`metrics update`'s `--history-root`). Omit to skip - `node.metrics` is left empty. |
+| `--metrics-root`                 | *(none)*  | Root of the accumulating metrics history tree (`metrics update`'s `--history-root`, e.g. `<output-root>/metrics`). Omit to skip - `node.metrics` is left empty. |
 
 Lineage edges are inferred with a real parser per engine - `Microsoft.SqlServer.TransactSql.ScriptDom`
 for MSSQL objects, a vendored ANTLR PL/SQL grammar for Oracle objects -
@@ -180,8 +195,9 @@ syncsql metrics update --snapshot-root ./metrics-snapshot --history-root ./metri
 
 | Option              | Default | Description |
 |----------------------|---------|-------------|
-| `--snapshot-root`    | *(required)* | Root of this run's freshly captured snapshot tree (one JSON file per object, same relative path/id as the object's own `.sql` file - `sync`'s `--metrics-snapshot-root`). |
-| `--history-root`     | *(required)* | Root of the accumulating history tree, e.g. `<target-repo-checkout>/metrics`. Kept outside `config.git.pathPrefix` so a wipe-and-replace of the object tree never touches it. |
+| `--output-root`      | `./syncsql-output` | Directory the two paths below default to a folder inside. |
+| `--snapshot-root`    | `<output-root>/metrics-snapshot` | Root of this run's freshly captured snapshot tree (one JSON file per object, same relative path/id as the object's own `.sql` file - `sync`'s `--metrics-snapshot-root`). |
+| `--history-root`     | `<output-root>/metrics` | Root of the accumulating history tree; in a pipeline, `<target-repo-checkout>/metrics`. Kept outside `config.git.pathPrefix` so a wipe-and-replace of the object tree never touches it. |
 | `--history-limit`    | `90`    | Maximum snapshots retained per object; oldest are trimmed first. |
 
 ### `syncsql lint`
@@ -206,9 +222,10 @@ before it's ever run against a server.
 syncsql lint --path ./staging
 ```
 
-| Option       | Default   | Description |
-|--------------|-----------|-------------|
-| `--path`     | *(required)* | A `.sql` file, or a directory searched recursively for `*.sql` files. Repeatable. |
+| Option          | Default   | Description |
+|-----------------|-----------|-------------|
+| `--output-root` | `./syncsql-output` | Directory `--path` defaults to a folder inside. |
+| `--path`        | `<output-root>/objects` | A `.sql` file, or a directory searched recursively for `*.sql` files. Repeatable. |
 | `--fail-on`  | `error`   | Minimum finding severity that makes the command exit non-zero: `warning` or `error`. |
 
 Findings are logged one per line as `path:line:column [rule-id] message`, at
@@ -228,11 +245,13 @@ extracted.
   (default `main`), `pathPrefix` (default `objects`), `commitUserName`,
   `commitUserEmail`, `commitMessage`. `syncsql` itself never reads or
   acts on this block - it exists purely as part of the config schema
-  `validate-config` checks. The calling pipeline resolves and acts on it
-  directly (see [`.gitlab/README.md`](../../.gitlab/README.md), which reads it via `jq`);
-  leaving `remoteUrl` blank there means push back into the repository
-  identified by the GitLab CI predefined variables
-  `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH`.
+  `validate-config` checks. [`scripts/Publish-SyncSqlObjects.ps1`](../../scripts/Publish-SyncSqlObjects.ps1)
+  is what resolves and acts on it, and each field there is also a script
+  parameter that overrides the config value (see
+  [`.gitlab/README.md`](../../.gitlab/README.md)); the CI job passes
+  `-RemoteUrl` built from the GitLab predefined variables
+  `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH` when `remoteUrl`
+  is left blank, so objects go back into the same project.
 - **`defaults`** / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
   (`Schemas`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
@@ -250,20 +269,66 @@ server, database, schema, and individual object name. An exclude match
 always wins over an include match; an empty/missing include list means
 "include everything."
 
+## Output layout
+
+Every path `syncsql` writes defaults to a folder under `--output-root`
+(itself defaulting to `./syncsql-output` in the current directory), so a
+local run needs no path parameter at all and the four commands chain
+together out of the box:
+
+```
+./syncsql-output/
+├── objects/           # sync --staging-root         → catalog build --objects-root, lint --path
+├── metrics-snapshot/  # sync --metrics-snapshot-root → metrics update --snapshot-root
+├── metrics/           # metrics update --history-root → catalog build --metrics-root
+└── catalog.json       # catalog build --output
+```
+
+Any single path can still be pinned explicitly, and the CI pipeline pins
+all of them (see [`.gitlab/README.md`](../../.gitlab/README.md)). Relative
+paths resolve against the current directory; the resolved absolute path is
+what gets logged.
+
 ## Credentials
 
 Credentials are **never** stored in the config. Each server entry has a
-`credentialsVariablePrefix`; `syncsql` reads
-`<prefix>_DB_USER` / `<prefix>_DB_PASSWORD` from the process
-environment. A server missing either variable is skipped (logged as an
-error, counted as a failure) rather than aborting the whole run.
+`credentialsVariablePrefix`, and `syncsql sync` resolves that prefix
+against three sources, in order - each half (username, password)
+independently, so a username passed as a parameter can be completed by a
+password that only the environment has:
 
-The git push token used by the calling pipeline (`CI_JOB_Maintainer_Token`,
-documented in [`.gitlab/README.md`](../../.gitlab/README.md)) never passes through `syncsql` at
-all - the pipeline hands it to `git` directly via `GIT_ASKPASS` plus a
-process environment variable, never a command-line argument and never
-embedded in the remote URL, so it cannot leak through a process listing,
-`git remote -v`, or shell history.
+1. **`--db-user PREFIX=value` / `--db-password PREFIX=value`** - repeatable
+   parameters, one pair per server. This is how a CI job passes credentials
+   in without the CLI needing anything in its environment.
+2. **`--credentials-file <path>`** - a JSON file keyed by prefix:
+
+   ```json
+   {
+     "SQLPROD01": { "user": "svc_syncsql", "password": "..." },
+     "ORAPROD01": { "user": "SYNCSQL", "password": "..." }
+   }
+   ```
+
+   Either half may be omitted and filled in by a lower layer. Keep the file
+   outside the repository and readable only by the account running `syncsql`.
+3. **`<prefix>_DB_USER` / `<prefix>_DB_PASSWORD` environment variables** -
+   the original behaviour, kept as the last-resort layer so an existing
+   setup keeps working with no parameter changes.
+
+A server whose username or password can't be found in any of the three is
+skipped (logged as an error naming every source tried, counted as a
+failure) rather than aborting the whole run.
+
+Command-line arguments are visible to other processes on the same host, so
+on a shared machine prefer `--credentials-file` (or the environment) over
+`--db-password` for the password half.
+
+The git push token used when publishing never passes through `syncsql` at
+all: [`scripts/Publish-SyncSqlObjects.ps1`](../../scripts/Publish-SyncSqlObjects.ps1)
+hands it to `git` through a credential helper that reads it from that
+script's own environment - never a command-line argument, never written to
+disk, and never embedded in the remote URL, so it cannot leak through a
+process listing, `git remote -v`, or shell history.
 
 ## Exit codes
 
@@ -275,17 +340,31 @@ embedded in the remote URL, so it cannot leak through a process listing,
 
 ## Running locally
 
+Nothing here needs a CI job, an exported variable, or a path parameter -
+the whole flow runs from a checkout with credentials in a file:
+
 ```bash
-syncsql sync --config ./config/servers.json --staging-root ./staging
+cat > ~/.syncsql-credentials.json <<'JSON'
+{ "SQLPROD01": { "user": "svc_syncsql", "password": "..." } }
+JSON
+chmod 600 ~/.syncsql-credentials.json
+
+syncsql sync --credentials-file ~/.syncsql-credentials.json   # → ./syncsql-output/{objects,metrics-snapshot}
+syncsql metrics update                                        # → ./syncsql-output/metrics
+syncsql catalog build --metrics-root ./syncsql-output/metrics # → ./syncsql-output/catalog.json
 ```
 
-Leaves the extracted files under `./staging`. To build a `catalog.json`
-for local preview from that staging directory:
+`--config` defaults to `./config/servers.json`, so a checkout with a real
+config needs no parameter for it either. Pass credentials as `--db-user
+SQLPROD01=svc_syncsql --db-password SQLPROD01=...` instead of the file if
+you prefer, or leave the `SQLPROD01_DB_USER`/`SQLPROD01_DB_PASSWORD`
+variables exported in your shell - all three work.
+
+To preview the site against that catalog, point `catalog build --output` at
+it and run `npm run dev` inside `site/`:
 
 ```bash
-syncsql catalog build \
-  --objects-root ./staging \
-  --output ./site/public/data/catalog.json
+syncsql catalog build --output ./site/public/data/catalog.json
 ```
 
 Add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
@@ -294,7 +373,21 @@ nothing is written back to that checkout), and `--metrics-root
 <metrics-history-dir>` to include accumulated metrics trends (a single
 local run only ever has one snapshot to show - real trend graphs need
 several runs' worth of history accumulated in a real `metrics/` tree,
-via `syncsql metrics update`). Then `npm run dev` inside `site/`.
+via `syncsql metrics update`).
+
+Publishing the result into a git repository - the same steps CI runs - is
+one script away, and `-SkipPush` makes it a dry run:
+
+```bash
+pwsh ./scripts/Publish-SyncSqlObjects.ps1 \
+  -ExtractedObjectsDir ./syncsql-output/objects \
+  -MetricsSnapshotDir ./syncsql-output/metrics-snapshot \
+  -ConfigPath ./config/servers.json \
+  -SkipPush
+```
+
+See [`.gitlab/README.md`](../../.gitlab/README.md)'s `sync-database-objects`
+section for its full parameter list.
 
 ## Architecture
 
@@ -302,7 +395,9 @@ via `syncsql metrics update`). Then `npm run dev` inside `site/`.
 `cli/`:
 
 - **`SyncSql.Core`** - domain records and interfaces only; no database
-  driver, parser, or git dependency.
+  driver, parser, or git dependency. `SyncSql.Core.Credentials` holds the
+  credential sources (parameters, credentials file, environment) and the
+  layered provider that stacks them.
 - **`SyncSql.Extraction.MsSql`** / **`SyncSql.Extraction.Oracle`** -
   one `IDatabaseObjectExtractor` per engine (`Microsoft.Data.SqlClient`,
   `Oracle.ManagedDataAccess.Core`).

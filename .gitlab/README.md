@@ -19,7 +19,7 @@ an `include:` of four modules under `.gitlab/ci/`:
 |----------------|------------------------------------------------------|------|
 | `cli.yml`      | `cli-lint`, `cli-test`, `cli-build`, `cli-publish`   | `cli-lint`, `cli-test`, `cli-build`, `cli-publish` |
 | `extract.yml`  | `validate`, `extract`                               | `validate-config`, `extract-server` |
-| `sync.yml`     | `sync`                                              | `sync-database-objects` |
+| `sync.yml`     | `sync`                                              | `sync-database-objects` (a thin wrapper around [`../scripts/Publish-SyncSqlObjects.ps1`](../scripts/Publish-SyncSqlObjects.ps1)) |
 | `pages.yml`    | `pages`                                             | `pages` |
 
 Splitting this way keeps each concern - building the CLI, extracting from the
@@ -127,15 +127,31 @@ needed - this is a fast sanity check for merge requests and pushes.
 ### `extract-server` (`extract.yml`)
 
 The only jobs that touch your databases. One job **per server**, run in
-parallel via a GitLab `parallel: matrix:` over `SERVER_NAME`. Each instance
-runs:
+parallel via a GitLab `parallel: matrix:` over `SERVER_NAME` +
+`CREDENTIALS_PREFIX`. Each instance runs:
 
 ```
 syncsql sync --config "$CONFIG_PATH" --server-include "^${SERVER_NAME}$" \
-  --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR"
+  --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR" \
+  --db-user "${CREDENTIALS_PREFIX}=$(printenv "${CREDENTIALS_PREFIX}_DB_USER")" \
+  --db-password "${CREDENTIALS_PREFIX}=$(printenv "${CREDENTIALS_PREFIX}_DB_PASSWORD")"
 ```
 
 purely locally - no git operation happens here or anywhere in the CLI.
+
+**Credentials are passed as parameters, not inherited from the job's
+environment.** The masked CI/CD variables are still named after each
+server's `credentialsVariablePrefix`; `printenv` picks the right pair and
+hands them to the CLI. GitLab logs the *unexpanded* script line, so the
+values never reach the job log, and the CLI needs nothing in its
+environment - which is what makes the same command runnable by hand.
+Command-line arguments are readable by other processes on the same host,
+though, so on a shared runner prefer `syncsql sync --credentials-file`
+with a file the job writes from a masked variable (or drop the two
+`--db-*` parameters and let the CLI fall back to the environment, which
+still works). That is also why `CREDENTIALS_PREFIX` is its own matrix key:
+a server whose name differs from its prefix (`SQLPROD02_FINANCE_ONLY` vs
+`SQLPROD02` in the example config) still gets the right pair.
 Every instance writes to the *same* `--staging-root`/`--metrics-snapshot-root`;
 this is safe because extraction always writes under `<server>/...` first
 (see `ExtractedObjectFile.RelativePath`), so concurrent instances scoped to
@@ -143,7 +159,7 @@ different servers never collide. GitLab merges every instance's artifacts
 together for the downstream `sync-database-objects` job - a plain job name
 in `dependencies:` pulls in *all* instances of a `parallel:` job.
 
-The `SERVER_NAME` matrix list must match every server
+The `SERVER_NAME`/`CREDENTIALS_PREFIX` matrix list must match every server
 `config/servers.json`'s `serverSelection` would actually run for this
 pipeline, and has to be kept in sync by hand whenever the fleet changes - a
 server present in the config but missing from the matrix silently isn't
@@ -156,45 +172,90 @@ syncsql sync --config "$CONFIG_PATH" --staging-root "$EXTRACTED_OBJECTS_DIR" \
   --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR"
 ```
 
-(no `--server-include`, so every server extracts) ahead of its existing git
-script - same end result, back to one sequential job doing everything.
+(no `--server-include`, so every server extracts; with no per-server
+`--db-user`/`--db-password` to pass, credentials come from the job's
+`<prefix>_DB_USER`/`<prefix>_DB_PASSWORD` variables) ahead of its existing
+publish script - same end result, back to one sequential job doing
+everything.
 
 ### `sync-database-objects` (`sync.yml`)
 
 Publishes the merged output of every `extract-server` instance. This is the
-**only** place git actually runs in the whole pipeline: everything
-git-shaped - resolving `config.git.*` (via `jq`, since the CLI itself never
-reads that block), cloning, replacing `config.git.pathPrefix` with the
-merged staged tree, committing, and pushing - is a plain shell script here.
-It calls `syncsql metrics update` and `syncsql catalog build` only for the
-pure, non-git steps: folding this run's metrics into history, and
-rebuilding `catalog.json` (structure, inferred lineage via a real parser per
-engine, and history/heatmap/point-in-time mined from this repo's own commit
+**only** place git actually runs in the whole pipeline - and the job itself
+is deliberately thin: it installs `git` (and PowerShell, if the image
+doesn't already ship it) and invokes
+[`../scripts/Publish-SyncSqlObjects.ps1`](../scripts/Publish-SyncSqlObjects.ps1)
+with every setting as a parameter. Everything git-shaped - resolving
+`config.git.*`, cloning, replacing `config.git.pathPrefix` with the merged
+staged tree, committing, and pushing - lives in that script, which also
+calls `syncsql metrics update` and `syncsql catalog build` for the pure,
+non-git steps: folding this run's metrics into history, and rebuilding
+`catalog.json` (structure, inferred lineage via a real parser per engine,
+and history/heatmap/point-in-time mined from this repo's own commit
 history). One commit carries the extracted objects, `catalog.json`, and the
 updated `metrics/` tree together.
 
-Notable details in that script:
+Keeping it in a script rather than an inline YAML block means the exact
+same publish can be read, reviewed, and run by hand from a workstation:
+
+```powershell
+pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
+  -ExtractedObjectsDir ./syncsql-output/objects `
+  -MetricsSnapshotDir ./syncsql-output/metrics-snapshot `
+  -ConfigPath ./config/servers.json `
+  -SkipPush
+```
+
+| Parameter | Default | What it does |
+|-----------|---------|--------------|
+| `-ExtractedObjectsDir` | *(required)* | The tree to publish - `syncsql sync --staging-root`'s output. |
+| `-MetricsSnapshotDir` | *(none)* | This run's `--metrics-snapshot-root`. Omitted or missing: the metrics history update is skipped. |
+| `-ConfigPath` | *(none)* | `config/servers.json`, read only to default the git settings below. |
+| `-RemoteUrl` | config `git.remoteUrl` | Repository published to. The CI job passes the `CI_SERVER_*`-derived self-repo URL when the config leaves it blank. |
+| `-Branch` | config, then `main` | Branch cloned, committed to, and pushed. Created from the default branch if the remote doesn't have it yet. |
+| `-PathPrefix` | config, then `objects` | Folder inside the clone the object tree replaces. |
+| `-CommitUserName` / `-CommitUserEmail` / `-CommitMessage` | config, then the SyncSQL defaults | Commit identity and message. |
+| `-MetricsHistoryDirName` | `metrics` | Folder inside the clone holding the metrics history tree, kept outside `-PathPrefix`. |
+| `-CatalogFileName` | `catalog.json` | Name of the catalog written inside `-PathPrefix`. |
+| `-HistoryLimit` | `250` | Clone depth and `catalog build --history-limit`. |
+| `-MetricsHistoryLimit` | `90` | `metrics update --history-limit`. |
+| `-MaxVersionsPerObject` / `-MaxHistoryContentCalls` / `-MaxCoChangeCommitSize` | `15` / `1500` / `40` | Passed straight through to `catalog build`. |
+| `-PushToken` | `SYNCSQL_PUSH_TOKEN`, `GIT_PUSH_TOKEN`, then `CI_JOB_Maintainer_Token` | The one deliberate environment fallback - see below. |
+| `-SyncSqlCommand` | `syncsql` | The CLI to invoke, e.g. an absolute path to a locally built one. |
+| `-CloneDirectory` | a fresh temp directory | Where the target repo is cloned; removed afterwards unless `-KeepCloneDirectory`. |
+| `-DotEnvPath` | *(none)* | Where to write the `PATH_PREFIX`/`GIT_BRANCH` dotenv the `pages` job consumes. |
+| `-SkipPush` | off | Do everything except commit and push - a real dry run. |
+
+Notable details:
 
 - **`config.git.*` defaults** (branch `main`, path prefix `objects`, etc.)
   match what SyncSQL has always used - see the root README's Configuration
-  section. The CLI never resolves or acts on this block itself; this script
-  is the one place that does.
-- **Push token**: `CI_JOB_Maintainer_Token` (falling back to
-  `GIT_PUSH_TOKEN`) is handed to git only through `GIT_ASKPASS` plus a
-  process environment variable - never a CLI argument, never embedded in
-  the remote URL - so it can't leak via a process listing, `git remote -v`,
-  or shell history.
-- **Wipe and repopulate**: the target directory (`config.git.pathPrefix`) is
+  section. Precedence is parameter → config file → default, so CI can pin a
+  value without editing the config, and a config-only setup keeps working.
+- **Push token**: a secret is the one thing the script still reads from its
+  environment when it isn't passed (`SYNCSQL_PUSH_TOKEN`, `GIT_PUSH_TOKEN`,
+  `CI_JOB_Maintainer_Token`) - precisely so it never has to appear in a
+  command line. It reaches `git` through a credential helper that reads it
+  back out of the script's own environment: never a `git` argument, never
+  written to disk, never embedded in the remote URL, so it can't leak via a
+  process listing, `git remote -v`, or shell history.
+- **Wipe and repopulate**: the target directory (`-PathPrefix`) is
   deleted and rewritten from scratch on every run, so objects dropped from
   the source database (or excluded by an updated filter) show up as
   deletions in git rather than lingering forever.
-- **`sync.env` dotenv report**: writes `PATH_PREFIX`/`GIT_BRANCH` as a
-  GitLab `dotenv` artifact so the downstream `pages` job knows where to find
-  `catalog.json` and which branch tip to fetch, without hardcoding either.
+- **`sync.env` dotenv report**: `-DotEnvPath` writes `PATH_PREFIX`/`GIT_BRANCH`
+  as a GitLab `dotenv` artifact so the downstream `pages` job knows where to
+  find `catalog.json` and which branch tip to fetch, without hardcoding either.
+- **PowerShell in the job**: the `.NET SDK` image may or may not ship `pwsh`
+  depending on the tag, so the job installs it as a dotnet tool when
+  `command -v pwsh` finds nothing. On a runner with no nuget.org access,
+  mirror the `PowerShell` package in Nexus and add
+  `--add-source "$NEXUS_NUGET_SOURCE_URL"` to that install line.
 
 This design is a deliberate split: the CLI (`syncsql`) is a pure,
-git-agnostic data pipeline you can run and test anywhere, and this one job
-is the single place that decides how and where results get published.
+git-agnostic data pipeline you can run and test anywhere, and this one
+script is the single place that decides how and where results get
+published.
 
 ### `pages` (`pages.yml`)
 
@@ -209,7 +270,8 @@ it), but this job's own checkout was taken from the pipeline's *original*
 commit - so its `before_script` fetches and hard-resets to the branch tip
 first, using the `GIT_BRANCH` (falling back to `$CI_COMMIT_REF_NAME`) and
 `PATH_PREFIX` (falling back to `objects`) from `sync-database-objects`'s
-`sync.env` dotenv report.
+`sync.env` dotenv report, and copies `$CATALOG_FILE_NAME` (falling back to
+`catalog.json`) out of that folder.
 
 ## Required CI/CD variables
 
@@ -217,15 +279,26 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 
 | Variable                            | Purpose                                                                                                    |
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, used by `sync-database-objects` to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. Falls back to `GIT_PUSH_TOKEN` if unset. |
-| `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`, where `<PREFIX>` is that server's `credentialsVariablePrefix`. |
+| `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, read by `Publish-SyncSqlObjects.ps1` to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. Falls back to `GIT_PUSH_TOKEN`, and to the script's `-PushToken` parameter if you'd rather pass it in. |
+| `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`, where `<PREFIX>` is that server's `credentialsVariablePrefix`. `extract-server` reads them with `printenv` and passes them to the CLI as `--db-user`/`--db-password` parameters. |
 | `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used by `validate-config`/`extract-server`/`sync-database-objects` to install the published `syncsql` tool and by `cli-publish` to publish it. |
 | `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by `cli-publish`. |
+| `SYNC_REMOTE_URL`                    | Optional. Repository `sync-database-objects` publishes to, passed as the script's `-RemoteUrl`. Unset, the job passes this project's own URL built from `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH`. |
 
 `CI_JOB_Maintainer_Token` is only needed if `git.remoteUrl` is left blank in
 `config/servers.json` (the default, self-repo target). If you point
 `git.remoteUrl` at a different project, it needs Maintainer/
 `write_repository` access there instead.
+
+Every other setting is a plain pipeline variable in `.gitlab-ci.yml`, passed
+down as a CLI/script parameter by the job that needs it: `CONFIG_PATH`,
+`EXTRACTED_OBJECTS_DIR`, `METRICS_SNAPSHOT_DIR`, `METRICS_HISTORY_DIR_NAME`,
+`CATALOG_FILE_NAME`, `PUBLISH_SCRIPT`, `HISTORY_LIMIT`,
+`METRICS_HISTORY_LIMIT`, `MAX_VERSIONS_PER_OBJECT`,
+`MAX_HISTORY_CONTENT_CALLS`, and `MAX_CO_CHANGE_COMMIT_SIZE`. None of them
+is read out of the environment by the CLI or the publish script - which is
+what lets the same commands run on a workstation, where the tools' own
+defaults (`./syncsql-output/...`) take over.
 
 Optional: `HISTORY_LIMIT` (default `250`, set in `.gitlab-ci.yml`) controls
 how many commits get mined for the heatmap/co-change/point-in-time features

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using SyncSql.Catalog;
 using SyncSql.Core.Abstractions;
+using SyncSql.Core.Credentials;
 using SyncSql.Core.Domain;
 using SyncSql.Extraction.MsSql;
 using SyncSql.Extraction.Oracle;
@@ -15,6 +16,8 @@ internal static class ServiceCollectionExtensions
     public static void AddSyncSqlServices(IServiceCollection services)
     {
         services.AddSingleton<IClock, SystemClock>();
+        // The environment stays the last-resort credential source; `sync` layers its --db-user/
+        // --db-password/--credentials-file parameters on top of whatever this returns.
         services.AddSingleton<ICredentialProvider, EnvironmentCredentialProvider>();
         services.AddSingleton<IDatabaseObjectExtractorResolver, DatabaseObjectExtractorResolver>();
         services.AddSingleton<ILineageAnalyzerResolver, LineageAnalyzerResolver>();

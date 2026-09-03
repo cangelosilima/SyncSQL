@@ -1,6 +1,10 @@
 # CI module that publishes extracted database objects back into git. See
 # ../README.md for the full explanation of this job - it's the only place
 # git actually runs in the pipeline.
+#
+# The job itself is deliberately thin: every step lives in
+# scripts/Publish-SyncSqlObjects.ps1, which takes all of it as parameters so the
+# exact same publish can be run (and dry-run, with -SkipPush) from a workstation.
 
 sync-database-objects:
   extends:
@@ -10,77 +14,28 @@ sync-database-objects:
   dependencies:
     - extract-server
   script:
-    - apt-get update -qq && apt-get install -y --no-install-recommends git jq -qq
+    - apt-get update -qq && apt-get install -y --no-install-recommends git -qq
+    # The .NET SDK image may or may not ship PowerShell depending on the tag; install
+    # it as a dotnet tool when it's missing (mirror the PowerShell package in Nexus and
+    # add --add-source "$NEXUS_NUGET_SOURCE_URL" if nuget.org isn't reachable).
+    - command -v pwsh >/dev/null 2>&1 || dotnet tool install --global PowerShell
     - |
-      set -euo pipefail
-
-      GIT_CFG=$(jq -c '.git // {}' "$CONFIG_PATH")
-      BRANCH=$(echo "$GIT_CFG" | jq -r '.branch // "main"')
-      PATH_PREFIX=$(echo "$GIT_CFG" | jq -r '.pathPrefix // "objects"')
-      COMMIT_USER_NAME=$(echo "$GIT_CFG" | jq -r '.commitUserName // "SyncSQL Bot"')
-      COMMIT_USER_EMAIL=$(echo "$GIT_CFG" | jq -r '.commitUserEmail // "syncsql-bot@example.com"')
-      COMMIT_MESSAGE=$(echo "$GIT_CFG" | jq -r '.commitMessage // "chore(sync): update database objects"')
-      REMOTE_URL=$(echo "$GIT_CFG" | jq -r '.remoteUrl // empty')
-      if [ -z "$REMOTE_URL" ]; then
-        REMOTE_URL="${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-      fi
-
-      PUSH_TOKEN="${CI_JOB_Maintainer_Token:-${GIT_PUSH_TOKEN:-}}"
-      if [ -z "$PUSH_TOKEN" ]; then
-        echo "No push token supplied. Set the CI_JOB_Maintainer_Token CI/CD variable (a Maintainer-role token with write_repository scope) or GIT_PUSH_TOKEN." >&2
-        exit 1
-      fi
-
-      ASKPASS_SCRIPT=$(mktemp)
-      cat > "$ASKPASS_SCRIPT" <<'ASKPASS'
-      #!/bin/sh
-      case "$1" in
-          Username*) printf '%s' "oauth2" ;;
-          *)         printf '%s' "$SYNCSQL_GIT_PASSWORD" ;;
-      esac
-      ASKPASS
-      chmod 700 "$ASKPASS_SCRIPT"
-      export GIT_ASKPASS="$ASKPASS_SCRIPT"
-      export GIT_TERMINAL_PROMPT=0
-      export SYNCSQL_GIT_PASSWORD="$PUSH_TOKEN"
-
-      CLONE_DIR=$(mktemp -d)
-      echo "Cloning target repository (branch '$BRANCH', depth $HISTORY_LIMIT)"
-      if ! git clone --branch "$BRANCH" --single-branch --depth "$HISTORY_LIMIT" "$REMOTE_URL" "$CLONE_DIR"; then
-        echo "Branch '$BRANCH' not found on remote yet; cloning default branch and creating it."
-        rm -rf "$CLONE_DIR"
-        git clone --depth "$HISTORY_LIMIT" "$REMOTE_URL" "$CLONE_DIR"
-        git -C "$CLONE_DIR" checkout -B "$BRANCH"
-      fi
-
-      git -C "$CLONE_DIR" config user.name "$COMMIT_USER_NAME"
-      git -C "$CLONE_DIR" config user.email "$COMMIT_USER_EMAIL"
-
-      TARGET_DIR="$CLONE_DIR/$PATH_PREFIX"
-      rm -rf "$TARGET_DIR"
-      mkdir -p "$TARGET_DIR"
-      if [ -d "$EXTRACTED_OBJECTS_DIR" ]; then
-        cp -a "$EXTRACTED_OBJECTS_DIR"/. "$TARGET_DIR"/
-      fi
-
-      METRICS_HISTORY_DIR="$CLONE_DIR/metrics"
-      echo "Updating metrics history ($METRICS_HISTORY_LIMIT-snapshot retention) -> $METRICS_HISTORY_DIR"
-      syncsql metrics update --snapshot-root "$METRICS_SNAPSHOT_DIR" --history-root "$METRICS_HISTORY_DIR" --history-limit "$METRICS_HISTORY_LIMIT"
-
-      echo "Building catalog.json ($HISTORY_LIMIT-commit history window) -> $TARGET_DIR/catalog.json"
-      syncsql catalog build --objects-root "$TARGET_DIR" --output "$TARGET_DIR/catalog.json" --repo-root "$CLONE_DIR" --path-prefix "$PATH_PREFIX" --history-limit "$HISTORY_LIMIT" --metrics-root "$METRICS_HISTORY_DIR"
-
-      git -C "$CLONE_DIR" add -A
-      if git -C "$CLONE_DIR" diff --cached --quiet; then
-        echo "No changes detected; nothing to publish."
-      else
-        git -C "$CLONE_DIR" commit -m "$COMMIT_MESSAGE"
-        echo "Pushing to '$BRANCH'"
-        git -C "$CLONE_DIR" push origin "HEAD:$BRANCH"
-      fi
-
-      echo "PATH_PREFIX=$PATH_PREFIX" > "$CI_PROJECT_DIR/sync.env"
-      echo "GIT_BRANCH=$BRANCH" >> "$CI_PROJECT_DIR/sync.env"
+      pwsh -NoProfile -NonInteractive -File "$PUBLISH_SCRIPT" \
+        -ExtractedObjectsDir "$EXTRACTED_OBJECTS_DIR" \
+        -MetricsSnapshotDir "$METRICS_SNAPSHOT_DIR" \
+        -ConfigPath "$CONFIG_PATH" \
+        -RemoteUrl "${SYNC_REMOTE_URL:-${CI_SERVER_PROTOCOL}://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git}" \
+        -MetricsHistoryDirName "$METRICS_HISTORY_DIR_NAME" \
+        -CatalogFileName "$CATALOG_FILE_NAME" \
+        -HistoryLimit "$HISTORY_LIMIT" \
+        -MetricsHistoryLimit "$METRICS_HISTORY_LIMIT" \
+        -MaxVersionsPerObject "$MAX_VERSIONS_PER_OBJECT" \
+        -MaxHistoryContentCalls "$MAX_HISTORY_CONTENT_CALLS" \
+        -MaxCoChangeCommitSize "$MAX_CO_CHANGE_COMMIT_SIZE" \
+        -DotEnvPath "$CI_PROJECT_DIR/sync.env"
+    # -PushToken is deliberately not passed: the script reads the token from
+    # CI_JOB_Maintainer_Token/GIT_PUSH_TOKEN in its environment and hands it to git
+    # through a credential helper, so it never lands in a command line or the log.
   artifacts:
     reports:
       dotenv: sync.env

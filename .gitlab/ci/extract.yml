@@ -24,12 +24,14 @@ validate-config:
     - if: '$CI_PIPELINE_SOURCE == "push"'
   script:
     - |
-      if [ -f "config/servers.json" ]; then CONFIG_FILE="config/servers.json"; else CONFIG_FILE="config/servers.example.json"; fi
+      if [ -f "$CONFIG_PATH" ]; then CONFIG_FILE="$CONFIG_PATH"; else CONFIG_FILE="$CI_PROJECT_DIR/config/servers.example.json"; fi
     - syncsql validate-config --config "$CONFIG_FILE"
 
-# Keep the SERVER_NAME matrix in sync by hand with config/servers.json - see
-# ../README.md's "extract-server" section for the fallback to a single
-# sequential job for a small fleet.
+# Keep the SERVER_NAME/CREDENTIALS_PREFIX matrix in sync by hand with
+# config/servers.json - see ../README.md's "extract-server" section for the
+# fallback to a single sequential job for a small fleet. Each entry is its own
+# matrix combination, so a server whose credentialsVariablePrefix differs from
+# its name (SQLPROD02_FINANCE_ONLY below) still gets the right credentials.
 extract-server:
   extends:
     - .syncsql_cli
@@ -38,9 +40,27 @@ extract-server:
   timeout: 1h
   parallel:
     matrix:
-      - SERVER_NAME: ["SQLPROD01", "SQLPROD02_FINANCE_ONLY", "ORAPROD01"]
+      - SERVER_NAME: ["SQLPROD01"]
+        CREDENTIALS_PREFIX: ["SQLPROD01"]
+      - SERVER_NAME: ["SQLPROD02_FINANCE_ONLY"]
+        CREDENTIALS_PREFIX: ["SQLPROD02"]
+      - SERVER_NAME: ["ORAPROD01"]
+        CREDENTIALS_PREFIX: ["ORAPROD01"]
   script:
-    - syncsql sync --config "$CONFIG_PATH" --server-include "^${SERVER_NAME}$" --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR"
+    # The credentials are CI/CD variables (masked + protected) named after the
+    # server's credentialsVariablePrefix; `printenv` reads the right pair and
+    # hands them to the CLI as parameters, so the values never appear in the job
+    # log (GitLab echoes the unexpanded script line) and the CLI needs nothing in
+    # its environment. Prefer `--credentials-file` on a shared runner where other
+    # processes can read this job's command line.
+    - |
+      syncsql sync \
+        --config "$CONFIG_PATH" \
+        --server-include "^${SERVER_NAME}$" \
+        --staging-root "$EXTRACTED_OBJECTS_DIR" \
+        --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR" \
+        --db-user "${CREDENTIALS_PREFIX}=$(printenv "${CREDENTIALS_PREFIX}_DB_USER")" \
+        --db-password "${CREDENTIALS_PREFIX}=$(printenv "${CREDENTIALS_PREFIX}_DB_PASSWORD")"
   artifacts:
     paths:
       - extracted-objects/

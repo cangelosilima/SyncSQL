@@ -4,6 +4,12 @@
 # modules under .gitlab/ci/. For the full pipeline explanation - what each
 # module/job does, required CI/CD variables, trigger rules, and design
 # rationale - see .gitlab/README.md.
+#
+# Every variable below is passed to the CLI (or to scripts/Publish-SyncSqlObjects.ps1)
+# as an explicit parameter by the job that needs it - nothing here is read out of the
+# environment by the tools themselves. That's what keeps the same commands runnable
+# by hand on a workstation, where these variables don't exist and the CLI's own
+# defaults (./syncsql-output/...) take over.
 
 include:
   - local: '.gitlab/ci/cli.yml'
@@ -22,10 +28,19 @@ stages:
   - pages
 
 variables:
+  # Inputs and output paths, pinned here so every job agrees on them and each one
+  # passes them down as CLI parameters. See .gitlab/README.md's "Required CI/CD
+  # variables" for what these control.
   CONFIG_PATH: "$CI_PROJECT_DIR/config/servers.json"
   EXTRACTED_OBJECTS_DIR: "$CI_PROJECT_DIR/extracted-objects"
   METRICS_SNAPSHOT_DIR: "$CI_PROJECT_DIR/metrics-snapshot"
+  METRICS_HISTORY_DIR_NAME: "metrics"
+  CATALOG_FILE_NAME: "catalog.json"
+  PUBLISH_SCRIPT: "$CI_PROJECT_DIR/scripts/Publish-SyncSqlObjects.ps1"
   GIT_DEPTH: "1"
-  # See .gitlab/README.md's "Required CI/CD variables" for what these control.
+  # Catalog/metrics tuning knobs, all passed through as parameters.
   HISTORY_LIMIT: "250"
   METRICS_HISTORY_LIMIT: "90"
+  MAX_VERSIONS_PER_OBJECT: "15"
+  MAX_HISTORY_CONTENT_CALLS: "1500"
+  MAX_CO_CHANGE_COMMIT_SIZE: "40"
