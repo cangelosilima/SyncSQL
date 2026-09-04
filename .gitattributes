@@ -1,3 +1,7 @@
 # ANTLR emits trailing spaces in generated C#. Preserve byte-for-byte reproducibility with the
 # documented generator command and keep whitespace checks focused on maintained source files.
 grammar/**/Generated/*.cs -whitespace
+
+# Browser AI weights are vendored for same-origin GitLab Pages delivery, but
+# kept outside Vite's public tree so an unresolved pointer is never published.
+site/vendor/ai/**/*.onnx filter=lfs diff=lfs merge=lfs -text
