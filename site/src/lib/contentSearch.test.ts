@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest'
 import { filterByContent, matchesContentQuery, nodeContentText } from './contentSearch'
 import { makeNode } from '../test/fixtures'
 

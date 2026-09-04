@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest'
 import { diffLines } from './diff'
 
 describe('diffLines', () => {

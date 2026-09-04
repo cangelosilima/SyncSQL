@@ -81,6 +81,8 @@ jobs:
         working-directory: site
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - uses: actions/setup-node@v4
         with:
@@ -91,20 +93,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # `npm run build` is `tsc -b && vite build`, so this typechecks too.
+      - name: Test
+        run: npm test
+
+      # GitHub is the enforcement point for the vendored browser model. GitLab
+      # Pages deliberately treats it as optional so the core catalog still
+      # publishes when a runner cannot materialize LFS objects.
+      - name: Verify vendored AI model
+        run: npm run verify:ai-model
+
+      # `npm run build` typechecks, builds, and stages the verified model.
       - name: Build
         run: npm run build
-
-      - name: Test
-        run: npm run test:run -- --reporter=default --reporter=junit --outputFile=test-results.xml
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: site-test-results
-          path: site/test-results.xml
-          if-no-files-found: ignore
+        env:
+          # Keep staging/copy errors strict too, not only pre-build verification.
+          AI_MODEL_STRICT: '1'
 
   publish-script:
     name: Publish script - parse and 5.1 compatibility

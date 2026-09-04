@@ -16,8 +16,6 @@ staging/
 site/node_modules/
 site/dist/
 site/*.tsbuildinfo
-site/coverage/
-site/test-results.xml
 
 # .NET CLI build output
 cli/**/bin/
@@ -87,6 +85,7 @@ PublishProfiles/
 node_modules/
 dist/
 .npm/
+.npm-cache/
 .pnpm-store/
 .yarn/cache/
 .yarn/install-state.gz

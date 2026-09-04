@@ -37,7 +37,7 @@
     {
       "label": "site: test",
       "type": "shell",
-      "command": "npm run test:run",
+      "command": "npm test",
       "options": { "cwd": "${workspaceFolder}/site" },
       "group": "test",
       "problemMatcher": []

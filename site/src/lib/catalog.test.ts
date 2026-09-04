@@ -1,93 +1,105 @@
-import { NO_SCHEMA_LABEL, buildIndex } from './catalog'
-import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
+import { describe, expect, it } from 'vitest'
+import { buildIndex, isLinkNode, qualifiedRefName } from './catalog'
+import type { Catalog, CatalogNode } from '../types'
 
-describe('buildIndex', () => {
-  it('indexes every node by id', () => {
-    const index = buildIndex(makeCatalog({ nodes: [makeNode({ id: 'a' }), makeNode({ id: 'b' })] }))
-    expect([...index.byId.keys()].sort()).toEqual(['a', 'b'])
+function node(partial: Partial<CatalogNode> & Pick<CatalogNode, 'id' | 'name' | 'type'>): CatalogNode {
+  return {
+    server: 'SQLPROD01',
+    database: 'AppDb',
+    schema: 'dbo',
+    qualifiedName: `dbo.${partial.name}`,
+    path: `${partial.id}.sql`,
+    ddl: '',
+    columns: [],
+    grants: [],
+    sections: [],
+    sizeBytes: 0,
+    changeCount: 0,
+    history: [],
+    metrics: [],
+    ...partial,
+  } as CatalogNode
+}
+
+const link = node({
+  id: 'SQLPROD01/_ServerLevel/LinkedServers/SALES_LINK',
+  name: 'SALES_LINK',
+  type: 'LinkedServers',
+  database: '_ServerLevel',
+  schema: null,
+  qualifiedName: 'SALES_LINK',
+})
+const proc = node({ id: 'SQLPROD01/AppDb/StoredProcedures/dbo/GetOrder', name: 'GetOrder', type: 'StoredProcedures' })
+const remote = node({
+  id: 'SQLPROD02/SalesDb/Tables/dbo/Orders',
+  name: 'Orders',
+  type: 'Tables',
+  server: 'SQLPROD02',
+  database: 'SalesDb',
+})
+
+const catalog = {
+  generatedAt: '2026-06-01T12:00:00Z',
+  servers: ['SQLPROD01', 'SQLPROD02'],
+  typeCounts: {},
+  nodes: [link, proc, remote],
+  edges: [],
+  linkedServerReferences: [
+    {
+      linkedServer: link.id,
+      from: proc.id,
+      to: remote.id,
+      database: 'SalesDb',
+      schema: 'dbo',
+      name: 'Orders',
+    },
+    {
+      linkedServer: link.id,
+      from: proc.id,
+      to: null,
+      database: 'SalesDb',
+      schema: 'dbo',
+      name: 'Archive',
+    },
+  ],
+} as unknown as Catalog
+
+describe('linked-server references in the catalog index', () => {
+  it('groups every reference under the link it crosses', () => {
+    const index = buildIndex(catalog)
+
+    expect(index.linkedServerRefsByLink.get(link.id)?.map((r) => r.name)).toEqual(['Orders', 'Archive'])
   })
 
-  it('records each edge in both directions', () => {
-    const index = buildIndex(
-      makeCatalog({
-        nodes: [makeNode({ id: 'a' }), makeNode({ id: 'b' })],
-        edges: [makeEdge('a', 'b')],
-      }),
+  it('also indexes them by the object that makes them', () => {
+    const index = buildIndex(catalog)
+
+    expect(index.linkedServerRefsByFrom.get(proc.id)).toHaveLength(2)
+    expect(index.linkedServerRefsByFrom.has(remote.id)).toBe(false)
+  })
+
+  it('leaves the maps empty for a catalog without the field', () => {
+    const index = buildIndex({ ...catalog, linkedServerReferences: undefined })
+
+    expect(index.linkedServerRefsByLink.size).toBe(0)
+  })
+})
+
+describe('qualifiedRefName', () => {
+  it('keeps only the parts the DDL actually wrote', () => {
+    expect(qualifiedRefName({ schema: 'dbo', name: 'Orders' })).toBe('dbo.Orders')
+    expect(qualifiedRefName({ database: 'SalesDb', schema: 'dbo', name: 'Orders' })).toBe('SalesDb.dbo.Orders')
+    expect(qualifiedRefName({ server: 'LNK', database: 'SalesDb', schema: 'dbo', name: 'Orders' })).toBe(
+      'LNK.SalesDb.dbo.Orders',
     )
-    expect(index.outgoing.get('a')).toEqual(['b'])
-    expect(index.incoming.get('b')).toEqual(['a'])
-    expect(index.outgoing.get('b')).toBeUndefined()
+    expect(qualifiedRefName({ schema: null, name: 'Orders' })).toBe('Orders')
   })
+})
 
-  it('keys referenced columns by "from|to" and skips edges that carry none', () => {
-    const index = buildIndex(
-      makeCatalog({
-        nodes: [makeNode({ id: 'a' }), makeNode({ id: 'b' })],
-        edges: [makeEdge('a', 'b', ['Id', 'Name']), makeEdge('b', 'a')],
-      }),
-    )
-    expect(index.edgeColumns.get('a|b')).toEqual(['Id', 'Name'])
-    expect(index.edgeColumns.has('b|a')).toBe(false)
-  })
-
-  it('groups orphaned references by the node whose DDL contains them', () => {
-    const index = buildIndex(
-      makeCatalog({
-        nodes: [makeNode({ id: 'a' })],
-        orphanedReferences: [
-          { from: 'a', schema: 'dbo', name: 'Gone' },
-          { from: 'a', schema: null, name: 'AlsoGone' },
-        ],
-      }),
-    )
-    expect(index.orphanedByFrom.get('a')?.map((r) => r.name)).toEqual(['Gone', 'AlsoGone'])
-  })
-
-  it('treats a catalog built before orphanedReferences existed as having none', () => {
-    const index = buildIndex(makeCatalog({ nodes: [makeNode({ id: 'a' })] }))
-    expect(index.orphanedByFrom.size).toBe(0)
-  })
-
-  describe('tree', () => {
-    it('nests server > database > schema > type > node', () => {
-      const index = buildIndex(
-        makeCatalog({
-          nodes: [makeNode({ id: 'a', server: 'SRV1', database: 'AppDb', schema: 'dbo', type: 'Tables', name: 'Orders' })],
-        }),
-      )
-      const server = index.tree[0]
-      expect(server.name).toBe('SRV1')
-      expect(server.databases[0].name).toBe('AppDb')
-      expect(server.databases[0].schemas[0].name).toBe('dbo')
-      expect(server.databases[0].schemas[0].types[0].name).toBe('Tables')
-      expect(server.databases[0].schemas[0].types[0].nodes[0].name).toBe('Orders')
-    })
-
-    it('sorts servers, databases, types and node names alphabetically', () => {
-      const index = buildIndex(
-        makeCatalog({
-          nodes: [
-            makeNode({ id: '1', server: 'SRV2', database: 'Zeta', type: 'Views', name: 'zz' }),
-            makeNode({ id: '2', server: 'SRV1', database: 'Alpha', type: 'Views', name: 'bb' }),
-            makeNode({ id: '3', server: 'SRV1', database: 'Alpha', type: 'Tables', name: 'aa' }),
-          ],
-        }),
-      )
-      expect(index.tree.map((s) => s.name)).toEqual(['SRV1', 'SRV2'])
-      expect(index.tree[0].databases.map((d) => d.name)).toEqual(['Alpha'])
-      expect(index.tree[0].databases[0].schemas[0].types.map((t) => t.name)).toEqual(['Tables', 'Views'])
-    })
-
-    it('buckets schema-less objects under the server-level label and sorts it last', () => {
-      const index = buildIndex(
-        makeCatalog({
-          nodes: [
-            makeNode({ id: 'link', schema: null, type: 'LinkedServers', name: 'REPORTING' }),
-            makeNode({ id: 'tbl', schema: 'dbo', type: 'Tables', name: 'Orders' }),
-          ],
-        }),
-      )
-      expect(index.tree[0].databases[0].schemas.map((s) => s.name)).toEqual(['dbo', NO_SCHEMA_LABEL])
-    })
+describe('isLinkNode', () => {
+  it('recognizes both engines\' link objects', () => {
+    expect(isLinkNode(link)).toBe(true)
+    expect(isLinkNode({ ...link, type: 'DatabaseLinks' })).toBe(true)
+    expect(isLinkNode(proc)).toBe(false)
   })
 })

@@ -67,6 +67,16 @@ public sealed class CatalogBuilderTests : IDisposable
         }
     }
 
+    private static string LinkedServerDdl(string name, string dataSource, string catalog) => $"""
+        EXEC sp_addlinkedserver
+            @server = N'{name}',
+            @srvproduct = N'SQL Server',
+            @provider = N'SQLNCLI',
+            @datasrc = N'{dataSource}',
+            @provstr = N'',
+            @catalog = N'{catalog}';
+        """;
+
     private static string NodeId(string server, string database, string type, string? schema, string name) =>
         ExtractedObjectFile.ObjectId(server, database, schema, type, name);
 
@@ -328,6 +338,112 @@ public sealed class CatalogBuilderTests : IDisposable
         CatalogNode node = Assert.Single(catalog.Nodes);
         Assert.Null(node.Schema);
         Assert.Equal("REMOTESRV", node.QualifiedName);
+    }
+
+    [Fact]
+    public async Task BuildAsync_CrossDatabaseReference_ResolvesToTheOtherDatabaseOnTheSameServer()
+    {
+        WriteObjectFile("SQLPROD01", "SalesDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM SalesDb.dbo.Orders;");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "SalesDb" }],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogEdge edge = Assert.Single(catalog.Edges);
+        Assert.Equal(NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder"), edge.From);
+        Assert.Equal(NodeId("SQLPROD01", "SalesDb", "Tables", "dbo", "Orders"), edge.To);
+        Assert.Empty(catalog.OrphanedReferences);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ReferenceIntoAnUnextractedDatabase_IsNotFlaggedAsOrphaned()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM NobodyExtractsThis.dbo.Orders;");
+        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "NobodyExtractsThis" }],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        Assert.Empty(catalog.Edges);
+        Assert.Empty(catalog.OrphanedReferences);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ReferenceAcrossALinkedServer_RoutesLineageThroughTheLinkAndListsItThere()
+    {
+        WriteObjectFile("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SALES_LINK", LinkedServerDdl("SALES_LINK", "SQLPROD02", "SalesDb"));
+        WriteObjectFile("SQLPROD02", "SalesDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM SALES_LINK.SalesDb.dbo.Orders;");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "SalesDb", Server = "SALES_LINK" }],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        string procId = NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder");
+        string linkId = NodeId("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SALES_LINK");
+        string ordersId = NodeId("SQLPROD02", "SalesDb", "Tables", "dbo", "Orders");
+
+        Assert.Contains(catalog.Edges, e => e.From == procId && e.To == linkId);
+        Assert.Contains(catalog.Edges, e => e.From == linkId && e.To == ordersId);
+        Assert.DoesNotContain(catalog.Edges, e => e.From == procId && e.To == ordersId);
+        Assert.Empty(catalog.OrphanedReferences);
+
+        CatalogLinkedServerReference reference = Assert.Single(catalog.LinkedServerReferences);
+        Assert.Equal(linkId, reference.LinkedServer);
+        Assert.Equal(procId, reference.From);
+        Assert.Equal(ordersId, reference.To);
+        Assert.Equal("SalesDb", reference.Database);
+        Assert.Equal("dbo", reference.Schema);
+        Assert.Equal("Orders", reference.Name);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ReferenceAcrossALinkToAnUnextractedServer_IsListedOnTheLinkWithoutATarget()
+    {
+        WriteObjectFile("SQLPROD01", "_ServerLevel", "LinkedServers", null, "VENDOR", LinkedServerDdl("VENDOR", "vendor-host.example.net", "VendorDb"));
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM VENDOR.VendorDb.dbo.Orders;");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "VendorDb", Server = "VENDOR" }],
+            Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+            ColumnRefs = [],
+        });
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        string procId = NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder");
+        string linkId = NodeId("SQLPROD01", "_ServerLevel", "LinkedServers", null, "VENDOR");
+
+        CatalogEdge edge = Assert.Single(catalog.Edges);
+        Assert.Equal(procId, edge.From);
+        Assert.Equal(linkId, edge.To);
+        Assert.Empty(catalog.OrphanedReferences);
+
+        CatalogLinkedServerReference reference = Assert.Single(catalog.LinkedServerReferences);
+        Assert.Equal(linkId, reference.LinkedServer);
+        Assert.Null(reference.To);
+        Assert.Equal("VendorDb", reference.Database);
     }
 
     public void Dispose()

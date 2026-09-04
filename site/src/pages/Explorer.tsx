@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
@@ -8,7 +8,7 @@ import { filterByContent } from '../lib/contentSearch'
 import { epochOf } from '../lib/analytics'
 import { useDebouncedValue } from '../lib/useDebouncedValue'
 import type { CatalogNode } from '../types'
-import type { FilterToken } from '../lib/filters'
+import { decodeTokensFromUrl, encodeTokensForUrl, type FilterToken } from '../lib/filters'
 
 type SortKey = 'qualifiedName' | 'type' | 'server' | 'database' | 'schema' | 'lastChangedAt' | 'changeCount'
 
@@ -16,8 +16,10 @@ const ROW_CAP = 500
 
 export default function Explorer() {
   const { index } = useCatalog()
-  const [tokens, setTokens] = useState<FilterToken[]>([])
-  const [contentQuery, setContentQuery] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const encodedTokens = searchParams.get('filters')
+  const contentQuery = searchParams.get('q') ?? ''
+  const tokens = useMemo(() => decodeTokensFromUrl(encodedTokens), [encodedTokens])
   const debouncedContentQuery = useDebouncedValue(contentQuery, 150)
   const [sortKey, setSortKey] = useState<SortKey>('qualifiedName')
   const [sortDir, setSortDir] = useState<1 | -1>(1)
@@ -49,6 +51,20 @@ export default function Explorer() {
       setSortKey(key)
       setSortDir(1)
     }
+  }
+
+  function setTokens(nextTokens: FilterToken[]) {
+    const next = new URLSearchParams(searchParams)
+    if (nextTokens.length > 0) next.set('filters', encodeTokensForUrl(nextTokens))
+    else next.delete('filters')
+    setSearchParams(next, { replace: true })
+  }
+
+  function setContentQuery(value: string) {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set('q', value)
+    else next.delete('q')
+    setSearchParams(next, { replace: true })
   }
 
   return (

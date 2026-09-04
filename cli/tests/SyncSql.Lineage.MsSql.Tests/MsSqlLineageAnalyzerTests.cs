@@ -95,4 +95,65 @@ public class MsSqlLineageAnalyzerTests
 
         Assert.Empty(result.ObjectRefs);
     }
+
+    [Fact]
+    public void Analyze_ThreePartName_KeepsTheDatabaseQualifier()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE PROCEDURE [dbo].[SyncOrders] AS
+            BEGIN
+                SELECT * FROM [SalesDb].[dbo].[Orders];
+            END
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Server: null, Database: "SalesDb", Schema: "dbo", Name: "Orders" });
+    }
+
+    [Fact]
+    public void Analyze_FourPartName_KeepsTheLinkedServerAndDatabaseQualifiers()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE PROCEDURE [dbo].[SyncOrders] AS
+            BEGIN
+                SELECT * FROM [SALES_LINK].[SalesDb].[dbo].[Orders] o WHERE o.Total > 0;
+            END
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Server: "SALES_LINK", Database: "SalesDb", Schema: "dbo", Name: "Orders" });
+        Assert.Equal("SALES_LINK", result.Aliases["o"].Server);
+    }
+
+    [Fact]
+    public void Analyze_FourPartNameWithAnEmptyDatabasePart_LeavesTheDatabaseUnset()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE PROCEDURE [dbo].[SyncOrders] AS
+            BEGIN
+                SELECT * FROM SALES_LINK..dbo.Orders;
+            END
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Server: "SALES_LINK", Database: null, Schema: "dbo", Name: "Orders" });
+    }
+
+    [Fact]
+    public void Analyze_CrossDatabaseFunctionCall_KeepsTheDatabaseQualifier()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE PROCEDURE [dbo].[DoStuff] AS
+            BEGIN
+                SELECT [SalesDb].[dbo].[CalculateTotal](1);
+            END
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Database: "SalesDb", Schema: "dbo", Name: "CalculateTotal" });
+    }
+
+    [Fact]
+    public void Analyze_UnqualifiedReference_LeavesDatabaseAndServerUnset()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("CREATE VIEW dbo.V AS SELECT * FROM dbo.Orders;");
+
+        Assert.Contains(result.ObjectRefs, r => r is { Server: null, Database: null, Schema: "dbo", Name: "Orders" });
+    }
 }

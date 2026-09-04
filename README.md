@@ -206,6 +206,10 @@ for the full schema; in short:
 - `serverSelection`: regex filter over which of the listed servers
   actually run in a given pipeline execution (can also be overridden per
   run with `--server-include` / `--server-exclude`).
+- `discovery.linkedServers`: whether a run also **follows the linked
+  servers it finds** and extracts what's on the other side, instead of
+  stopping at the servers listed by hand - see
+  [Following linked servers](#following-linked-servers). Off by default.
 
 Filtering is regex-based and works at every level mentioned in the
 config: server, database, schema, and individual object name.
@@ -248,9 +252,9 @@ dotnet test    SyncSql.slnx
 # Catalog site
 cd ../site
 npm install
-npm run test:run     # Vitest, single run
-npm run test         # Vitest, watch mode
-npm run build        # tsc -b && vite build
+npm test             # Vitest, single run
+npx vitest           # Vitest, watch mode
+npm run build        # typecheck, build, stage the vendored AI model
 ```
 
 ### Editors
@@ -259,7 +263,7 @@ npm run build        # tsc -b && vite build
 stays ignored) and is what makes both test suites discoverable:
 
 - **`settings.json`** sets `dotnet.defaultSolution` to `cli/SyncSql.slnx`
-  and points the Vitest extension at `site/vite.config.ts`.
+  and points the Vitest extension at `site/vitest.config.ts`.
 - **`extensions.json`** recommends the two extensions that actually
   populate Test Explorer: **C# Dev Kit** (`ms-dotnettools.csdevkit`) and
   **Vitest** (`vitest.explorer`).
@@ -294,19 +298,19 @@ opened, and this repository's solution is one level down in `cli/`.
 5. `Developer: Reload Window`, then check `Output → C# Dev Kit` and
    `Output → .NET Test Log` for the actual error.
 
-**No site tests.** Vitest was only added to `site/` recently; older
-checkouts have no test runner installed at all.
+**No site tests.** Vitest config lives in
+[`site/vitest.config.ts`](site/vitest.config.ts), not at the repository
+root, so the extension has to be told where to find it.
 
 1. Run `npm install` in `site/` — the Vitest extension does nothing until
    `vitest` is present in `node_modules`.
 2. Install the **Vitest** extension (`vitest.explorer`).
-3. Confirm `npx vitest run` passes in `site/`. If it does and the tree is
-   still empty, the extension is looking in the wrong place: check
+3. Confirm `npm test` passes in `site/`. If it does and the tree is still
+   empty, the extension is looking in the wrong place: check
    `vitest.rootConfig` in `.vscode/settings.json`, or open the `site/`
    folder directly.
-4. Test files must match `src/**/*.{test,spec}.{ts,tsx}` (see the `test`
-   block in [`site/vite.config.ts`](site/vite.config.ts)) — a file outside
-   `src/`, or named `*.tests.ts`, is not picked up.
+4. Test files must be named `*.test.ts` / `*.test.tsx` (Vitest's default
+   glob) — a file named `*.tests.ts` is not picked up.
 
 ## CI/CD pipeline
 
@@ -334,7 +338,7 @@ half on GitHub, for pushes to `main`, pull requests, and manual runs:
 | Job                | What it runs |
 |--------------------|--------------|
 | `cli`              | `dotnet format --verify-no-changes`, `dotnet build`, `dotnet test` over `cli/SyncSql.slnx` (test results uploaded as a `.trx` artifact). |
-| `site`             | `npm ci`, `npm run build` (which is `tsc -b && vite build`, so it typechecks too), and `npm run test:run` in `site/` (Vitest; results uploaded as a JUnit artifact). |
+| `site`             | `npm ci`, browser/unit tests, strict verification of the Git LFS-backed local AI model, and the typechecked Vite build in `site/`. |
 | `publish-script`   | Parses `scripts/Publish-SyncSqlObjects.ps1` and checks it against PSScriptAnalyzer's Windows PowerShell 5.1 syntax rules. |
 
 It deliberately stops there: extraction, publishing to git, and the Pages
@@ -367,6 +371,14 @@ see "Theme" below):
   Indexes, ...) — e.g. "which procs reference this column" — distinct from
   the attribute filter bar above it, which only matches server/database/
   schema/type/name/description.
+- **AI** (`/#/ai`) — an optional, entirely browser-local assistant that turns
+  an English request into a preview of validated Explorer filters and one DDL
+  content query. It uses the quantized `all-MiniLM-L6-v2` model only to
+  classify ambiguous filter intent; a deterministic catalog-aware planner
+  resolves values and operators, and never generates or executes SQL. The
+  model is fetched from the same Pages origin on the first request. If a
+  deployment omits the model, the tab remains visible but disabled and the
+  rest of the site is unaffected.
 - **Object detail** — qualified name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), an **orphaned reference** warning when this
@@ -451,6 +463,12 @@ computed columns as references, or guesses an alias's target from nearby
 text rather than the parser's own binding. Any node missing an `Engine` tag
 (an extraction from before that header field existed) is simply skipped for
 lineage inference rather than guessed at.
+
+A reference that names a database or a linked server / database link keeps
+those qualifiers and is resolved against them - see
+[Where a reference is looked up](#where-a-reference-is-looked-up) - with the
+link itself drawn as an explicit hop in the graph rather than an invisible
+one.
 
 None of this is a certified lineage report - it will still miss dynamic SQL
 and anything built at runtime, and a traversal that crosses a linked-server/
@@ -553,7 +571,12 @@ size, index fragmentation/usage, and optimizer-statistics graphs, plus the
 latest snapshot's statistics table) whenever a table has history to show;
 it's simply absent for objects with none. Every one of these queries
 degrades independently (with a warning) rather than failing extraction, the
-same posture as every other optional extraction step in this project.
+same posture as every other optional extraction step in this project - and
+that split matters here, because they don't all need the same rights: row
+counts and sizes come from catalog views any reader can see, while the index
+and optimizer-statistics DMVs need `VIEW DATABASE STATE` (or `VIEW SERVER
+STATE`). An extraction login without it still gets volume metrics; the DMV
+parts are skipped with a warning naming the permission.
 
 Tables dropped from the source database keep their existing metrics history
 file rather than being cleaned up - a minor storage cost, not a correctness
@@ -577,29 +600,128 @@ This shows up as column tags next to each entry in an object's "depends
 on"/"used by" lists, and as highlighted, labeled edges in the Lineage
 graph.
 
+### Where a reference is looked up
+
+A reference found in one object's DDL is resolved by widening outwards, in
+the order a reader of that DDL would:
+
+1. **The qualifiers the reference itself carries.** T-SQL's three- and
+   four-part names (`OtherDb.dbo.Orders`, `LNK.OtherDb.dbo.Orders`) and
+   PL/SQL's `app.orders@LNK` say exactly where to look, so the parsers keep
+   the database and linked-server/DB-link parts instead of collapsing them
+   to `dbo.Orders`.
+2. **The object's own database**, for a reference that named none.
+3. **The other databases on the same server** - a schema-qualified name
+   that resolves nowhere in its own database, but to exactly one object
+   elsewhere on that server, resolves there.
+4. **The servers one link away** - the last resort, and only for a unique
+   match across all of them.
+
+A linked server / database link is mapped onto a catalog server through the
+link object the extraction already collected: MSSQL's `sp_addlinkedserver`
+carries the link's `@datasrc` and `@catalog`, Oracle's `CREATE DATABASE
+LINK` its `USING` connect string. Since a link points at a *host* while the
+catalog is keyed by the *configured server name*, a link matches a server
+whose name equals the link's own name, its data source, or the host part of
+that data source (port, instance and DNS suffix trimmed).
+
+Widening only ever settles on a **unique** match. Two candidates are
+reported as ambiguous rather than guessed at, a schema-qualified reference
+is never downgraded to a bare-name guess, and a bare name (no schema at
+all) never crosses a server boundary - it's too weak a signal to carry that
+far.
+
 ### Orphaned reference detection
 
 Cheap to compute once lineage inference has run: every reference that
-resolves nowhere in the current catalog's scope (same server+database, or
-bare on the same server) is collected as an **orphaned reference** rather
-than just silently producing no edge. In practice this is almost always a
-real bug worth flagging - the referenced table/view/procedure was renamed
-or dropped and the object still calling it was never updated - though it
-can occasionally be a false positive: dynamic SQL, a genuinely external
-object (a linked-server target, a system object) that was never in scope
-to begin with, or a name built at runtime.
+resolves nowhere the lookup above can reach is collected as an **orphaned
+reference** rather than just silently producing no edge. In practice this is
+almost always a real bug worth flagging - the referenced
+table/view/procedure was renamed or dropped and the object still calling it
+was never updated - though it can occasionally be a false positive: dynamic
+SQL, a system object, or a name built at runtime.
 
-A reference that's merely *ambiguous* - more than one same-named object in
-scope - is deliberately **not** flagged this way; that's a different
-situation (the target clearly exists, it just can't be resolved uniquely
-from a bare name) and conflating the two would bury real orphaned
-references in noise from otherwise-benign naming collisions.
+Two situations are deliberately **not** flagged this way, because neither
+means "the target is missing":
+
+- A reference that's merely *ambiguous* - more than one same-named object in
+  scope. The target clearly exists, it just can't be resolved uniquely from
+  a bare name, and conflating the two would bury real orphaned references in
+  noise from otherwise-benign naming collisions.
+- A reference that lands **outside what was extracted** - a link nothing in
+  the catalog answers to, or a database nobody extracts. Nothing is
+  dangling there; the target simply isn't in the catalog. Where a link was
+  involved, it's recorded against that link instead (see
+  [Linked servers as lineage hops](#linked-servers-as-lineage-hops)), so it
+  stays visible without being counted as a bug.
 
 `syncsql catalog build` writes these to `catalog.json`'s
-`orphanedReferences` array (`from`/`schema`/`name`) and logs a summary
-count as a warning. The site surfaces them in two places: an Overview panel
-listing every orphaned reference across the catalog, and a warning banner on
-the referencing object's own detail page.
+`orphanedReferences` array (`from`/`server`/`database`/`schema`/`name`) and
+logs a summary count as a warning. The site surfaces them in two places: an
+Overview panel listing every orphaned reference across the catalog, and a
+warning banner on the referencing object's own detail page.
+
+### Linked servers as lineage hops
+
+A reference that crosses a linked server / database link doesn't become a
+direct edge to the remote object. It becomes **two** edges - caller → link,
+link → remote object - so the link is a visible hop in the lineage graph
+rather than an invisible one, and a hop that leaves the catalog's scope
+(the remote object isn't extracted) still shows the caller depending on the
+link.
+
+Every such reference is also written to `catalog.json`'s
+`linkedServerReferences` array (`linkedServer`/`from`/`to`/`database`/
+`schema`/`name`, with `to` null when the target isn't extracted). The link
+object's own detail page turns that into a table of **everything referenced
+through this linked server** - one row per remote object, with the objects
+that reach it - and each referencing object's page lists the remote objects
+it reaches and the link it goes through.
+
+### Following linked servers
+
+By default `syncsql sync` extracts exactly the servers `config/servers.json`
+lists. With `discovery.linkedServers.enabled`, it also follows the linked
+servers it finds on those servers and extracts what's on the other side,
+reusing **the same credentials** - the follow-up server inherits its
+parent's `credentialsVariablePrefix`, along with its port, TLS settings, and
+schema/objectName/objectType filters:
+
+```json
+"discovery": {
+  "linkedServers": {
+    "enabled": true,
+    "maxDepth": 1,
+    "requireMatchingLogin": true,
+    "restrictToLinkedCatalog": true,
+    "linkNames": { "include": [".*"], "exclude": [] }
+  }
+}
+```
+
+- `maxDepth` - how many links deep to go. 1 extracts the servers the
+  configured ones link to; 2 also the ones *those* link to. 0 disables it.
+- `requireMatchingLogin` - only follow a link whose remote login is the
+  username already in hand, or that passes the local login through
+  (`uses_self_credential`). Since the credentials are reused as-is, a link
+  mapped to some *other* remote login is the catalog telling you those
+  credentials aren't the right ones there. Turn it off to try anyway.
+- `restrictToLinkedCatalog` - when a link pins a database
+  (`sp_addlinkedserver`'s `@catalog`), extract only that database on the far
+  side. A link that names a catalog points at one database, not the whole
+  instance.
+- `linkNames` - the usual regex include/exclude, over link names.
+
+Links that aren't SQL Server (`product`/`provider`), that declare no data
+source, or that lead somewhere a configured server already covers are
+skipped, each with a logged reason. Discovered servers are named after the
+link (suffixed if that collides with a configured name), which is also what
+their output path segment becomes. Oracle database links aren't followed:
+an Oracle connection needs a service name that a link's connect string
+doesn't reliably provide.
+
+Each follow-up opens a connection to a host nobody listed by hand, which is
+why this is opt-in - and why the credentials rule above is on by default.
 
 ### History, heatmap and point-in-time
 
@@ -645,6 +767,25 @@ npm run test    # Vitest, watch mode
 `site/public/data/catalog.json` ships a small demo fixture so `npm run dev`
 has something to render before any pipeline has actually run; replace it
 with a real one (see below) to preview actual data.
+
+The development server is model-free by default. To exercise AI locally,
+materialize the Git LFS files, verify them, and preview a production build:
+
+```sh
+git lfs pull
+cd site
+npm run verify:ai-model
+npm run build
+npm run preview
+```
+
+`npm run build` packages AI in optional mode: a missing LFS object produces a
+warning and an `available: false` capability manifest, but the core site still
+builds. GitHub Actions runs `verify:ai-model` first and fails on missing,
+unresolved, or modified model files. The GitLab Pages job deliberately keeps
+the optional behavior so catalog publishing is not blocked by LFS or proxy
+availability. Vendored sources and checksums live under
+`site/vendor/ai/all-MiniLM-L6-v2/`; only verified files are copied to `dist`.
 
 ## Running the extraction locally
 

@@ -76,6 +76,12 @@ public static class SyncSqlConfigLoader
         ValidateFilterPatterns(config.Defaults?.Schemas, path, "defaults.schemas");
         ValidateFilterPatterns(config.Defaults?.ObjectNames, path, "defaults.objectNames");
         ValidateFilterPatterns(config.ServerSelection, path, "serverSelection");
+        ValidateFilterPatterns(config.Discovery.LinkedServers.LinkNames, path, "discovery.linkedServers.linkNames");
+
+        if (config.Discovery.LinkedServers.MaxDepth < 0)
+        {
+            throw new ConfigValidationException($"Config file '{path}' has a negative discovery.linkedServers.maxDepth ({config.Discovery.LinkedServers.MaxDepth}) - use 0 to disable following linked servers.");
+        }
     }
 
     /// <summary>Every include/exclude entry is a regex evaluated at extraction time - compile each here so a typo fails validate-config instead of mid-extraction.</summary>

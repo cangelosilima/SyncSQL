@@ -10,7 +10,7 @@
 
   // Vitest lives in site/, so the extension has to be told where its config is;
   // pointed at the repository root it finds none and reports no tests.
-  "vitest.rootConfig": "./site/vite.config.ts",
+  "vitest.rootConfig": "./site/vitest.config.ts",
 
   "testing.automaticallyOpenTestResults": "neverOpen",
 

@@ -118,6 +118,27 @@ export interface CoChangePair {
 export interface CatalogOrphanedReference {
   /** Node id of the object whose DDL contains the unresolved reference. */
   from: string
+  /** The linked server / database link the reference named, when it named one. */
+  server?: string | null
+  /** The database the reference named, when it named one. */
+  database?: string | null
+  schema: string | null
+  name: string
+}
+
+/**
+ * One reference that crosses a linked server / database link: who makes it, which link it crosses, the
+ * target as the DDL writes it, and the target node when the catalog has it extracted (null when the hop
+ * lands outside the catalog's scope).
+ */
+export interface CatalogLinkedServerReference {
+  /** Node id of the LinkedServers/DatabaseLinks object the reference crosses. */
+  linkedServer: string
+  /** Node id of the object whose DDL makes the reference. */
+  from: string
+  /** Node id of the referenced object, or null when it isn't in the catalog. */
+  to: string | null
+  database?: string | null
   schema: string | null
   name: string
 }
@@ -132,4 +153,5 @@ export interface Catalog {
   coChangePairs: CoChangePair[]
   /** Absent on catalogs built before this field existed - treat as empty. */
   orphanedReferences?: CatalogOrphanedReference[]
+  linkedServerReferences?: CatalogLinkedServerReference[]
 }

@@ -52,9 +52,42 @@ public sealed record ExtractedObject
     public string QualifiedName => Schema is { Length: > 0 } ? $"{Schema}.{Name}" : Name;
 }
 
-/// <summary>Everything one extractor run produced for one server: the objects, plus this run's metrics snapshots keyed by object id.</summary>
+/// <summary>
+/// One linked server (MSSQL) / database link (Oracle) an extraction run saw declared on the server it
+/// was extracting, reported back so the caller can decide whether to follow it up and extract the server
+/// on the other side too - see <see cref="Configuration.LinkedServerFollowUp"/>. Separate from the
+/// LinkedServers objects the same run extracts: those are DDL to diff, this is a lead to chase.
+/// </summary>
+public sealed record DiscoveredLinkedServer
+{
+    /// <summary>The link's name, as references write it.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>sys.servers.product - "SQL Server" for the links a follow-up extraction can actually handle.</summary>
+    public string? Product { get; init; }
+
+    /// <summary>sys.servers.provider - e.g. SQLNCLI/MSOLEDBSQL for a SQL Server target.</summary>
+    public string? Provider { get; init; }
+
+    /// <summary>The host (optionally "host,port" or "host\instance") the link points at.</summary>
+    public string? DataSource { get; init; }
+
+    /// <summary>The database the link itself pins, when it pins one.</summary>
+    public string? Catalog { get; init; }
+
+    /// <summary>The remote logins this link maps to, from sys.linked_logins - what decides whether the credentials in hand will work on the other side.</summary>
+    public IReadOnlyList<string> RemoteLoginNames { get; init; } = [];
+
+    /// <summary>Whether any login mapping passes the local login through unchanged (sys.linked_logins.uses_self_credential = 1), i.e. the same username reaches the other side.</summary>
+    public bool UsesLocalLogin { get; init; }
+}
+
+/// <summary>Everything one extractor run produced for one server: the objects, this run's metrics snapshots keyed by object id, and any linked servers it saw declared.</summary>
 public sealed record ExtractionOutcome
 {
     public required IReadOnlyList<ExtractedObject> Objects { get; init; }
     public required IReadOnlyDictionary<string, MetricsSnapshot> MetricsSnapshots { get; init; }
+
+    /// <summary>Empty unless <see cref="Abstractions.ExtractionOptions.DiscoverLinkedServers"/> asked for it.</summary>
+    public IReadOnlyList<DiscoveredLinkedServer> DiscoveredLinkedServers { get; init; } = [];
 }

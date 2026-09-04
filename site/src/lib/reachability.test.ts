@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest'
 import { buildIndex } from './catalog'
 import { getReachable } from './reachability'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
