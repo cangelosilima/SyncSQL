@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
+import HelpButton from '../components/HelpButton'
 
 export default function History() {
   const { index } = useCatalog()
@@ -21,7 +22,10 @@ export default function History() {
 
   return (
     <div className="page">
-      <h1>History</h1>
+      <h1 className="page-title">
+        History
+        <HelpButton topic="history" />
+      </h1>
       <p className="muted">
         {commits.length} commit{commits.length === 1 ? '' : 's'} touching tracked objects, most recent first (mined
         by the analyze-catalog CI stage, bounded to a configurable commit window).

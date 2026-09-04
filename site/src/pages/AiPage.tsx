@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import HelpButton from '../components/HelpButton'
 import { useAi } from '../ai/AiContext'
 import type { FilterPlanV1 } from '../ai/types'
 import { useCatalog } from '../lib/CatalogContext'
@@ -44,7 +45,10 @@ export default function AiPage() {
   if (!ai.available) {
     return (
       <div className="page ai-page">
-        <h1>AI</h1>
+        <h1 className="page-title">
+          AI
+          <HelpButton topic="ai" />
+        </h1>
         <div className="ai-unavailable" role="status">
           <h2>AI filter generation is unavailable</h2>
           <p>{availabilityMessage(ai.reason)}</p>
@@ -89,7 +93,10 @@ export default function AiPage() {
     <div className="page ai-page">
       <div className="ai-heading-row">
         <div>
-          <h1>AI</h1>
+          <h1 className="page-title">
+            AI
+            <HelpButton topic="ai" />
+          </h1>
           <p className="muted">Describe the objects you want to find. Interpretation and filtering stay in this browser.</p>
         </div>
         <span className="ai-local-badge">Local · English</span>
@@ -167,7 +174,15 @@ export default function AiPage() {
 }
 
 function StatusPage({ title, message }: { title: string; message: string }) {
-  return <div className="page ai-page"><h1>{title}</h1><p className="muted" role="status">{message}</p></div>
+  return (
+    <div className="page ai-page">
+      <h1 className="page-title">
+        {title}
+        <HelpButton topic="ai" />
+      </h1>
+      <p className="muted" role="status">{message}</p>
+    </div>
+  )
 }
 
 function availabilityMessage(reason: string | null): string {

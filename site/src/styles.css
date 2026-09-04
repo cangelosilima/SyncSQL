@@ -2061,3 +2061,163 @@ a {
   align-items: center;
   gap: 0.75rem;
 }
+
+/* ---------------------------------------------------------------------------
+   Per-page help ("?" next to a page heading -> that page's Markdown guide)
+   --------------------------------------------------------------------------- */
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.help-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  font-weight: 600;
+  height: 1.35rem;
+  line-height: 1;
+  padding: 0;
+  width: 1.35rem;
+}
+
+.help-button:hover,
+.help-button[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.help-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 4rem 1.5rem 2rem;
+}
+
+.help-panel {
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  max-width: 720px;
+  width: 100%;
+}
+
+.help-panel:focus {
+  outline: none;
+}
+
+.help-panel-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.9rem 1.25rem;
+}
+
+.help-panel-header h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+}
+
+.help-panel-eyebrow {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.help-close {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+}
+
+.help-close:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.help-panel-body {
+  overflow-y: auto;
+  padding: 0.5rem 1.25rem 1.25rem;
+}
+
+/* Rendered Markdown (components/Markdown.tsx) */
+
+.markdown h2 {
+  font-size: 0.95rem;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.markdown h3 {
+  font-size: 0.85rem;
+  margin: 1.1rem 0 0.3rem;
+}
+
+.markdown p,
+.markdown li {
+  line-height: 1.55;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0.4rem 0;
+  padding-left: 1.2rem;
+}
+
+.markdown li {
+  margin: 0.2rem 0;
+}
+
+.markdown code {
+  background: var(--surface-alt);
+  border-radius: 2px;
+  font-size: 0.85em;
+  padding: 0.05rem 0.25rem;
+}
+
+.markdown a {
+  color: var(--accent);
+}
+
+.markdown-code {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow-x: auto;
+  padding: 0.6rem 0.75rem;
+}
+
+.markdown-code code {
+  background: none;
+  padding: 0;
+}

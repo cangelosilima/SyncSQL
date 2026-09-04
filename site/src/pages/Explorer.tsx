@@ -5,6 +5,7 @@ import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import CsvExportButton from '../components/CsvExportButton'
+import HelpButton from '../components/HelpButton'
 import { csvFileName } from '../lib/csv'
 import { objectColumns } from '../lib/catalogCsv'
 import { filterByContent } from '../lib/contentSearch'
@@ -73,7 +74,10 @@ export default function Explorer() {
   return (
     <div className="page page--wide">
       <div className="lineage-header-row">
-        <h1>Explorer</h1>
+        <h1 className="page-title">
+          Explorer
+          <HelpButton topic="explorer" />
+        </h1>
         <CsvExportButton
           rows={sorted}
           columns={objectColumns(index)}
