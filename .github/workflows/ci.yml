@@ -95,6 +95,17 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm run test:run -- --reporter=default --reporter=junit --outputFile=test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-test-results
+          path: site/test-results.xml
+          if-no-files-found: ignore
+
   publish-script:
     name: Publish script - parse and 5.1 compatibility
     runs-on: ubuntu-latest

@@ -1,0 +1,33 @@
+{
+  // The solution lives in cli/, not at the repository root. Without this the
+  // C# Dev Kit finds no solution to open, loads no projects, and Test Explorer
+  // stays empty even though cli/tests/ holds six xUnit projects.
+  "dotnet.defaultSolution": "cli/SyncSql.slnx",
+  "dotnet.server.useOmnisharp": false,
+  "dotnet.unitTestDebuggingOptions": {
+    "justMyCode": false
+  },
+
+  // Vitest lives in site/, so the extension has to be told where its config is;
+  // pointed at the repository root it finds none and reports no tests.
+  "vitest.rootConfig": "./site/vite.config.ts",
+
+  "testing.automaticallyOpenTestResults": "neverOpen",
+
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "grammar/**/Generated": true
+  },
+
+  "[csharp]": {
+    "editor.formatOnSave": true
+  }
+}

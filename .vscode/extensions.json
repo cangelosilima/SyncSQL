@@ -1,0 +1,11 @@
+{
+  // Test Explorer is populated by extensions, not by VS Code itself: without
+  // the C# Dev Kit no .NET test is discovered, and without the Vitest
+  // extension no site/ test is discovered.
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
+    "vitest.explorer",
+    "editorconfig.editorconfig"
+  ]
+}

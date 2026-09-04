@@ -17,7 +17,12 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Vitest's globals (describe/it/expect) and jest-dom's custom matchers are
+       ambient - without them here, `tsc -b` fails on every *.test.ts file and
+       the editor red-squiggles tests it would otherwise be able to enumerate. */
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src"]
 }

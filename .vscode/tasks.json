@@ -1,0 +1,54 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cli: restore",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["restore", "SyncSql.slnx"],
+      "options": { "cwd": "${workspaceFolder}/cli" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "cli: build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "SyncSql.slnx"],
+      "options": { "cwd": "${workspaceFolder}/cli" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "cli: test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "SyncSql.slnx", "--logger", "console;verbosity=normal"],
+      "options": { "cwd": "${workspaceFolder}/cli" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "site: install",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}/site" },
+      "problemMatcher": []
+    },
+    {
+      "label": "site: test",
+      "type": "shell",
+      "command": "npm run test:run",
+      "options": { "cwd": "${workspaceFolder}/site" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "site: dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/site" },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}
