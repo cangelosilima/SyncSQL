@@ -6,13 +6,23 @@ import TypeBadge from '../components/TypeBadge'
 import LineageGraph from '../components/LineageGraph'
 import MetricsPanels from '../components/MetricsPanels'
 import DiffView from '../components/DiffView'
-import { getEdgeColumns } from '../lib/neighborhood'
+import RelatedObjects from '../components/RelatedObjects'
+import CsvExportButton from '../components/CsvExportButton'
 import { isLinkNode, qualifiedRefName } from '../lib/catalog'
 import { epochOf } from '../lib/analytics'
+import { csvFileName } from '../lib/csv'
+import { columnColumns, dependencyColumns, dependencyRows, grantColumns, objectColumns } from '../lib/catalogCsv'
 import type { CatalogNode, CatalogObjectVersion } from '../types'
 
 /** Synthetic sha standing in for the object's current (uncommitted-to-history) DDL, selectable in compare mode alongside real revisions. */
 const CURRENT_SHA = '__current__'
+
+/**
+ * The inline neighborhood graph is a thumbnail, not the lineage explorer, so it
+ * summarizes earlier than the full-page graph does - past this many neighbours
+ * the same-type ones collapse into counted bundle nodes.
+ */
+const NEIGHBORHOOD_GRAPH_CAP = 30
 
 export default function ObjectPage() {
   const params = useParams()
@@ -104,6 +114,12 @@ export default function ObjectPage() {
         <Link className="lineage-share-btn" to={`/lineage?focus=${encodeURIComponent(node.id)}`}>
           Open in Lineage &rarr;
         </Link>
+        <CsvExportButton
+          rows={[node]}
+          columns={objectColumns(index)}
+          filename={csvFileName(node.id, 'details')}
+          label="Export details CSV"
+        />
       </div>
 
       {orphanedRefs.length > 0 && (
@@ -200,7 +216,10 @@ export default function ObjectPage() {
 
       {node.columns.length > 0 && (
         <>
-          <h2>Columns</h2>
+          <div className="lineage-graph-header">
+            <h2>Columns</h2>
+            <CsvExportButton rows={node.columns} columns={columnColumns} filename={csvFileName(node.id, 'columns')} />
+          </div>
           <table className="columns-table">
             <thead>
               <tr>
@@ -257,7 +276,10 @@ export default function ObjectPage() {
         <>
           <div className="lineage-graph-header">
             <h2>Access</h2>
-            <Link to="/lineage?tab=access">Search access by grantee &rarr;</Link>
+            <div className="section-actions">
+              <Link to="/lineage?tab=access">Search access by grantee &rarr;</Link>
+              <CsvExportButton rows={node.grants} columns={grantColumns} filename={csvFileName(node.id, 'grants')} />
+            </div>
           </div>
           <table className="columns-table">
             <thead>
@@ -357,20 +379,23 @@ export default function ObjectPage() {
         </>
       )}
 
-      <h2>Lineage</h2>
+      <div className="lineage-graph-header">
+        <h2>Lineage</h2>
+        <CsvExportButton
+          rows={dependencyRows(index, node.id)}
+          columns={dependencyColumns}
+          filename={csvFileName(node.id, 'dependencies')}
+          label="Export lineage CSV"
+          title="Download both directions (depends on + used by) as one CSV"
+        />
+      </div>
       <p className="muted overview-panel-hint">
         Column tags are a best-effort signal (qualified &quot;alias.column&quot; references detected in the DDL text), not a
         certified column-level lineage report.
       </p>
       <div className="lineage-lists">
-        <div>
-          <h3>Depends on ({outgoing.length})</h3>
-          <RelatedList rootId={node.id} ids={outgoing} direction="outgoing" />
-        </div>
-        <div>
-          <h3>Used by ({incoming.length})</h3>
-          <RelatedList rootId={node.id} ids={incoming} direction="incoming" />
-        </div>
+        <RelatedObjects title="Depends on" rootId={node.id} ids={outgoing} direction="outgoing" />
+        <RelatedObjects title="Used by" rootId={node.id} ids={incoming} direction="incoming" />
       </div>
 
       {neighborhoodIds.length > 1 && (
@@ -379,7 +404,7 @@ export default function ObjectPage() {
             <h3>Neighborhood graph</h3>
             <Link to={`/lineage?focus=${encodeURIComponent(node.id)}`}>Open in full lineage explorer &rarr;</Link>
           </div>
-          <LineageGraph nodeIds={neighborhoodIds} focusId={node.id} height={360} />
+          <LineageGraph nodeIds={neighborhoodIds} focusId={node.id} height={360} maxNodes={NEIGHBORHOOD_GRAPH_CAP} />
         </>
       )}
     </div>
@@ -414,50 +439,5 @@ function DiffCompare({ node, shas }: { node: CatalogNode; shas: string[] }) {
       <h3>Diff</h3>
       <DiffView oldText={older.ddl} newText={newer.ddl} oldLabel={older.label} newLabel={newer.label} />
     </>
-  )
-}
-
-function RelatedList({ rootId, ids, direction }: { rootId: string; ids: string[]; direction: 'outgoing' | 'incoming' }) {
-  const { index } = useCatalog()
-  if (ids.length === 0) return <p className="muted">None found.</p>
-  return (
-    <ul className="related-list">
-      {ids.map((id) => {
-        const target = index?.byId.get(id)
-        if (!target || !index) return null
-        const columns = direction === 'outgoing' ? getEdgeColumns(index, rootId, id) : getEdgeColumns(index, id, rootId)
-        return (
-          <li key={id}>
-            <Link to={`/object/${id}`}>{target.qualifiedName}</Link> <TypeBadge type={target.type} />
-            {columns.length > 0 && <ColumnTags columns={columns} />}
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-function ColumnTags({ columns, cap = 6 }: { columns: string[]; cap?: number }) {
-  const [expanded, setExpanded] = useState(false)
-  const shown = expanded ? columns : columns.slice(0, cap)
-  const overflow = columns.length - shown.length
-  return (
-    <span className="column-tags">
-      {shown.map((col) => (
-        <span key={col} className="column-tag">
-          {col}
-        </span>
-      ))}
-      {overflow > 0 && (
-        <button type="button" className="column-tag column-tag--more" onClick={() => setExpanded(true)}>
-          +{overflow} more
-        </button>
-      )}
-      {expanded && columns.length > cap && (
-        <button type="button" className="column-tag column-tag--more" onClick={() => setExpanded(false)}>
-          show less
-        </button>
-      )}
-    </span>
   )
 }

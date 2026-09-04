@@ -17,6 +17,19 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
 {
     private const string CommitMarker = "@@COMMIT@@";
 
+    /// <summary>
+    /// The prefix every extracted file's path carries inside the repository, ready to be sliced off a
+    /// `git log --name-only` path. An empty PathPrefix (the default - the extracted tree starts at the
+    /// repository root with the server name) has no prefix at all, so this is "", not "/": prepending a
+    /// slash would make every path fail the StartsWith test and silently cost the whole history pass.
+    /// </summary>
+    private static string PrefixWithSlash(string pathPrefix) =>
+        string.IsNullOrEmpty(pathPrefix) ? string.Empty : pathPrefix.TrimEnd('/') + "/";
+
+    /// <summary>The pathspec `git log` is limited to. Git rejects an empty pathspec string, so a root-level tree is expressed as "." instead.</summary>
+    private static string LogPathSpec(string pathPrefix) =>
+        string.IsNullOrEmpty(pathPrefix) ? "." : pathPrefix;
+
     public async Task<GitHistoryMiningResult> MineAsync(GitHistoryMiningRequest request, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(Path.Combine(request.RepoRoot, ".git")))
@@ -25,12 +38,13 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
             return GitHistoryMiningResult.Empty;
         }
 
-        logger.LogInformation("Mining up to {HistoryLimit} commit(s) of git history under '{PathPrefix}' in {RepoRoot}", request.HistoryLimit, request.PathPrefix, request.RepoRoot);
+        string prefixLabel = string.IsNullOrEmpty(request.PathPrefix) ? "the repository root" : $"'{request.PathPrefix}'";
+        logger.LogInformation("Mining up to {HistoryLimit} commit(s) of git history under {PathPrefix} in {RepoRoot}", request.HistoryLimit, prefixLabel, request.RepoRoot);
 
         try
         {
             List<Commit> commits = await ReadCommitsAsync(request, cancellationToken);
-            logger.LogInformation("Found {Count} commit(s) touching '{PathPrefix}'", commits.Count, request.PathPrefix);
+            logger.LogInformation("Found {Count} commit(s) touching {PathPrefix}", commits.Count, prefixLabel);
 
             List<CatalogCommit> recentChanges = [];
             Dictionary<string, int> changeCounts = [];
@@ -38,7 +52,7 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
             Dictionary<string, List<CatalogObjectVersion>> objectHistory = [];
             Dictionary<string, int> coChangeCounts = [];
 
-            string prefixWithSlash = request.PathPrefix + "/";
+            string prefixWithSlash = PrefixWithSlash(request.PathPrefix);
 
             foreach (Commit commit in commits)
             {
@@ -143,7 +157,7 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
             [
                 "-C", request.RepoRoot, "log", "-n", request.HistoryLimit.ToString(CultureInfo.InvariantCulture),
                 "--date=iso-strict", $"--pretty=format:{CommitMarker}%H{CommitMarker}%ad{CommitMarker}%s", "--name-only",
-                "--", request.PathPrefix,
+                "--", LogPathSpec(request.PathPrefix),
             ],
             cancellationToken: cancellationToken);
 
@@ -194,7 +208,7 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
                 break;
             }
 
-            string path = $"{request.PathPrefix}/{id}.sql";
+            string path = $"{PrefixWithSlash(request.PathPrefix)}{id}.sql";
             for (int i = 0; i < versions.Count; i++)
             {
                 if (showCalls >= request.MaxHistoryContentCalls)

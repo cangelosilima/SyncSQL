@@ -34,7 +34,7 @@ internal static class SyncCommand
         Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string?> stagingRootOption = new("--staging-root")
         {
-            Description = $"Directory each extracted object is written to. Default: <output-root>/{SyncSqlPaths.ObjectsDirectoryName}.",
+            Description = "Directory each extracted object is written to, as <server>/<database>/<type>/[<schema>/]<object>.sql. Default: <output-root> itself.",
         };
         Option<string?> metricsSnapshotRootOption = new("--metrics-snapshot-root")
         {
@@ -86,7 +86,7 @@ internal static class SyncCommand
             }
 
             string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
-            string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsDirectoryName);
+            string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
             Directory.CreateDirectory(stagingRoot);
             logger.LogInformation("Staging extracted objects under {StagingRoot}", stagingRoot);
 

@@ -11,7 +11,8 @@ public sealed record CatalogBuildRequest
     /// <summary>Git checkout containing -PathPrefix, mined for history/heatmap/point-in-time data. Omit to skip all of that (empty history, zero change counts) rather than failing.</summary>
     public string? RepoRoot { get; init; }
 
-    public string PathPrefix { get; init; } = "objects";
+    /// <summary>Folder inside <see cref="RepoRoot"/> holding the extracted tree. Empty (the default) means the tree starts at the repository root, so the first path segment is the server name.</summary>
+    public string PathPrefix { get; init; } = "";
     public int HistoryLimit { get; init; } = 250;
     public int MaxVersionsPerObject { get; init; } = 15;
     public int MaxHistoryContentCalls { get; init; } = 1500;

@@ -19,7 +19,13 @@ pages:
     - git reset --hard "origin/${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
   script:
     - mkdir -p site/public/data
-    - cp "${PATH_PREFIX:-objects}/${CATALOG_FILE_NAME:-catalog.json}" site/public/data/catalog.json
+    # PATH_PREFIX comes from sync-database-objects' dotenv report and is normally
+    # empty - the extracted tree starts at the repository root with the server
+    # name - so the separator is appended only when there is a prefix to append.
+    # A ${PATH_PREFIX:-objects} style default would be wrong twice over here: it
+    # fires on an empty value as well as an unset one, and the default is no
+    # longer "objects".
+    - cp "${PATH_PREFIX:+$PATH_PREFIX/}${CATALOG_FILE_NAME:-catalog.json}" site/public/data/catalog.json
     - cd site
     - npm ci
     - npm test

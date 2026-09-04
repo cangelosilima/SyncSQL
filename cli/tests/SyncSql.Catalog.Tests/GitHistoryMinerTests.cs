@@ -127,6 +127,50 @@ public sealed class GitHistoryMinerTests : IDisposable
         Assert.Equal(1, pair.Count);
     }
 
+    [Fact]
+    public async Task MineAsync_EmptyPathPrefix_TreatsRepositoryRootAsTheExtractedTree()
+    {
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        // The default layout: no wrapping folder, so the first path segment is the server name.
+        string log =
+            "@@COMMIT@@abc123@@COMMIT@@2026-01-01T00:00:00+00:00@@COMMIT@@Add Orders table\n" +
+            "SQLPROD01/AppDb/Tables/dbo/Orders.sql\n" +
+            "catalog.json\n";
+
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("log")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, log, string.Empty));
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("show")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "-- Engine:   mssql\n\nCREATE TABLE dbo.Orders (Id INT);", string.Empty));
+
+        GitHistoryMiningResult result = await _miner.MineAsync(new GitHistoryMiningRequest
+        {
+            RepoRoot = _repoRoot,
+            PathPrefix = string.Empty,
+            KnownObjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SQLPROD01/AppDb/Tables/dbo/Orders" },
+        }, CancellationToken.None);
+
+        // The object id is the whole path with nothing stripped off the front, and catalog.json - a
+        // sibling of the server directories now, not a file in another folder - is still ignored.
+        Assert.Single(result.RecentChanges);
+        Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders", Assert.Single(result.RecentChanges[0].ObjectIds));
+
+        // git rejects an empty pathspec, so a root-level tree has to be asked for as "." instead.
+        await _processRunner.Received().RunAsync(
+            "git",
+            Arg.Is<IReadOnlyList<string>>(a => a.Contains("log") && a[a.Count - 1] == "."),
+            Arg.Any<string?>(),
+            Arg.Any<IReadOnlyDictionary<string, string>?>(),
+            Arg.Any<CancellationToken>());
+
+        // ...and the content fetch must not end up asking for "abc123:/SQLPROD01/...".
+        await _processRunner.Received().RunAsync(
+            "git",
+            Arg.Is<IReadOnlyList<string>>(a => a.Contains("abc123:SQLPROD01/AppDb/Tables/dbo/Orders.sql")),
+            Arg.Any<string?>(),
+            Arg.Any<IReadOnlyDictionary<string, string>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
     public void Dispose()
     {
         try

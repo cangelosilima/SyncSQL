@@ -197,8 +197,8 @@ is deliberately thin: it installs `git` (and PowerShell, if the image
 doesn't already ship it) and invokes
 [`../scripts/Publish-SyncSqlObjects.ps1`](../scripts/Publish-SyncSqlObjects.ps1)
 with every setting as a parameter. Everything git-shaped - resolving
-`config.git.*`, cloning, replacing `config.git.pathPrefix` with the merged
-staged tree, committing, and pushing - lives in that script, which also
+`config.git.*`, cloning, replacing the published object tree with the merged
+staged one, committing, and pushing - lives in that script, which also
 calls `syncsql metrics update` and `syncsql catalog build` for the pure,
 non-git steps: folding this run's metrics into history, and rebuilding
 `catalog.json` (structure, inferred lineage via a real parser per engine,
@@ -211,7 +211,7 @@ same publish can be read, reviewed, and run by hand from a workstation:
 
 ```powershell
 pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
-  -ExtractedObjectsDir ./syncsql-output/objects `
+  -ExtractedObjectsDir ./syncsql-output `
   -MetricsSnapshotDir ./syncsql-output/metrics-snapshot `
   -ConfigPath ./config/servers.json `
   -SkipPush
@@ -224,10 +224,11 @@ pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
 | `-ConfigPath` | *(none)* | `config/servers.json`, read only to default the git settings below. |
 | `-RemoteUrl` | config `git.remoteUrl` | Repository published to. The CI job passes the `CI_SERVER_*`-derived self-repo URL when the config leaves it blank. |
 | `-Branch` | config, then `main` | Branch cloned, committed to, and pushed. Created from the default branch if the remote doesn't have it yet. |
-| `-PathPrefix` | config, then `objects` | Folder inside the clone the object tree replaces. |
+| `-PathPrefix` | config, then *(empty)* | Folder inside the clone the object tree replaces. Empty (the default) publishes the tree at the repository root, so the first path segment is the server name. |
 | `-CommitUserName` / `-CommitUserEmail` / `-CommitMessage` | config, then the SyncSQL defaults | Commit identity and message. |
-| `-MetricsHistoryDirName` | `metrics` | Folder inside the clone holding the metrics history tree, kept outside `-PathPrefix`. |
-| `-CatalogFileName` | `catalog.json` | Name of the catalog written inside `-PathPrefix`. |
+| `-MetricsHistoryDirName` | `metrics` | Folder inside the clone holding the metrics history tree, kept outside the object tree. |
+| `-MetricsSnapshotDirName` | `metrics-snapshot` | Name of the snapshot folder as it appears *inside* `-ExtractedObjectsDir`. Only used to recognize and skip it, so `-ExtractedObjectsDir` can be a `syncsql sync` output root that also holds the metrics folders and a local `catalog.json`. |
+| `-CatalogFileName` | `catalog.json` | Name of the catalog written inside `-PathPrefix` (at the repository root when that is empty). |
 | `-HistoryLimit` | `250` | Clone depth and `catalog build --history-limit`. |
 | `-MetricsHistoryLimit` | `90` | `metrics update --history-limit`. |
 | `-MaxVersionsPerObject` / `-MaxHistoryContentCalls` / `-MaxCoChangeCommitSize` | `15` / `1500` / `40` | Passed straight through to `catalog build`. |
@@ -239,10 +240,10 @@ pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
 
 Notable details:
 
-- **`config.git.*` defaults** (branch `main`, path prefix `objects`, etc.)
-  match what SyncSQL has always used - see the root README's Configuration
-  section. Precedence is parameter → config file → default, so CI can pin a
-  value without editing the config, and a config-only setup keeps working.
+- **`config.git.*` defaults** (branch `main`, an empty path prefix, etc.) -
+  see the root README's Configuration section. Precedence is parameter →
+  config file → default, so CI can pin a value without editing the config,
+  and a config-only setup keeps working.
 - **Push token**: a secret is the one thing the script still reads from its
   environment when it isn't passed (`SYNCSQL_PUSH_TOKEN`, `GIT_PUSH_TOKEN`,
   `CI_JOB_Maintainer_Token`) - precisely so it never has to appear in a
@@ -250,10 +251,21 @@ Notable details:
   back out of the script's own environment: never a `git` argument, never
   written to disk, never embedded in the remote URL, so it can't leak via a
   process listing, `git remote -v`, or shell history.
-- **Wipe and repopulate**: the target directory (`-PathPrefix`) is
-  deleted and rewritten from scratch on every run, so objects dropped from
-  the source database (or excluded by an updated filter) show up as
-  deletions in git rather than lingering forever.
+- **Wipe and repopulate**: the published object tree is deleted and rewritten
+  from scratch on every run, so objects dropped from the source database (or
+  excluded by an updated filter) show up as deletions in git rather than
+  lingering forever. With a `-PathPrefix` set that is simply the prefix
+  directory. With the default empty prefix there is no such directory - the
+  tree *is* the repository root - so the script removes only the server
+  directories it owns: the ones this run is about to write, plus the servers
+  the previous run recorded in `catalog.json` (which is how a server that
+  stopped being extracted still disappears). Everything else at the root -
+  `.git`, `metrics/`, a README - is left alone.
+
+  **Migrating an existing repository**: a repo published under the old
+  `objects/` prefix keeps that folder until you delete it once by hand (or
+  keep publishing with `-PathPrefix objects`). The script deliberately does
+  not delete a root-level directory it has no record of owning.
 - **`sync.env` dotenv report**: `-DotEnvPath` writes `PATH_PREFIX`/`GIT_BRANCH`
   as a GitLab `dotenv` artifact so the downstream `pages` job knows where to
   find `catalog.json` and which branch tip to fetch, without hardcoding either.
@@ -286,9 +298,9 @@ artifacts must be a directory named exactly `public` at the project root.
 it), but this job's own checkout was taken from the pipeline's *original*
 commit - so its `before_script` fetches and hard-resets to the branch tip
 first, using the `GIT_BRANCH` (falling back to `$CI_COMMIT_REF_NAME`) and
-`PATH_PREFIX` (falling back to `objects`) from `sync-database-objects`'s
-`sync.env` dotenv report, and copies `$CATALOG_FILE_NAME` (falling back to
-`catalog.json`) out of that folder.
+`PATH_PREFIX` (normally empty - the tree starts at the repository root) from
+`sync-database-objects`'s `sync.env` dotenv report, and copies
+`$CATALOG_FILE_NAME` (falling back to `catalog.json`) out of that folder.
 
 The Pages build treats the vendored browser AI model as an optional
 capability. Its packaging step verifies the manifest, Git LFS materialization,
@@ -336,7 +348,7 @@ rather than living only as a separate CI artifact.
 
 Optional: `METRICS_HISTORY_LIMIT` (default `90`, set in `.gitlab-ci.yml`)
 controls how many daily volume/index/optimizer-statistics snapshots are kept
-per table (the `metrics/` tree, outside `git.pathPrefix`) - see the root
+per table (the `metrics/` tree, outside the object tree) - see the root
 README's "Volatile metrics" section. This data changes every run by nature,
 so it's tracked separately from each object's own version history rather
 than bloating it.

@@ -5,11 +5,16 @@ import LineageGraph from '../components/LineageGraph'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
+import CsvExportButton from '../components/CsvExportButton'
 import { getNeighborhoodIds } from '../lib/neighborhood'
 import { findObjectsForGrantee, getSuggestedGrantees } from '../lib/grants'
 import { filterByContent } from '../lib/contentSearch'
 import { useDebouncedValue } from '../lib/useDebouncedValue'
+import { groupRelated, type GroupBy } from '../lib/grouping'
+import { csvFileName } from '../lib/csv'
+import { objectGrantColumns, type ObjectGrantRow } from '../lib/catalogCsv'
 import { decodeTokensFromUrl, encodeTokensForUrl, type FilterToken } from '../lib/filters'
+import type { CatalogNode } from '../types'
 
 const GRAPH_CAP = 300
 const HOP_OPTIONS = [1, 2, 3] as const
@@ -70,6 +75,10 @@ export default function LineagePage() {
     [allNodes, debouncedGrantee, exact, mode],
   )
   const totalGrants = grantMatches.reduce((sum, m) => sum + m.grants.length, 0)
+  const grantRows = useMemo<ObjectGrantRow[]>(
+    () => grantMatches.flatMap(({ node, grants }) => grants.map((grant) => ({ node, grant }))),
+    [grantMatches],
+  )
 
   const baseIds = mode === 'access' ? grantMatches.map((m) => m.node.id) : filtered.map((n) => n.id)
   const nodeIds = currentFocus ? neighborhoodIds : baseIds
@@ -221,6 +230,15 @@ export default function LineagePage() {
           )}
 
           {grantMatches.length > 0 && (
+            <>
+            <div className="lineage-header-row" style={{ margin: '0.5rem 0' }}>
+              <span className="muted">One row per object, one CSV row per permission.</span>
+              <CsvExportButton
+                rows={grantRows}
+                columns={objectGrantColumns}
+                filename={csvFileName('syncsql-access', debouncedGrantee)}
+              />
+            </div>
             <div className="explorer-table-wrap" style={{ marginBottom: '0.75rem' }}>
               <table className="explorer-table">
                 <thead>
@@ -262,6 +280,7 @@ export default function LineagePage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </>
       )}
@@ -319,13 +338,93 @@ export default function LineagePage() {
       )}
 
       {nodeIds.length > GRAPH_CAP ? (
-        <p className="lineage-warning">
-          {nodeIds.length} objects match this filter - add another filter (e.g. server or database) to keep the graph
-          readable. Rendering more than {GRAPH_CAP} nodes at once gets slow and hard to read.
-        </p>
+        <SelectionBreakdown
+          nodes={nodeIds.map((id) => index.byId.get(id)).filter((n): n is CatalogNode => Boolean(n))}
+          onNarrow={
+            // Access mode's selection comes from the grantee search, not from
+            // filter tokens, so there'd be nothing for a click to narrow there.
+            mode === 'browse'
+              ? (attribute, value) => {
+                  setTokens([...tokens, { id: `narrow-${attribute}-${Date.now()}`, attribute, operator: 'is', values: [value] }])
+                  setFocusStack([])
+                }
+              : undefined
+          }
+        />
       ) : (
         <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} />
       )}
+    </div>
+  )
+}
+
+/** The grouping axes offered as a way out of an over-sized selection - the ones a filter token can narrow on. */
+const BREAKDOWN_AXES: { by: GroupBy; attribute: 'server' | 'database' | 'type'; label: string }[] = [
+  { by: 'server', attribute: 'server', label: 'By server' },
+  { by: 'database', attribute: 'database', label: 'By database' },
+  { by: 'type', attribute: 'type', label: 'By type' },
+]
+
+/** Rows past this per axis are summarized as "+N more" - the point is to pick one, not to read them all. */
+const BREAKDOWN_ROWS = 8
+
+/**
+ * What a too-large selection is actually made of, with every row a one-click
+ * narrowing. Drawing 4,000 nodes helps nobody, but "3,812 objects: 3,100 of them
+ * Tables in WarehouseDb" is the answer to the question that got someone here -
+ * and clicking that row is the next step, instead of a warning that just stops.
+ */
+function SelectionBreakdown({
+  nodes,
+  onNarrow,
+}: {
+  nodes: CatalogNode[]
+  onNarrow?: (attribute: 'server' | 'database' | 'type', value: string) => void
+}) {
+  return (
+    <div className="lineage-warning selection-breakdown">
+      <p>
+        <strong>{nodes.length} objects</strong> match this selection - too many to draw as one graph, and unreadable if
+        we did. Here is what they are
+        {onNarrow ? '; pick a row to narrow the filter, or drill into a single object from the Explorer.' : '.'}
+      </p>
+      <div className="selection-breakdown-axes">
+        {BREAKDOWN_AXES.map(({ by, attribute, label }) => {
+          const groups = groupRelated(nodes, by)
+          const shown = groups.slice(0, BREAKDOWN_ROWS)
+          const rest = groups.length - shown.length
+          return (
+            <div key={by} className="selection-breakdown-axis">
+              <h4>{label}</h4>
+              <ul>
+                {shown.map((group) =>
+                  onNarrow ? (
+                    <li key={group.key}>
+                      <button type="button" className="selection-breakdown-row" onClick={() => onNarrow(attribute, group.key)}>
+                        <span className="selection-breakdown-name">{group.key}</span>
+                        <span className="selection-breakdown-count">{group.nodes.length}</span>
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={group.key}>
+                      <span className="selection-breakdown-row selection-breakdown-row--static">
+                        <span className="selection-breakdown-name">{group.key}</span>
+                        <span className="selection-breakdown-count">{group.nodes.length}</span>
+                      </span>
+                    </li>
+                  ),
+                )}
+                {rest > 0 && (
+                  <li className="muted selection-breakdown-rest">
+                    +{rest} more {by}
+                    {rest === 1 ? '' : 's'}
+                  </li>
+                )}
+              </ul>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

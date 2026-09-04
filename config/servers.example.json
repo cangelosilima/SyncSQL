@@ -2,7 +2,7 @@
   "git": {
     "remoteUrl": "",
     "branch": "main",
-    "pathPrefix": "objects",
+    "pathPrefix": "",
     "commitUserName": "SyncSQL Bot",
     "commitUserEmail": "syncsql-bot@example.com",
     "commitMessage": "chore(sync): update database objects"
