@@ -62,6 +62,7 @@ public class CatalogJsonTests
         Assert.True(root.TryGetProperty("recentChanges", out _));
         Assert.True(root.TryGetProperty("coChangePairs", out _));
         Assert.True(root.TryGetProperty("orphanedReferences", out _));
+        Assert.True(root.TryGetProperty("linkedServerReferences", out _));
 
         JsonElement node = root.GetProperty("nodes")[0];
         foreach (string field in new[]

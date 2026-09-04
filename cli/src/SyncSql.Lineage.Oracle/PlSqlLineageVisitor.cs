@@ -38,6 +38,18 @@ internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
         return text;
     }
 
+    /// <summary>
+    /// The database-link name of an "@LNK"-suffixed reference, as written (link_name is
+    /// "database ('.' domain)* ('@' connection_qualifier)?", so "orders@SALES.WORLD" keeps the whole
+    /// "SALES.WORLD" - narrowing it to a catalog server is the resolver's job, not the parser's). Null
+    /// when the reference stays on this database.
+    /// </summary>
+    private static string? GetLinkName(PlSqlParser.Link_nameContext? context)
+    {
+        string text = GetIdentifierText(context);
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
     private static ObjectRef? FromTableviewName(PlSqlParser.Tableview_nameContext? context)
     {
         if (context?.identifier() is null)
@@ -46,10 +58,12 @@ internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
         }
 
         string first = GetIdentifierText(context.identifier());
-        // tableview_name: identifier ('.' id_expression)? - qualified when id_expression is present.
+        string? link = GetLinkName(context.link_name());
+        // tableview_name: identifier ('.' id_expression)? ('@' link_name)? - qualified when
+        // id_expression is present, and crossing a database link when link_name is.
         return context.id_expression() is { } idExpression
-            ? new ObjectRef(first, GetIdentifierText(idExpression))
-            : new ObjectRef(null, first);
+            ? new ObjectRef(first, GetIdentifierText(idExpression)) { Server = link }
+            : new ObjectRef(null, first) { Server = link };
     }
 
     // FROM-clause table/view reference, with its alias when one is given (confirmed against the real
@@ -89,14 +103,15 @@ internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
         }
 
         string first = GetIdentifierText(context.identifier());
+        string? link = GetLinkName(context.link_name());
         PlSqlParser.Id_expressionContext[] rest = context.id_expression();
         if (rest.Length == 0)
         {
-            return new ObjectRef(null, first);
+            return new ObjectRef(null, first) { Server = link };
         }
 
         string? schema = rest.Length >= 2 ? GetIdentifierText(rest[^2]) : first;
-        return new ObjectRef(schema, GetIdentifierText(rest[^1]));
+        return new ObjectRef(schema, GetIdentifierText(rest[^1])) { Server = link };
     }
 
     // Standalone procedure-call statements (app.other_proc();) use a dedicated call_statement/

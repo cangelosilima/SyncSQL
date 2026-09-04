@@ -115,13 +115,35 @@ internal static class SyncCommand
 
             IDatabaseObjectExtractorResolver extractorResolver = services.GetRequiredService<IDatabaseObjectExtractorResolver>();
 
+            LinkedServerDiscoveryConfig discovery = config.Discovery.LinkedServers;
+            bool followLinkedServers = discovery.Enabled && discovery.MaxDepth > 0;
+            if (followLinkedServers)
+            {
+                logger.LogInformation(
+                    "Linked-server discovery is on (maxDepth {MaxDepth}): servers reached through a link are extracted with the same credentials as the server that declared it{CatalogNote}.",
+                    discovery.MaxDepth,
+                    discovery.RestrictToLinkedCatalog ? ", limited to the database the link pins" : string.Empty);
+            }
+
             List<string> failedServers = [];
+            // A server nobody configured is a lead this run chose to chase; failing to reach one says
+            // something about the fleet, not about this run's job, so it's reported without failing it.
+            List<string> failedDiscoveredServers = [];
             int attemptedServers = 0;
             int totalFiles = 0;
+            int discoveredServers = 0;
 
-            foreach (ServerConfig server in config.Servers)
+            // Configured servers first; anything reached by following their linked servers is appended
+            // as its own round, so a link found at depth N is extracted at depth N+1 and can in turn be
+            // followed (up to discovery.linkedServers.maxDepth).
+            List<ServerConfig> knownServers = [.. config.Servers];
+            Queue<(ServerConfig Server, int Depth)> pending = new(config.Servers.Select(server => (server, 0)));
+
+            while (pending.Count > 0)
             {
-                if (!serverSelection.IsAllowed(server.Name))
+                (ServerConfig server, int depth) = pending.Dequeue();
+
+                if (depth == 0 && !serverSelection.IsAllowed(server.Name))
                 {
                     logger.LogInformation("Skipping '{Server}' (excluded by server selection filter)", server.Name);
                     continue;
@@ -143,31 +165,54 @@ internal static class SyncCommand
                 catch (InvalidOperationException ex)
                 {
                     logger.LogError("Skipping '{Server}': {Message}", server.Name, ex.Message);
-                    failedServers.Add(server.Name);
+                    (depth == 0 ? failedServers : failedDiscoveredServers).Add(server.Name);
                     continue;
                 }
+
+                bool discoverHere = followLinkedServers && depth < discovery.MaxDepth && server.Type == DatabaseEngine.MsSql;
 
                 try
                 {
                     IDatabaseObjectExtractor extractor = extractorResolver.Resolve(server.Type);
                     ExtractionOutcome outcome = await extractor.ExtractAsync(
-                        server, filters, new ExtractionOptions { Credentials = credentials }, cancellationToken);
+                        server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere }, cancellationToken);
 
                     await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, cancellationToken);
 
                     totalFiles += outcome.Objects.Count;
                     logger.LogInformation("- {Server} ({Engine}): {Count} object file(s)", server.Name, server.Type.ToConfigString(), outcome.Objects.Count);
+
+                    if (discoverHere)
+                    {
+                        discoveredServers += QueueLinkedServers(
+                            logger, server, credentials.Username, outcome.DiscoveredLinkedServers, discovery, depth, knownServers, pending);
+                    }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError("Extraction failed for '{Server}': {Message}", server.Name, ex.Message);
-                    failedServers.Add(server.Name);
+                    if (depth == 0)
+                    {
+                        logger.LogError("Extraction failed for '{Server}': {Message}", server.Name, ex.Message);
+                        failedServers.Add(server.Name);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Extraction failed for discovered server '{Server}': {Message}", server.Name, ex.Message);
+                        failedDiscoveredServers.Add(server.Name);
+                    }
                 }
             }
 
             logger.LogInformation(
-                "Extraction complete: {TotalFiles} object file(s) across {ServerCount} server(s); {FailureCount} failure(s).",
-                totalFiles, attemptedServers - failedServers.Count, failedServers.Count);
+                "Extraction complete: {TotalFiles} object file(s) across {ServerCount} server(s) ({DiscoveredCount} reached through a linked server); {FailureCount} failure(s).",
+                totalFiles, attemptedServers - failedServers.Count - failedDiscoveredServers.Count, discoveredServers, failedServers.Count);
+
+            if (failedDiscoveredServers.Count > 0)
+            {
+                logger.LogWarning(
+                    "Discovered server(s) that couldn't be extracted (not counted as a run failure): {Servers}",
+                    string.Join(", ", failedDiscoveredServers));
+            }
 
             if (failedServers.Count > 0)
             {
@@ -179,6 +224,45 @@ internal static class SyncCommand
         });
 
         return command;
+    }
+
+    /// <summary>
+    /// Turns the linked servers one extraction reported into the next round of work, logging both what
+    /// gets followed and what deliberately doesn't - a link skipped for using a different remote login
+    /// is a fact about the fleet worth seeing, not a silent no-op.
+    /// </summary>
+    private static int QueueLinkedServers(
+        ILogger logger,
+        ServerConfig parent,
+        string parentUsername,
+        IReadOnlyList<DiscoveredLinkedServer> discovered,
+        LinkedServerDiscoveryConfig discovery,
+        int depth,
+        List<ServerConfig> knownServers,
+        Queue<(ServerConfig Server, int Depth)> pending)
+    {
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, parentUsername, discovered, discovery, knownServers);
+
+        foreach (SkippedLinkedServer skipped in plan.Skipped)
+        {
+            logger.LogInformation("  Not following linked server '{Link}' on '{Server}': {Reason}", skipped.LinkName, parent.Name, skipped.Reason);
+        }
+
+        foreach (LinkedServerFollowUp followUp in plan.FollowUps)
+        {
+            logger.LogInformation(
+                "  Following linked server '{Link}' on '{Server}' -> '{Target}' ({Host}{Database}), same credentials",
+                followUp.LinkName,
+                parent.Name,
+                followUp.Server.Name,
+                followUp.Server.Host,
+                followUp.Catalog is { } catalog ? $", database {catalog}" : string.Empty);
+
+            knownServers.Add(followUp.Server);
+            pending.Enqueue((followUp.Server, depth + 1));
+        }
+
+        return plan.FollowUps.Count;
     }
 
     /// <summary>

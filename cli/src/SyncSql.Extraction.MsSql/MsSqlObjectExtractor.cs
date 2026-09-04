@@ -36,11 +36,25 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
     {
         List<ExtractedObject> objects = [];
         Dictionary<string, MetricsSnapshot> metrics = [];
+        List<DiscoveredLinkedServer> discoveredLinkedServers = [];
 
-        if (filters.ObjectTypes.Contains("LinkedServers"))
+        // One read of sys.servers serves both callers: the LinkedServers objects to diff, and the leads
+        // the caller may want to follow up on (see LinkedServerFollowUpPlanner).
+        if (filters.ObjectTypes.Contains("LinkedServers") || options.DiscoverLinkedServers)
         {
             await using SqlConnection masterConnection = await MsSqlConnectionFactory.OpenAsync(server, "master", options.Credentials, cancellationToken);
-            await ExtractLinkedServersAsync(masterConnection, server, filters, objects);
+            IReadOnlyList<IGrouping<string, LinkedServerRow>> linkedServers =
+                [.. (await MsSqlCatalogReader.GetLinkedServersAsync(masterConnection)).GroupBy(r => r.LinkedServerName, StringComparer.OrdinalIgnoreCase)];
+
+            if (filters.ObjectTypes.Contains("LinkedServers"))
+            {
+                AddLinkedServerObjects(linkedServers, server, filters, objects);
+            }
+
+            if (options.DiscoverLinkedServers)
+            {
+                discoveredLinkedServers = [.. linkedServers.Select(ToDiscoveredLinkedServer)];
+            }
         }
 
         await using SqlConnection dbListConnection = await MsSqlConnectionFactory.OpenAsync(server, "master", options.Credentials, cancellationToken);
@@ -58,13 +72,40 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
         }
 
-        return new ExtractionOutcome { Objects = objects, MetricsSnapshots = metrics };
+        return new ExtractionOutcome
+        {
+            Objects = objects,
+            MetricsSnapshots = metrics,
+            DiscoveredLinkedServers = discoveredLinkedServers,
+        };
     }
 
-    private static async Task ExtractLinkedServersAsync(SqlConnection connection, ServerConfig server, EffectiveFilters filters, List<ExtractedObject> objects)
+    /// <summary>
+    /// One linked server as a follow-up lead: where it points, which database it pins, and which remote
+    /// login it maps to - the last one being what decides whether the credentials in hand will work on
+    /// the far side. sys.linked_logins.uses_self_credential = 1 means the local login is passed through
+    /// unchanged, i.e. the same username reaches the other side; 0 means the mapped remote_name is used
+    /// instead.
+    /// </summary>
+    private static DiscoveredLinkedServer ToDiscoveredLinkedServer(IGrouping<string, LinkedServerRow> group)
     {
-        IEnumerable<LinkedServerRow> rows = await MsSqlCatalogReader.GetLinkedServersAsync(connection);
-        foreach (IGrouping<string, LinkedServerRow> group in rows.GroupBy(r => r.LinkedServerName, StringComparer.OrdinalIgnoreCase))
+        LinkedServerRow first = group.First();
+        return new DiscoveredLinkedServer
+        {
+            Name = group.Key,
+            Product = first.Product,
+            Provider = first.Provider,
+            DataSource = first.DataSource,
+            Catalog = first.Catalog,
+            RemoteLoginNames = [.. group.Select(r => r.RemoteLoginName).Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name!).Distinct(StringComparer.OrdinalIgnoreCase)],
+            UsesLocalLogin = group.Any(r => r.UsesSelfCredential == true),
+        };
+    }
+
+    private static void AddLinkedServerObjects(
+        IEnumerable<IGrouping<string, LinkedServerRow>> linkedServers, ServerConfig server, EffectiveFilters filters, List<ExtractedObject> objects)
+    {
+        foreach (IGrouping<string, LinkedServerRow> group in linkedServers)
         {
             if (!filters.ObjectNames.IsAllowed(group.Key))
             {

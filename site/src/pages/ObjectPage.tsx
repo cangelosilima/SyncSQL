@@ -7,6 +7,7 @@ import LineageGraph from '../components/LineageGraph'
 import MetricsPanels from '../components/MetricsPanels'
 import DiffView from '../components/DiffView'
 import { getEdgeColumns } from '../lib/neighborhood'
+import { isLinkNode, qualifiedRefName } from '../lib/catalog'
 import { epochOf } from '../lib/analytics'
 import type { CatalogNode, CatalogObjectVersion } from '../types'
 
@@ -22,6 +23,21 @@ export default function ObjectPage() {
   const outgoing = index?.outgoing.get(id) ?? []
   const incoming = index?.incoming.get(id) ?? []
   const orphanedRefs = index?.orphanedByFrom.get(id) ?? []
+  const refsThroughThisLink = index?.linkedServerRefsByLink.get(id) ?? []
+  const refsAcrossLinks = index?.linkedServerRefsByFrom.get(id) ?? []
+
+  // Everything reached through this link, one row per remote object with the callers that use it -
+  // the same reference made by five procedures is one remote object, not five findings.
+  const targetsThroughThisLink = useMemo(() => {
+    const byTarget = new Map<string, { label: string; to: string | null; callers: string[] }>()
+    for (const ref of refsThroughThisLink) {
+      const label = qualifiedRefName(ref)
+      const key = ref.to ?? `?${label}`
+      if (!byTarget.has(key)) byTarget.set(key, { label, to: ref.to, callers: [] })
+      byTarget.get(key)!.callers.push(ref.from)
+    }
+    return [...byTarget.values()].sort((a, b) => a.label.localeCompare(b.label))
+  }, [refsThroughThisLink])
 
   const [viewingVersion, setViewingVersion] = useState<CatalogObjectVersion | null>(null)
   const [compareMode, setCompareMode] = useState(false)
@@ -95,14 +111,91 @@ export default function ObjectPage() {
           <strong>
             {orphanedRefs.length} orphaned reference{orphanedRefs.length === 1 ? '' : 's'}
           </strong>{' '}
-          - this object&apos;s DDL refers to something that doesn&apos;t resolve in the current catalog&apos;s scope,
-          usually a renamed or dropped target:
+          - this object&apos;s DDL refers to something that doesn&apos;t resolve anywhere the lookup reaches (this
+          database, the rest of this server, or a server one linked server away), usually a renamed or dropped
+          target:
           <ul className="orphaned-ref-list">
             {orphanedRefs.map((ref, i) => (
-              <li key={`${ref.schema ?? ''}|${ref.name}|${i}`}>{ref.schema ? `${ref.schema}.${ref.name}` : ref.name}</li>
+              <li key={`${ref.server ?? ''}|${ref.database ?? ''}|${ref.schema ?? ''}|${ref.name}|${i}`}>
+                {qualifiedRefName(ref)}
+              </li>
             ))}
           </ul>
         </div>
+      )}
+
+      {isLinkNode(node) && (
+        <>
+          <h2>Referenced through this {node.type === 'DatabaseLinks' ? 'database link' : 'linked server'}</h2>
+          {targetsThroughThisLink.length === 0 ? (
+            <p className="muted">
+              No object in the catalog references anything through this link. Either nothing uses it, or the objects
+              that do aren&apos;t extracted.
+            </p>
+          ) : (
+            <table className="columns-table">
+              <thead>
+                <tr>
+                  <th>Remote object</th>
+                  <th>In catalog</th>
+                  <th>Referenced by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {targetsThroughThisLink.map((target) => (
+                  <tr key={target.to ?? target.label}>
+                    <td>
+                      {target.to ? <Link to={`/object/${target.to}`}>{target.label}</Link> : <code>{target.label}</code>}
+                    </td>
+                    <td>{target.to ? 'yes' : 'not extracted'}</td>
+                    <td>
+                      {target.callers.map((caller, i) => (
+                        <span key={caller}>
+                          {i > 0 && ', '}
+                          <Link to={`/object/${caller}`}>{index.byId.get(caller)?.qualifiedName ?? caller}</Link>
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+
+      {refsAcrossLinks.length > 0 && (
+        <>
+          <h2>References across linked servers</h2>
+          <table className="columns-table">
+            <thead>
+              <tr>
+                <th>Through</th>
+                <th>Remote object</th>
+              </tr>
+            </thead>
+            <tbody>
+              {refsAcrossLinks.map((ref, i) => (
+                <tr key={`${ref.linkedServer}|${ref.name}|${i}`}>
+                  <td>
+                    <Link to={`/object/${ref.linkedServer}`}>
+                      {index.byId.get(ref.linkedServer)?.name ?? ref.linkedServer}
+                    </Link>
+                  </td>
+                  <td>
+                    {ref.to ? (
+                      <Link to={`/object/${ref.to}`}>{qualifiedRefName(ref)}</Link>
+                    ) : (
+                      <>
+                        <code>{qualifiedRefName(ref)}</code> <span className="muted">(not extracted)</span>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
 
       {node.columns.length > 0 && (
