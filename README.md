@@ -1,5 +1,7 @@
 # SyncSQL
 
+[![CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml)
+
 SyncSQL extracts database objects — stored procedures, views, functions,
 triggers, tables (with foreign keys, check constraints and indexes), schemas,
 synonyms, and linked servers / database links — from a fleet of **MSSQL** and
@@ -85,7 +87,7 @@ flowchart TD
 
     staged["extracted-objects/{server}/{database}/{type}/[{schema}/]{object}.sql<br/>metrics-snapshot/{...} - merged across every parallel job"]
 
-    subgraph sync["CI stage: sync - one job, plain shell git + syncsql"]
+    subgraph sync["CI stage: sync - one job running scripts/Publish-SyncSqlObjects.ps1"]
         direction TB
         clone["git clone --history-limit commits deep,<br/>replace pathPrefix/ with the staged tree -<br/>dropped objects show up as deletions"]
         metrics["syncsql metrics update<br/>folds this run's snapshots into repo/metrics/<br/>(outside pathPrefix - accumulates across runs)"]
@@ -131,17 +133,25 @@ local files (`SyncSql.Catalog`'s history mining is a read-only `git log`/
 `git show`, never a write).
 
 ```
-syncsql validate-config --config <path>
-syncsql sync --config <path> [--staging-root] [--metrics-snapshot-root]
+syncsql validate-config [--config <path>]
+syncsql sync [--config <path>] [--output-root] [--staging-root] [--metrics-snapshot-root]
+             [--db-user PREFIX=value] [--db-password PREFIX=value] [--credentials-file <path>]
              [--server-include/--server-exclude]
-syncsql catalog build --objects-root <path> --output <path>
+syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
                        [--max-co-change-commit-size] [--metrics-root]
-syncsql metrics update --snapshot-root <path> --history-root <path>
+syncsql metrics update [--output-root] [--snapshot-root <path>] [--history-root <path>]
                         [--history-limit]
-syncsql lint --path <file-or-dir>... [--fail-on warning|error]
+syncsql lint [--output-root] [--path <file-or-dir>...] [--fail-on warning|error]
 ```
+
+Every input is a parameter, and every one of them has a local default:
+credentials come from `--db-user`/`--db-password`/`--credentials-file`
+(falling back to the `<prefix>_DB_USER`/`<prefix>_DB_PASSWORD` environment
+variables, so existing setups keep working), and every output path defaults
+to a folder under `--output-root` (`./syncsql-output`), so the four commands
+chain together with no arguments at all outside CI.
 
 `sync` extracts (purely local - no git of any kind); `catalog build` and
 `metrics update` are the other two pure, composable steps (rebuild the
@@ -152,9 +162,12 @@ same real `ScriptDom` parser `catalog build` uses for lineage and reports
 syntax errors plus a few style/best-practice findings (`SELECT *`, `NOLOCK`
 hints, cursor usage) - see [`cli/docs/cli.md`](cli/docs/cli.md) for the
 full rule list.
-Publishing results to git is entirely the calling pipeline's job, done as
-plain shell (see [`.gitlab/README.md`](.gitlab/README.md)) - `syncsql`
-itself never clones, commits, or pushes. Install it as a
+Publishing results to git is
+[`scripts/Publish-SyncSqlObjects.ps1`](scripts/Publish-SyncSqlObjects.ps1)'s
+job - a PowerShell script the CI `sync` stage invokes with parameters, and
+that you can run by hand the same way (`-SkipPush` for a dry run); see
+[`.gitlab/README.md`](.gitlab/README.md). `syncsql` itself never clones,
+commits, or pushes. Install it as a
 [dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools)
 from the project's Nexus feed, or run it straight from source with
 `dotnet run --project cli/src/SyncSql.Cli --`. Full option reference,
@@ -173,12 +186,14 @@ Nothing in that file is secret: it lists server hostnames and the regex
 filters that decide what gets extracted. See the field descriptions below
 for the full schema; in short:
 
-- `git`: where extracted objects get pushed. Read and acted on directly by
-  the `sync-database-objects` job (via `jq`) - see
+- `git`: where extracted objects get pushed. Read and acted on by
+  [`scripts/Publish-SyncSqlObjects.ps1`](scripts/Publish-SyncSqlObjects.ps1),
+  where every field is also a parameter that overrides it - see
   [`.gitlab/README.md`](.gitlab/README.md) - `syncsql`
   itself never touches this block. Left blank (the default), objects are
-  pushed back into **this same project** using the predefined
-  `CI_SERVER_*` variables — see [`.gitlab/README.md`](.gitlab/README.md)'s
+  pushed back into **this same project**: the CI job passes a `-RemoteUrl`
+  built from the predefined `CI_SERVER_*` variables — see
+  [`.gitlab/README.md`](.gitlab/README.md)'s
   "Required CI/CD variables" for the token that requires. Set it to a
   full URL to push into a different project instead.
 - `defaults` / per-server overrides: `databases`, `schemas`,
@@ -196,8 +211,12 @@ Filtering is regex-based and works at every level mentioned in the
 config: server, database, schema, and individual object name.
 
 Credentials are **never** stored in the config. Each server entry has a
-`credentialsVariablePrefix`; the pipeline reads
-`<prefix>_DB_USER` / `<prefix>_DB_PASSWORD` from the environment.
+`credentialsVariablePrefix`, and `syncsql sync` resolves it from, in order,
+`--db-user`/`--db-password PREFIX=value` parameters, a `--credentials-file`
+JSON file, then the `<prefix>_DB_USER` / `<prefix>_DB_PASSWORD` environment
+variables. The pipeline keeps the credentials in masked CI/CD variables
+named that way and passes them to the CLI as parameters - see
+[`cli/docs/cli.md`](cli/docs/cli.md)'s "Credentials".
 
 ## CI/CD pipeline
 
@@ -210,6 +229,28 @@ tool's own build/publish pipeline - are documented in
 **[`.gitlab/README.md`](.gitlab/README.md)**; set the required variables
 there before running it, and see it for how to fall back to a single
 sequential extraction job for a small fleet.
+
+The pipeline holds configuration, not logic: every path, limit, and
+credential it defines is passed to `syncsql` or to
+[`scripts/Publish-SyncSqlObjects.ps1`](scripts/Publish-SyncSqlObjects.ps1)
+as an explicit parameter, and neither reads a CI variable of its own. That
+is what makes the same steps runnable, and dry-runnable, from a workstation.
+
+### GitHub Actions
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) covers the build-and-test
+half on GitHub, for pushes to `main`, pull requests, and manual runs:
+
+| Job                | What it runs |
+|--------------------|--------------|
+| `cli`              | `dotnet format --verify-no-changes`, `dotnet build`, `dotnet test` over `cli/SyncSql.slnx` (test results uploaded as a `.trx` artifact). |
+| `site`             | `npm ci` and `npm run build` in `site/` - which is `tsc -b && vite build`, so it typechecks too. |
+| `publish-script`   | Parses `scripts/Publish-SyncSqlObjects.ps1` and checks it against PSScriptAnalyzer's Windows PowerShell 5.1 syntax rules. |
+
+It deliberately stops there: extraction, publishing to git, and the Pages
+deploy stay in GitLab CI, since those are the jobs that need database
+credentials, a push token, and a schedule. Nothing in this workflow touches
+a database, a credential, or a git remote.
 
 ## The catalog / lineage site
 
@@ -516,31 +557,62 @@ with a real one (see below) to preview actual data.
 
 ## Running the extraction locally
 
+Nothing here needs CI, and nothing needs to be exported: credentials and
+paths are all parameters, and the paths have local defaults.
+
 ```bash
-export SQLPROD01_DB_USER='...'
-export SQLPROD01_DB_PASSWORD='...'
-syncsql sync --config ./config/servers.json --staging-root ./staging
+cat > ~/.syncsql-credentials.json <<'JSON'
+{ "SQLPROD01": { "user": "svc_syncsql", "password": "..." } }
+JSON
+chmod 600 ~/.syncsql-credentials.json
+
+syncsql sync --credentials-file ~/.syncsql-credentials.json
 ```
 
-`sync` is purely local - it just leaves the extracted files under
-`--staging-root` (printed in the log if you don't pass one) and the
-metrics snapshots under `--metrics-snapshot-root`. To build a
-`catalog.json` for local preview, feed the object staging directory into:
+(or `--db-user SQLPROD01=svc_syncsql --db-password SQLPROD01=...`, or the
+`SQLPROD01_DB_USER`/`SQLPROD01_DB_PASSWORD` environment variables - all
+three work.)
+
+`sync` is purely local: with no path parameters it reads
+`./config/servers.json` and leaves extracted objects under
+`./syncsql-output/objects` and metrics snapshots under
+`./syncsql-output/metrics-snapshot` (`--staging-root` /
+`--metrics-snapshot-root` / `--output-root` override that). The other
+commands default to the same layout, so the chain needs no arguments:
 
 ```bash
-syncsql catalog build \
-  --objects-root <staging-dir> \
-  --output ./site/public/data/catalog.json
+syncsql metrics update                                        # → ./syncsql-output/metrics
+syncsql catalog build --metrics-root ./syncsql-output/metrics # → ./syncsql-output/catalog.json
+```
+
+To preview the site against a run, write the catalog where the site reads it:
+
+```bash
+syncsql catalog build --output ./site/public/data/catalog.json
 ```
 
 (add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
-target repo to include history; add `--metrics-root <metrics-staging-dir>`
-to include that one run's metrics snapshot - real trend graphs need
-several runs' worth of history accumulated in a real `metrics/` tree, so a
-single local run only shows a single data point per chart), then
-`npm run dev` inside `site/`. See [`cli/docs/cli.md`](cli/docs/cli.md) for
-every option and install instructions (the `syncsql` global tool, or
+target repo to include history; `--metrics-root` includes accumulated
+metrics - real trend graphs need several runs' worth of history in a real
+`metrics/` tree, so a single local run only shows a single data point per
+chart), then `npm run dev` inside `site/`. See
+[`cli/docs/cli.md`](cli/docs/cli.md) for every option and install
+instructions (the `syncsql` global tool, or
 `dotnet run --project cli/src/SyncSql.Cli --` straight from source).
+
+To publish a local run into a git repository exactly the way CI does -
+including the dry run that stops before committing:
+
+```powershell
+pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
+  -ExtractedObjectsDir ./syncsql-output/objects `
+  -MetricsSnapshotDir ./syncsql-output/metrics-snapshot `
+  -ConfigPath ./config/servers.json `
+  -SkipPush
+```
+
+The script targets Windows PowerShell 5.1, so `powershell.exe` runs it on a
+stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
 
 ## Known limitations
 

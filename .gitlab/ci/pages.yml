@@ -19,7 +19,7 @@ pages:
     - git reset --hard "origin/${GIT_BRANCH:-$CI_COMMIT_REF_NAME}"
   script:
     - mkdir -p site/public/data
-    - cp "${PATH_PREFIX:-objects}/catalog.json" site/public/data/catalog.json
+    - cp "${PATH_PREFIX:-objects}/${CATALOG_FILE_NAME:-catalog.json}" site/public/data/catalog.json
     - cd site
     - npm ci
     - npm run build

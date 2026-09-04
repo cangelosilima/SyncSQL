@@ -5,15 +5,15 @@ using System.CommandLine;
 
 namespace SyncSql.Cli.Commands;
 
-/// <summary>`syncsql validate-config --config &lt;path&gt;` - parses and validates a config/servers.json file without touching any database or git remote.</summary>
+/// <summary>`syncsql validate-config [--config &lt;path&gt;]` - parses and validates a config/servers.json file without touching any database or git remote.</summary>
 internal static class ValidateConfigCommand
 {
     public static Command Build(IServiceProvider services)
     {
-        Option<FileInfo> configOption = new("--config")
+        Option<string> configOption = new("--config")
         {
-            Description = "Path to the config/servers.json file to validate.",
-            Required = true,
+            Description = "Path to the config/servers.json file to validate, relative to the current directory unless absolute.",
+            DefaultValueFactory = _ => SyncSqlPaths.DefaultConfigPath,
         };
 
         Command command = new("validate-config", "Parse and validate a config/servers.json file.")
@@ -23,13 +23,13 @@ internal static class ValidateConfigCommand
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            FileInfo configFile = parseResult.GetRequiredValue(configOption);
+            string configPath = Path.GetFullPath(parseResult.GetValue(configOption) ?? SyncSqlPaths.DefaultConfigPath);
             ILogger logger = services.GetLogger(nameof(ValidateConfigCommand));
 
             try
             {
-                SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(configFile.FullName, cancellationToken);
-                logger.LogInformation("OK: {ServerCount} server(s) defined in {Path}", config.Servers.Count, configFile.FullName);
+                SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(configPath, cancellationToken);
+                logger.LogInformation("OK: {ServerCount} server(s) defined in {Path}", config.Servers.Count, configPath);
                 return 0;
             }
             catch (ConfigValidationException ex)

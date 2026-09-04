@@ -36,7 +36,12 @@ cli-lint:
   <<: *cli_dotnet
   stage: cli-lint
   script:
-    - dotnet format SyncSql.slnx --verify-no-changes
+    # grammar/ is generated ANTLR output committed as-is; it is excluded for the
+    # same reason .gitattributes exempts it from whitespace checks - reformatting
+    # it would break byte-for-byte reproducibility with the documented generator
+    # command. The GitHub Actions workflow (.github/workflows/ci.yml) runs the
+    # same line.
+    - dotnet format SyncSql.slnx --verify-no-changes --exclude ../grammar/
 
 cli-test:
   <<: *cli_dotnet

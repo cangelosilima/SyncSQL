@@ -14,10 +14,10 @@ internal static class LintCommand
 {
     public static Command Build(IServiceProvider services)
     {
+        Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string[]> pathOption = new("--path")
         {
-            Description = "A .sql file, or a directory searched recursively for *.sql files. Repeatable.",
-            Required = true,
+            Description = $"A .sql file, or a directory searched recursively for *.sql files. Repeatable. Default: <output-root>/{SyncSqlPaths.ObjectsDirectoryName}, i.e. what `syncsql sync` just wrote.",
         };
         Option<string> failOnOption = new("--fail-on")
         {
@@ -27,6 +27,7 @@ internal static class LintCommand
 
         Command command = new("lint", "Lint T-SQL script(s) for syntax errors and common style/best-practice issues.")
         {
+            outputRootOption,
             pathOption,
             failOnOption,
         };
@@ -35,7 +36,10 @@ internal static class LintCommand
         {
             ILogger logger = services.GetLogger(nameof(LintCommand));
 
-            string[] paths = parseResult.GetRequiredValue(pathOption);
+            string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
+            string[] paths = parseResult.GetValue(pathOption) is { Length: > 0 } explicitPaths
+                ? [.. explicitPaths.Select(Path.GetFullPath)]
+                : [SyncSqlPaths.Resolve(null, outputRoot, SyncSqlPaths.ObjectsDirectoryName)];
             string failOnRaw = parseResult.GetValue(failOnOption) ?? "error";
             if (!Enum.TryParse(failOnRaw, ignoreCase: true, out TSqlLintSeverity failOn))
             {

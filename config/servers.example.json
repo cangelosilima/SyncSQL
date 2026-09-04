@@ -54,7 +54,7 @@
       "type": "mssql",
       "host": "sqlprod02.example.com",
       "port": 1433,
-      "credentialsVariablePrefix": "SQLPROD02",
+      "credentialsVariablePrefix": "SQLPROD02_FINANCE_ONLY",
       "databases": {
         "include": ["^Finance$"]
       },

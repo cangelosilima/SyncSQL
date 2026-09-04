@@ -1,10 +1,16 @@
-# Local extraction output when running `syncsql sync --skip-git`
+# Default local output root for `syncsql sync` / `metrics update` / `catalog build`
+# (--output-root), plus the older hand-picked staging directories.
+syncsql-output/
 staging/
 *.staging/
 
 # CI artifact directories created by `syncsql sync` / `syncsql catalog build`
 /extracted-objects/
+/metrics-snapshot/
 /catalog/
+
+# Local credentials file for `syncsql sync --credentials-file` - never commit one
+*credentials*.json
 
 # React catalog/lineage site
 site/node_modules/
