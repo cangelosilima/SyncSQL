@@ -22,6 +22,9 @@ pages:
     - cp "${PATH_PREFIX:-objects}/${CATALOG_FILE_NAME:-catalog.json}" site/public/data/catalog.json
     - cd site
     - npm ci
+    - npm test
+    # Model packaging is optional here: npm run build emits a warning and an
+    # unavailable capability manifest when LFS assets are absent or invalid.
     - npm run build
     - cd ..
     - rm -rf public

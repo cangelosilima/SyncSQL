@@ -244,7 +244,7 @@ half on GitHub, for pushes to `main`, pull requests, and manual runs:
 | Job                | What it runs |
 |--------------------|--------------|
 | `cli`              | `dotnet format --verify-no-changes`, `dotnet build`, `dotnet test` over `cli/SyncSql.slnx` (test results uploaded as a `.trx` artifact). |
-| `site`             | `npm ci` and `npm run build` in `site/` - which is `tsc -b && vite build`, so it typechecks too. |
+| `site`             | `npm ci`, browser/unit tests, strict verification of the Git LFS-backed local AI model, and the typechecked Vite build in `site/`. |
 | `publish-script`   | Parses `scripts/Publish-SyncSqlObjects.ps1` and checks it against PSScriptAnalyzer's Windows PowerShell 5.1 syntax rules. |
 
 It deliberately stops there: extraction, publishing to git, and the Pages
@@ -277,6 +277,14 @@ see "Theme" below):
   Indexes, ...) — e.g. "which procs reference this column" — distinct from
   the attribute filter bar above it, which only matches server/database/
   schema/type/name/description.
+- **AI** (`/#/ai`) — an optional, entirely browser-local assistant that turns
+  an English request into a preview of validated Explorer filters and one DDL
+  content query. It uses the quantized `all-MiniLM-L6-v2` model only to
+  classify ambiguous filter intent; a deterministic catalog-aware planner
+  resolves values and operators, and never generates or executes SQL. The
+  model is fetched from the same Pages origin on the first request. If a
+  deployment omits the model, the tab remains visible but disabled and the
+  rest of the site is unaffected.
 - **Object detail** — qualified name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), an **orphaned reference** warning when this
@@ -554,6 +562,25 @@ npm run dev
 `site/public/data/catalog.json` ships a small demo fixture so `npm run dev`
 has something to render before any pipeline has actually run; replace it
 with a real one (see below) to preview actual data.
+
+The development server is model-free by default. To exercise AI locally,
+materialize the Git LFS files, verify them, and preview a production build:
+
+```sh
+git lfs pull
+cd site
+npm run verify:ai-model
+npm run build
+npm run preview
+```
+
+`npm run build` packages AI in optional mode: a missing LFS object produces a
+warning and an `available: false` capability manifest, but the core site still
+builds. GitHub Actions runs `verify:ai-model` first and fails on missing,
+unresolved, or modified model files. The GitLab Pages job deliberately keeps
+the optional behavior so catalog publishing is not blocked by LFS or proxy
+availability. Vendored sources and checksums live under
+`site/vendor/ai/all-MiniLM-L6-v2/`; only verified files are copied to `dist`.
 
 ## Running the extraction locally
 

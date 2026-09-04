@@ -11,6 +11,8 @@ export interface FilterToken {
   values: string[]
 }
 
+export type FilterTokenInput = Omit<FilterToken, 'id'>
+
 export interface FilterAttributeDef {
   key: FilterAttribute
   label: string
@@ -124,7 +126,7 @@ export function newTokenId(): string {
 }
 
 /** Compact JSON encoding of filter tokens for a shareable URL query param - drops the ephemeral `id`. */
-export function encodeTokensForUrl(tokens: FilterToken[]): string {
+export function encodeTokensForUrl(tokens: readonly FilterTokenInput[]): string {
   return JSON.stringify(tokens.map((t) => [t.attribute, t.operator, t.values]))
 }
 
@@ -133,10 +135,25 @@ export function decodeTokensFromUrl(raw: string | null): FilterToken[] {
   try {
     const parsed = JSON.parse(raw) as [FilterAttribute | null, FilterOperator, string[]][]
     if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((entry): entry is [FilterAttribute | null, FilterOperator, string[]] => Array.isArray(entry) && entry.length === 3)
-      .map(([attribute, operator, values]) => ({ id: newTokenId(), attribute, operator, values }))
+    return parsed.slice(0, 20).flatMap((entry) => {
+      if (!Array.isArray(entry) || entry.length !== 3) return []
+      const [attribute, operator, values] = entry
+      if (!isFilterAttribute(attribute) || !isFilterOperator(operator) || !Array.isArray(values)) return []
+      const cleanValues = values
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= 256)
+        .slice(0, 20)
+      if (cleanValues.length === 0 || !operatorsFor(attribute).includes(operator)) return []
+      return [{ id: newTokenId(), attribute, operator, values: cleanValues }]
+    })
   } catch {
     return []
   }
+}
+
+function isFilterAttribute(value: unknown): value is FilterAttribute | null {
+  return value === null || FILTER_ATTRIBUTES.some((attribute) => attribute.key === value)
+}
+
+function isFilterOperator(value: unknown): value is FilterOperator {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(OPERATOR_LABELS, value)
 }

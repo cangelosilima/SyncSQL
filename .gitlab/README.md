@@ -290,6 +290,14 @@ first, using the `GIT_BRANCH` (falling back to `$CI_COMMIT_REF_NAME`) and
 `sync.env` dotenv report, and copies `$CATALOG_FILE_NAME` (falling back to
 `catalog.json`) out of that folder.
 
+The Pages build treats the vendored browser AI model as an optional
+capability. Its packaging step verifies the manifest, Git LFS materialization,
+file sizes, and SHA-256 checksums before copying anything into `site/dist`.
+Valid assets enable the AI filter assistant; missing, unresolved, or invalid
+assets emit a visible warning, omit `dist/models`, write an unavailable
+capability manifest, and still publish the core catalog. Compilation, tests,
+catalog handling, and Pages deployment remain normal hard failures.
+
 ## Required CI/CD variables
 
 Set these under **Settings > CI/CD > Variables** (masked + protected):

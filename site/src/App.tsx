@@ -6,18 +6,23 @@ import ObjectPage from './pages/ObjectPage'
 import LineagePage from './pages/LineagePage'
 import Explorer from './pages/Explorer'
 import History from './pages/History'
+import AiPage from './pages/AiPage'
+import { AiProvider, useAi } from './ai/AiContext'
 import pkg from '../package.json'
 
 export default function App() {
   return (
     <CatalogProvider>
-      <Shell />
+      <AiProvider>
+        <Shell />
+      </AiProvider>
     </CatalogProvider>
   )
 }
 
 function Shell() {
   const { loading, error, index } = useCatalog()
+  const ai = useAi()
 
   if (loading) {
     return (
@@ -51,6 +56,21 @@ function Shell() {
             Overview
           </NavLink>
           <NavLink to="/explorer">Explorer</NavLink>
+          {ai.available
+            ? <NavLink to="/ai">AI</NavLink>
+            : (
+              <span
+                className="nav-link-disabled"
+                aria-disabled="true"
+                title={ai.checking
+                  ? 'Checking AI availability'
+                  : ai.reason === 'runtime-error'
+                    ? 'AI disabled after the local model failed to load'
+                    : 'AI model not included in this deployment'}
+              >
+                AI
+              </span>
+            )}
           <NavLink to="/lineage">Lineage</NavLink>
           <NavLink to="/history">History</NavLink>
         </nav>
@@ -73,6 +93,7 @@ function Shell() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/explorer" element={<Explorer />} />
+            <Route path="/ai" element={<AiPage />} />
             <Route path="/object/*" element={<ObjectPage />} />
             <Route path="/lineage" element={<LineagePage />} />
             <Route path="/history" element={<History />} />
