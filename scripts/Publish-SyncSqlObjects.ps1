@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 
 <#
 .SYNOPSIS
@@ -9,6 +9,10 @@
     This is the sync stage of the pipeline - the only place git actually runs. It lives here as a real
     script rather than an inline CI shell block so it can be read, reviewed, and run by hand from a
     workstation exactly as CI runs it.
+
+    Targets Windows PowerShell 5.1, so it runs on a stock Windows runner or workstation with no
+    PowerShell install at all - and unchanged on PowerShell 7+ (which is what the Linux CI image uses).
+    Nothing here relies on a 7-only language feature or cmdlet parameter.
 
     Everything it needs is a parameter. A value that is not passed falls back to the `git` block of
     config/servers.json (when -ConfigPath is given), then to the documented default. The one deliberate
@@ -89,7 +93,8 @@ param(
     [switch] $KeepCloneDirectory
 )
 
-Set-StrictMode -Version Latest
+# 2.0 rather than Latest: identical, defined semantics on Windows PowerShell 5.1 and PowerShell 7+.
+Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 function Write-Step {
@@ -102,6 +107,9 @@ function Invoke-Native {
         .SYNOPSIS
             Runs a native command, turning a non-zero exit code into a terminating error unless
             -AllowFailure is passed (in which case the exit code is returned for the caller to inspect).
+        .NOTES
+            The command's own output goes straight to the host, so the only thing this function returns
+            is the exit code - callers can compare it without picking it out of the command's stdout.
     #>
     param(
         [Parameter(Mandatory)][string] $FilePath,
@@ -109,8 +117,18 @@ function Invoke-Native {
         [switch] $AllowFailure
     )
 
-    & $FilePath @ArgumentList
-    $exitCode = $LASTEXITCODE
+    # Windows PowerShell 5.1 turns a native command's stderr into error records while
+    # $ErrorActionPreference is 'Stop' - and git writes its progress there - so relax it for the call
+    # and judge the command by its exit code instead.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $FilePath @ArgumentList | Out-Host
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
 
     if ($exitCode -ne 0 -and -not $AllowFailure) {
         throw "$FilePath $($ArgumentList -join ' ') failed with exit code $exitCode."
@@ -299,11 +317,16 @@ try {
     # --------------------------------------------------------- downstream hand-off
     if (-not [string]::IsNullOrWhiteSpace($DotEnvPath)) {
         Write-Step "Writing PATH_PREFIX/GIT_BRANCH -> $DotEnvPath"
-        Set-Content -LiteralPath $DotEnvPath -Value @("PATH_PREFIX=$PathPrefix", "GIT_BRANCH=$Branch") -Encoding utf8NoBOM
+        # Written through .NET rather than Set-Content: 5.1's -Encoding utf8 always emits a BOM, which
+        # GitLab's dotenv parser reads as part of the first variable's name. Line endings are forced to
+        # LF for the same reason - a CRLF from a Windows runner would end up inside the value.
+        $dotEnvFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DotEnvPath)
+        $dotEnvContent = "PATH_PREFIX=$PathPrefix`nGIT_BRANCH=$Branch`n"
+        [System.IO.File]::WriteAllText($dotEnvFullPath, $dotEnvContent, (New-Object System.Text.UTF8Encoding($false)))
     }
 }
 finally {
-    $env:SYNCSQL_GIT_PASSWORD = $null
+    Remove-Item Env:\SYNCSQL_GIT_PASSWORD -ErrorAction SilentlyContinue
     if ($createdCloneDirectory -and -not $KeepCloneDirectory -and -not [string]::IsNullOrWhiteSpace($CloneDirectory) -and (Test-Path -LiteralPath $CloneDirectory)) {
         Remove-Item -LiteralPath $CloneDirectory -Recurse -Force -ErrorAction SilentlyContinue
     }

@@ -593,6 +593,9 @@ pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
   -SkipPush
 ```
 
+The script targets Windows PowerShell 5.1, so `powershell.exe` runs it on a
+stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
+
 ## Known limitations
 
 - MSSQL table DDL (columns, identity, defaults, primary key) is

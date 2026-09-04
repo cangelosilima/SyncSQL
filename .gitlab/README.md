@@ -127,31 +127,39 @@ needed - this is a fast sanity check for merge requests and pushes.
 ### `extract-server` (`extract.yml`)
 
 The only jobs that touch your databases. One job **per server**, run in
-parallel via a GitLab `parallel: matrix:` over `SERVER_NAME` +
-`CREDENTIALS_PREFIX`. Each instance runs:
+parallel via a GitLab `parallel: matrix:` over `SERVER_NAME`. Each instance
+runs:
 
 ```
 syncsql sync --config "$CONFIG_PATH" --server-include "^${SERVER_NAME}$" \
   --staging-root "$EXTRACTED_OBJECTS_DIR" --metrics-snapshot-root "$METRICS_SNAPSHOT_DIR" \
-  --db-user "${CREDENTIALS_PREFIX}=$(printenv "${CREDENTIALS_PREFIX}_DB_USER")" \
-  --db-password "${CREDENTIALS_PREFIX}=$(printenv "${CREDENTIALS_PREFIX}_DB_PASSWORD")"
+  --db-user "${SERVER_NAME}=$(printenv "${SERVER_NAME}_DB_USER")" \
+  --db-password "${SERVER_NAME}=$(printenv "${SERVER_NAME}_DB_PASSWORD")"
 ```
 
 purely locally - no git operation happens here or anywhere in the CLI.
 
 **Credentials are passed as parameters, not inherited from the job's
-environment.** The masked CI/CD variables are still named after each
-server's `credentialsVariablePrefix`; `printenv` picks the right pair and
-hands them to the CLI. GitLab logs the *unexpanded* script line, so the
-values never reach the job log, and the CLI needs nothing in its
-environment - which is what makes the same command runnable by hand.
+environment.** The masked CI/CD variables are named after the server -
+`<SERVER_NAME>_DB_USER` / `<SERVER_NAME>_DB_PASSWORD` - and `printenv` picks
+the right pair and hands it to the CLI. GitLab logs the *unexpanded* script
+line, so the values never reach the job log, and the CLI needs nothing in
+its environment, which is what makes the same command runnable by hand.
 Command-line arguments are readable by other processes on the same host,
 though, so on a shared runner prefer `syncsql sync --credentials-file`
 with a file the job writes from a masked variable (or drop the two
 `--db-*` parameters and let the CLI fall back to the environment, which
-still works). That is also why `CREDENTIALS_PREFIX` is its own matrix key:
-a server whose name differs from its prefix (`SQLPROD02_FINANCE_ONLY` vs
-`SQLPROD02` in the example config) still gets the right pair.
+still works).
+
+This makes `SERVER_NAME` do double duty as the server to extract *and* its
+credentials key, so the matrix needs one value per entry and no second
+variable. It assumes each server's `credentialsVariablePrefix` in
+`config/servers.json` **equals its `name`** (as in `config/servers.example.json`).
+If a config deliberately shares one prefix across several server entries,
+either pass that prefix instead of `$SERVER_NAME` in the two `--db-*`
+parameters, or drop them and name the CI/CD variables after the prefix so the
+CLI's environment fallback resolves them.
+
 Every instance writes to the *same* `--staging-root`/`--metrics-snapshot-root`;
 this is safe because extraction always writes under `<server>/...` first
 (see `ExtractedObjectFile.RelativePath`), so concurrent instances scoped to
@@ -159,7 +167,7 @@ different servers never collide. GitLab merges every instance's artifacts
 together for the downstream `sync-database-objects` job - a plain job name
 in `dependencies:` pulls in *all* instances of a `parallel:` job.
 
-The `SERVER_NAME`/`CREDENTIALS_PREFIX` matrix list must match every server
+The `SERVER_NAME` matrix list must match every server
 `config/servers.json`'s `serverSelection` would actually run for this
 pipeline, and has to be kept in sync by hand whenever the fleet changes - a
 server present in the config but missing from the matrix silently isn't
@@ -246,11 +254,17 @@ Notable details:
 - **`sync.env` dotenv report**: `-DotEnvPath` writes `PATH_PREFIX`/`GIT_BRANCH`
   as a GitLab `dotenv` artifact so the downstream `pages` job knows where to
   find `catalog.json` and which branch tip to fetch, without hardcoding either.
+- **PowerShell version**: the script targets **Windows PowerShell 5.1**, so a
+  stock Windows runner or workstation runs it with no PowerShell install at
+  all - and it runs unchanged on PowerShell 7+, which is what this Linux image
+  uses. Nothing in it relies on a 7-only language feature or cmdlet parameter.
 - **PowerShell in the job**: the `.NET SDK` image may or may not ship `pwsh`
   depending on the tag, so the job installs it as a dotnet tool when
   `command -v pwsh` finds nothing. On a runner with no nuget.org access,
   mirror the `PowerShell` package in Nexus and add
-  `--add-source "$NEXUS_NUGET_SOURCE_URL"` to that install line.
+  `--add-source "$NEXUS_NUGET_SOURCE_URL"` to that install line. On a Windows
+  runner neither applies: drop that line and invoke the script with
+  `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ...`.
 
 This design is a deliberate split: the CLI (`syncsql`) is a pure,
 git-agnostic data pipeline you can run and test anywhere, and this one
@@ -280,7 +294,7 @@ Set these under **Settings > CI/CD > Variables** (masked + protected):
 | Variable                            | Purpose                                                                                                    |
 |--------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `CI_JOB_Maintainer_Token`            | A project access token with the **Maintainer** role and `write_repository` scope, read by `Publish-SyncSqlObjects.ps1` to push extracted objects back into this project. The built-in `CI_JOB_TOKEN` cannot push commits, hence a dedicated token. Falls back to `GIT_PUSH_TOKEN`, and to the script's `-PushToken` parameter if you'd rather pass it in. |
-| `<PREFIX>_DB_USER` / `_DB_PASSWORD`  | One pair per server entry in `config/servers.json`, where `<PREFIX>` is that server's `credentialsVariablePrefix`. `extract-server` reads them with `printenv` and passes them to the CLI as `--db-user`/`--db-password` parameters. |
+| `<SERVER_NAME>_DB_USER` / `_DB_PASSWORD` | One pair per server entry in `config/servers.json`, named after that server's `name` (which `extract-server` also uses as its `credentialsVariablePrefix`). The job reads them with `printenv` and passes them to the CLI as `--db-user`/`--db-password` parameters. |
 | `NEXUS_NUGET_SOURCE_URL`             | NuGet v3 feed URL used by `validate-config`/`extract-server`/`sync-database-objects` to install the published `syncsql` tool and by `cli-publish` to publish it. |
 | `NEXUS_API_KEY`                      | API key/token with publish rights to that feed - only needed by `cli-publish`. |
 | `SYNC_REMOTE_URL`                    | Optional. Repository `sync-database-objects` publishes to, passed as the script's `-RemoteUrl`. Unset, the job passes this project's own URL built from `CI_SERVER_PROTOCOL`/`CI_SERVER_HOST`/`CI_PROJECT_PATH`. |

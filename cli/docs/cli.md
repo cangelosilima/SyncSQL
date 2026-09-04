@@ -386,7 +386,10 @@ pwsh ./scripts/Publish-SyncSqlObjects.ps1 \
   -SkipPush
 ```
 
-See [`.gitlab/README.md`](../../.gitlab/README.md)'s `sync-database-objects`
+The script targets **Windows PowerShell 5.1**, so `powershell.exe` runs it
+on a stock Windows box with nothing installed, and `pwsh` (PowerShell 7+)
+runs the same file on Linux/macOS. See
+[`.gitlab/README.md`](../../.gitlab/README.md)'s `sync-database-objects`
 section for its full parameter list.
 
 ## Architecture

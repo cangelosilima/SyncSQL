@@ -15,9 +15,12 @@ sync-database-objects:
     - extract-server
   script:
     - apt-get update -qq && apt-get install -y --no-install-recommends git -qq
-    # The .NET SDK image may or may not ship PowerShell depending on the tag; install
-    # it as a dotnet tool when it's missing (mirror the PowerShell package in Nexus and
-    # add --add-source "$NEXUS_NUGET_SOURCE_URL" if nuget.org isn't reachable).
+    # The publish script targets Windows PowerShell 5.1, so it also runs unchanged on the
+    # PowerShell 7 this Linux image needs. The .NET SDK image may or may not ship it
+    # depending on the tag; install it as a dotnet tool when it's missing (mirror the
+    # PowerShell package in Nexus and add --add-source "$NEXUS_NUGET_SOURCE_URL" if
+    # nuget.org isn't reachable). On a Windows runner, drop this line and call the script
+    # with: powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ...
     - command -v pwsh >/dev/null 2>&1 || dotnet tool install --global PowerShell
     - |
       pwsh -NoProfile -NonInteractive -File "$PUBLISH_SCRIPT" \
