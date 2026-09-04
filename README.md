@@ -1,5 +1,7 @@
 # SyncSQL
 
+[![CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml)
+
 SyncSQL extracts database objects — stored procedures, views, functions,
 triggers, tables (with foreign keys, check constraints and indexes), schemas,
 synonyms, and linked servers / database links — from a fleet of **MSSQL** and
@@ -233,6 +235,22 @@ credential it defines is passed to `syncsql` or to
 [`scripts/Publish-SyncSqlObjects.ps1`](scripts/Publish-SyncSqlObjects.ps1)
 as an explicit parameter, and neither reads a CI variable of its own. That
 is what makes the same steps runnable, and dry-runnable, from a workstation.
+
+### GitHub Actions
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) covers the build-and-test
+half on GitHub, for pushes to `main`, pull requests, and manual runs:
+
+| Job                | What it runs |
+|--------------------|--------------|
+| `cli`              | `dotnet format --verify-no-changes`, `dotnet build`, `dotnet test` over `cli/SyncSql.slnx` (test results uploaded as a `.trx` artifact). |
+| `site`             | `npm ci` and `npm run build` in `site/` - which is `tsc -b && vite build`, so it typechecks too. |
+| `publish-script`   | Parses `scripts/Publish-SyncSqlObjects.ps1` and checks it against PSScriptAnalyzer's Windows PowerShell 5.1 syntax rules. |
+
+It deliberately stops there: extraction, publishing to git, and the Pages
+deploy stay in GitLab CI, since those are the jobs that need database
+credentials, a push token, and a schedule. Nothing in this workflow touches
+a database, a credential, or a git remote.
 
 ## The catalog / lineage site
 

@@ -1,0 +1,137 @@
+# Build and test on GitHub, mirroring what .gitlab/ci/cli.yml does on GitLab:
+# format check, build, and test the .NET CLI, build the catalog site, and check
+# the publish script. The GitLab pipeline remains the one that extracts from the
+# fleet and publishes to git - nothing here touches a database, a credential, or
+# a git remote.
+#
+# Every job runs on every push/PR rather than filtering by changed path: the
+# repository is small enough that the whole thing is a few minutes, and a job
+# that never gets skipped is one that can be a required status check.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli:
+    name: CLI - format, build, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # No packages.lock.json in the repo, so cache the global package folder
+      # keyed by the project files that decide what gets restored.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('cli/**/*.csproj', 'cli/Directory.Build.props', 'cli/tests/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore SyncSql.slnx
+
+      # grammar/ is generated ANTLR output committed as-is, so it is excluded
+      # here for the same reason .gitattributes exempts it from whitespace
+      # checks - reformatting it would break byte-for-byte reproducibility with
+      # the documented generator command.
+      - name: Format check
+        run: dotnet format SyncSql.slnx --verify-no-changes --no-restore --exclude ../grammar/
+
+      - name: Build
+        run: dotnet build SyncSql.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: >-
+          dotnet test SyncSql.slnx --configuration Release --no-build
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-test-results
+          path: cli/tests/**/TestResults/*.trx
+          if-no-files-found: ignore
+
+  site:
+    name: Site - typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `npm run build` is `tsc -b && vite build`, so this typechecks too.
+      - name: Build
+        run: npm run build
+
+  publish-script:
+    name: Publish script - parse and 5.1 compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse
+        shell: pwsh
+        run: |
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path ./scripts/Publish-SyncSqlObjects.ps1).Path, [ref] $null, [ref] $errors)
+          if ($errors) {
+              $errors | ForEach-Object { Write-Host "::error::$($_.Extent.StartLineNumber): $($_.Message)" }
+              throw "$($errors.Count) parse error(s) in Publish-SyncSqlObjects.ps1."
+          }
+          Write-Host 'Parsed cleanly.'
+
+      # The script targets Windows PowerShell 5.1 (see .gitlab/README.md); this
+      # is what keeps that true. PSUseCompatibleSyntax is language-level only -
+      # profile-based cmdlet/parameter compatibility rules need a platform
+      # profile name and are left to run locally.
+      - name: Check Windows PowerShell 5.1 syntax compatibility
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -ErrorAction Stop
+          $settings = @{
+              Rules = @{
+                  PSUseCompatibleSyntax = @{
+                      Enable         = $true
+                      TargetVersions = @('5.1', '7.4')
+                  }
+              }
+          }
+          $findings = Invoke-ScriptAnalyzer -Path ./scripts -Recurse -IncludeRule PSUseCompatibleSyntax -Settings $settings
+          if ($findings) {
+              $findings | ForEach-Object { Write-Host "::error file=$($_.ScriptPath),line=$($_.Line)::$($_.Message)" }
+              throw "$($findings.Count) PowerShell 5.1 compatibility finding(s)."
+          }
+          Write-Host 'No 5.1 compatibility findings.'
