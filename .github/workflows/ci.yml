@@ -24,9 +24,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Matrixed over Linux and Windows because the CLI's on-disk formats are
+  # platform-sensitive in ways a single-OS pipeline cannot see: line endings
+  # (Environment.NewLine), path separators, the default console encoding a
+  # redirected child process is decoded with, and which characters are legal in
+  # a file name. A Linux-only run passed while the extracted-object round trip
+  # was broken on Windows, which is what this matrix exists to catch.
   cli:
-    name: CLI - format, build, test
-    runs-on: ubuntu-latest
+    name: CLI - format, build, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         working-directory: cli
@@ -53,7 +63,12 @@ jobs:
       # here for the same reason .gitattributes exempts it from whitespace
       # checks - reformatting it would break byte-for-byte reproducibility with
       # the documented generator command.
+      # Linux only: the check reads .editorconfig, which pins end_of_line = lf,
+      # while Git for Windows checks sources out as CRLF by default - so a
+      # second run on Windows reports the checkout's line endings rather than
+      # anything about the committed source.
       - name: Format check
+        if: runner.os == 'Linux'
         run: dotnet format SyncSql.slnx --verify-no-changes --no-restore --exclude ../grammar/
 
       - name: Build
@@ -69,13 +84,17 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cli-test-results
+          name: cli-test-results-${{ matrix.os }}
           path: cli/tests/**/TestResults/*.trx
           if-no-files-found: ignore
 
   site:
-    name: Site - typecheck and build
-    runs-on: ubuntu-latest
+    name: Site - typecheck and build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         working-directory: site
@@ -149,3 +168,30 @@ jobs:
               throw "$($findings.Count) PowerShell 5.1 compatibility finding(s)."
           }
           Write-Host 'No 5.1 compatibility findings.'
+
+  # The compatibility job above runs PSScriptAnalyzer's language-level 5.1 rule
+  # under PowerShell 7 on Linux. This one parses the script with the real
+  # Windows PowerShell 5.1 engine, which is the interpreter the GitLab runner
+  # actually uses (see .gitlab/README.md) - the only way to be sure a syntax
+  # form 7 accepts is one 5.1 accepts too. Parse only: nothing is executed, so
+  # no database, credential, or git remote is touched here either.
+  publish-script-windows:
+    name: Publish script - Windows PowerShell 5.1 parse
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `shell: powershell` is Windows PowerShell 5.1; `pwsh` would be 7.x.
+      - name: Parse under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw "Expected Windows PowerShell 5.1, got $($PSVersionTable.PSVersion)." }
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path ./scripts/Publish-SyncSqlObjects.ps1).Path, [ref] $null, [ref] $errors)
+          if ($errors) {
+              $errors | ForEach-Object { Write-Host "::error::$($_.Extent.StartLineNumber): $($_.Message)" }
+              throw "$($errors.Count) parse error(s) under Windows PowerShell 5.1."
+          }
+          Write-Host 'Parsed cleanly under Windows PowerShell 5.1.'

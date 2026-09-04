@@ -22,6 +22,10 @@ public interface IProcessRunner
 /// <summary>The only production <see cref="IProcessRunner"/>.</summary>
 public sealed class SystemProcessRunner : IProcessRunner
 {
+    // Encoding.UTF8 carries a byte-order-mark preamble; nothing here writes to the child, so the
+    // BOM-less instance is the honest one for decoding output.
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
     public async Task<ProcessResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
@@ -35,6 +39,14 @@ public sealed class SystemProcessRunner : IProcessRunner
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+
+            // Without these, redirected output is decoded with Console.OutputEncoding - UTF-8 on
+            // Linux, but the console's OEM code page on Windows (CP850, CP437, ...). git writes
+            // blob bytes out verbatim, so `git show` of a UTF-8 object file would come back
+            // mojibake on Windows only, silently corrupting every non-ASCII identifier, comment,
+            // and string literal in the mined historical DDL.
+            StandardOutputEncoding = Utf8NoBom,
+            StandardErrorEncoding = Utf8NoBom,
         };
         foreach (string argument in arguments)
         {
@@ -57,8 +69,14 @@ public sealed class SystemProcessRunner : IProcessRunner
         using Process process = new() { StartInfo = startInfo };
         StringBuilder stdout = new();
         StringBuilder stderr = new();
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.AppendLine(e.Data); } };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
+
+        // The captured text is reassembled with '\n', not AppendLine's Environment.NewLine: the
+        // event already stripped whatever line ending the child wrote, so AppendLine would invent
+        // CRLF on Windows for output the child sent as LF. Callers split this back apart on '\n'
+        // (GitHistoryMiner does, for both `git log` and `git show`), and a platform-dependent
+        // separator leaves a stray CR on the end of every line they get.
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.Append(e.Data).Append('\n'); } };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.Append(e.Data).Append('\n'); } };
 
         process.Start();
         process.BeginOutputReadLine();
