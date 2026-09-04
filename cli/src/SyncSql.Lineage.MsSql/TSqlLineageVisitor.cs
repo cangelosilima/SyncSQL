@@ -16,6 +16,12 @@ internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
     public Dictionary<string, ObjectRef> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<ColumnRef> ColumnRefs { get; } = [];
 
+    // ScriptDom hands back the parts of a 1- to 4-part name individually, so a cross-database
+    // ("OtherDb.dbo.Orders") or cross-linked-server ("LNK.OtherDb.dbo.Orders") reference keeps the
+    // qualifiers it was written with instead of collapsing to "dbo.Orders" - the resolver needs them to
+    // look outside this object's own database (see SyncSql.Catalog's NodeIndex). "Srv..dbo.Orders" is
+    // legal T-SQL and leaves the database part empty; Empty(...) normalizes that back to null so it
+    // means the same thing as "not written".
     private static ObjectRef? FromSchemaObjectName(SchemaObjectName? name)
     {
         if (name?.BaseIdentifier is null)
@@ -23,8 +29,14 @@ internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
             return null;
         }
 
-        return new ObjectRef(name.SchemaIdentifier?.Value, name.BaseIdentifier.Value);
+        return new ObjectRef(Empty(name.SchemaIdentifier?.Value), name.BaseIdentifier.Value)
+        {
+            Database = Empty(name.DatabaseIdentifier?.Value),
+            Server = Empty(name.ServerIdentifier?.Value),
+        };
     }
+
+    private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     // FROM/JOIN/INTO/UPDATE/DELETE targets - anything ScriptDom represents as a plain named table/view
     // reference.
@@ -82,7 +94,14 @@ internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
             return;
         }
 
-        ObjectRefs.Add(new ObjectRef(identifiers[^1].Value, node.FunctionName.Value));
+        // The qualifying prefix is read right-to-left - "dbo", "OtherDb.dbo" or "LNK.OtherDb.dbo" -
+        // exactly like the schema/database/server parts of a SchemaObjectName, just spelled out as a
+        // flat identifier list here.
+        ObjectRefs.Add(new ObjectRef(Empty(identifiers[^1].Value), node.FunctionName.Value)
+        {
+            Database = identifiers.Count >= 2 ? Empty(identifiers[^2].Value) : null,
+            Server = identifiers.Count >= 3 ? Empty(identifiers[^3].Value) : null,
+        });
     }
 
     // EXEC/EXECUTE dbo.MyProc ...

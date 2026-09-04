@@ -35,6 +35,18 @@
     "include": [".*"],
     "exclude": []
   },
+  "discovery": {
+    "linkedServers": {
+      "enabled": false,
+      "maxDepth": 1,
+      "requireMatchingLogin": true,
+      "restrictToLinkedCatalog": true,
+      "linkNames": {
+        "include": [".*"],
+        "exclude": []
+      }
+    }
+  },
   "servers": [
     {
       "name": "SQLPROD01",

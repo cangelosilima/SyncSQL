@@ -5,6 +5,7 @@ import TypeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/TypeAc
 import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
+import { qualifiedRefName } from '../lib/catalog'
 
 export default function Home() {
   const { index } = useCatalog()
@@ -89,8 +90,9 @@ export default function Home() {
         Orphaned references{orphanedReferences.length > 0 ? ` - ${orphanedReferences.length} detected` : ''}
       </h2>
       <p className="muted overview-panel-hint">
-        References that don&apos;t resolve to anything in the catalog&apos;s scope - usually a renamed or dropped
-        target the caller was never updated for.
+        References that don&apos;t resolve to anything the lookup reaches - the object&apos;s own database, the rest
+        of its server, or a server one linked server away - usually a renamed or dropped target the caller was
+        never updated for. A reference into something nobody extracts isn&apos;t counted here.
       </p>
       {orphanedReferences.length === 0 ? (
         <p className="muted">No orphaned references detected.</p>
@@ -98,9 +100,9 @@ export default function Home() {
         <div className="alert-cards">
           {orphanedReferences.slice(0, 10).map((ref, i) => {
             const fromNode = index.byId.get(ref.from)
-            const target = ref.schema ? `${ref.schema}.${ref.name}` : ref.name
+            const target = qualifiedRefName(ref)
             return (
-              <div key={`${ref.from}|${ref.schema ?? ''}|${ref.name}|${i}`} className="alert-card">
+              <div key={`${ref.from}|${ref.server ?? ''}|${ref.database ?? ''}|${ref.schema ?? ''}|${ref.name}|${i}`} className="alert-card">
                 <span className="alert-card-icon">!</span>
                 <div className="alert-card-body">
                   <div className="alert-card-title">

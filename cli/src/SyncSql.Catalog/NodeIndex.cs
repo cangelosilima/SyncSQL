@@ -13,12 +13,25 @@ internal enum ReferenceResolutionKind
 
     /// <summary>More than one node in scope shares this bare name - genuinely ambiguous, not "missing".</summary>
     Ambiguous,
+
+    /// <summary>
+    /// The reference names a place the catalog doesn't cover - a linked server nothing in the catalog
+    /// answers to, or a database that isn't extracted on the server it does answer to. Distinct from
+    /// <see cref="NotFound"/> on purpose: nothing is dangling, the target is simply outside what was
+    /// extracted, so it must not be reported as an orphan.
+    /// </summary>
+    External,
 }
 
 /// <summary>The outcome of one <see cref="NodeIndex.Resolve"/> lookup.</summary>
-internal readonly record struct ReferenceResolution(ReferenceResolutionKind Kind, string? NodeId)
+/// <param name="Kind">What the lookup concluded.</param>
+/// <param name="NodeId">The single node that matched, for <see cref="ReferenceResolutionKind.Resolved"/> only.</param>
+/// <param name="ViaLink">The linked server / database link the lookup crossed to get there, when it crossed one.</param>
+internal readonly record struct ReferenceResolution(ReferenceResolutionKind Kind, string? NodeId, LinkedServerLink? ViaLink = null)
 {
-    public static ReferenceResolution Found(string nodeId) => new(ReferenceResolutionKind.Resolved, nodeId);
+    public static ReferenceResolution Found(string nodeId, LinkedServerLink? viaLink = null) => new(ReferenceResolutionKind.Resolved, nodeId, viaLink);
+
+    public static ReferenceResolution External(LinkedServerLink? viaLink = null) => new(ReferenceResolutionKind.External, null, viaLink);
 
     public static readonly ReferenceResolution NotFound = new(ReferenceResolutionKind.NotFound, null);
 
@@ -26,28 +39,54 @@ internal readonly record struct ReferenceResolution(ReferenceResolutionKind Kind
 }
 
 /// <summary>
-/// Resolves a (possibly schema-qualified) <see cref="ObjectRef"/> found in one node's DDL to the node
-/// id it refers to, scoped to that node's own server+database (or server, for a bare cross-linked-
-/// server/DB-link reference) - a direct port of Build-Catalog.ps1's qualifiedIndex/bareIndexDb/
-/// bareIndexServer + Resolve-SyncSqlObjectRef.
+/// Resolves a (possibly qualified) <see cref="ObjectRef"/> found in one node's DDL to the node id it
+/// refers to.
+///
+/// The lookup starts in the referencing node's own server+database and widens from there, in the order
+/// a reader of the DDL would: the reference's own qualifiers first (a 3-part "OtherDb.dbo.Orders" or a
+/// 4-part "LNK.OtherDb.dbo.Orders" says exactly where to look), then the rest of the databases on the
+/// same server, then the servers reachable from it through a linked server / database link. Widening
+/// only ever settles on a *unique* match - two candidates are reported as
+/// <see cref="ReferenceResolutionKind.Ambiguous"/> rather than guessed at - and a reference that points
+/// somewhere the catalog doesn't cover at all comes back as <see cref="ReferenceResolutionKind.External"/>,
+/// so it isn't mistaken for a dropped object. That distinction is what keeps
+/// <see cref="CatalogBuilder"/>'s orphaned-reference list about genuinely dangling references.
 /// </summary>
 internal sealed class NodeIndex
 {
     private readonly Dictionary<string, string> _qualified = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<string>> _qualifiedOnServer = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> _bareInDatabase = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> _bareOnServer = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<string>> _databasesByServer = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LinkedServerMap _linkedServers;
 
     public NodeIndex(IEnumerable<CatalogNode> nodes)
+        : this(nodes, LinkedServerMap.Empty)
     {
+    }
+
+    public NodeIndex(IEnumerable<CatalogNode> nodes, LinkedServerMap linkedServers)
+    {
+        _linkedServers = linkedServers;
+
         foreach (CatalogNode node in nodes)
         {
             if (!string.IsNullOrEmpty(node.Schema))
             {
                 _qualified[$"{node.Server}::{node.Database}::{node.Schema}.{node.Name}"] = node.Id;
+                Add(_qualifiedOnServer, $"{node.Server}::{node.Schema}.{node.Name}", node.Id);
             }
 
             Add(_bareInDatabase, $"{node.Server}::{node.Database}::{node.Name}", node.Id);
             Add(_bareOnServer, $"{node.Server}::{node.Name}", node.Id);
+
+            if (!_databasesByServer.TryGetValue(node.Server, out HashSet<string>? databases))
+            {
+                databases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _databasesByServer[node.Server] = databases;
+            }
+            databases.Add(node.Database);
         }
 
         static void Add(Dictionary<string, List<string>> index, string key, string nodeId)
@@ -62,15 +101,20 @@ internal sealed class NodeIndex
     }
 
     /// <summary>
-    /// Resolves within $fromNode's own server+database scope. A schema-qualified reference to an
-    /// unknown schema is left unresolved rather than falling back to a bare-name guess - if the DDL was
-    /// specific, an ambiguous bare match would be a worse guess, not a better one. A bare reference only
-    /// resolves when exactly one object with that name exists in scope (database first, then server,
-    /// for cross-linked-server/DB-link bare references); more than one is reported as
-    /// <see cref="ReferenceResolutionKind.Ambiguous"/> rather than silently guessed at, and is distinct
-    /// from <see cref="ReferenceResolutionKind.NotFound"/> (no candidate at all) precisely so callers can
-    /// tell "this looks like a dropped/renamed object" apart from "this name is inherently ambiguous
-    /// here" - see <see cref="CatalogBuilder"/>'s orphaned-reference detection.
+    /// Resolves one reference made by <paramref name="fromNode"/>.
+    ///
+    /// A reference that names a linked server / database link is followed to whatever catalog server
+    /// that link lands on, defaulting to the database the link itself declares when the reference
+    /// doesn't name one; a link nothing in the catalog answers to (or a named database that isn't
+    /// extracted) is <see cref="ReferenceResolutionKind.External"/>, not an orphan.
+    ///
+    /// A schema-qualified reference is looked up in its target database, then - only when the DDL left
+    /// the database unsaid, so the "database" was an assumption rather than a statement - across the
+    /// other databases on that server, then across the servers one link away. An unknown *schema* is
+    /// still never downgraded to a bare-name guess: if the DDL was specific, an ambiguous bare match
+    /// would be a worse answer, not a better one. A bare reference resolves only within its own
+    /// database and then its own server, as before - a name with no qualifiers at all is too weak a
+    /// signal to carry across a server boundary.
     /// </summary>
     public ReferenceResolution Resolve(CatalogNode fromNode, ObjectRef reference)
     {
@@ -79,33 +123,155 @@ internal sealed class NodeIndex
             return ReferenceResolution.NotFound;
         }
 
-        if (!string.IsNullOrWhiteSpace(reference.Schema))
+        string targetServer = fromNode.Server;
+        LinkedServerLink? viaLink = null;
+
+        // "Stated" means the DDL (or the link it crosses) actually named the database, as opposed to one
+        // being assumed from where the referencing object itself lives.
+        string? statedDatabase = reference.Database;
+
+        // A four-part name that spells out this object's own server isn't a hop - people write the local
+        // server's name out in full often enough that treating it as a foreign one would strand a pile of
+        // perfectly local references outside the catalog.
+        if (!string.IsNullOrWhiteSpace(reference.Server)
+            && !string.Equals(reference.Server, fromNode.Server, StringComparison.OrdinalIgnoreCase))
         {
-            return _qualified.TryGetValue($"{fromNode.Server}::{fromNode.Database}::{reference.Schema}.{reference.Name}", out string? qualifiedId)
-                ? ReferenceResolution.Found(qualifiedId)
-                : ReferenceResolution.NotFound;
+            LinkedServerLink? link = _linkedServers.Resolve(fromNode.Server, reference.Server);
+            if (link?.TargetServer is not { } linkedTargetServer)
+            {
+                // Either the server declares no such link, or the link points somewhere nothing in the
+                // catalog answers to - the reference leaves the catalog's scope either way.
+                return ReferenceResolution.External(link);
+            }
+
+            statedDatabase ??= link.DefaultDatabase;
+
+            // A loopback link lands right back here: the reference is local, and drawing it through the
+            // link node would invent a boundary nothing actually crosses.
+            if (!string.Equals(linkedTargetServer, fromNode.Server, StringComparison.OrdinalIgnoreCase))
+            {
+                targetServer = linkedTargetServer;
+                viaLink = link;
+            }
         }
 
-        if (_bareInDatabase.TryGetValue($"{fromNode.Server}::{fromNode.Database}::{reference.Name}", out List<string>? inDatabase))
+        // Crossing a link that pins no database leaves the database open, so the lookup covers the whole
+        // server it landed on; staying here, an unstated database means this object's own.
+        string? targetDatabase = statedDatabase ?? (viaLink is null ? fromNode.Database : null);
+
+        // A database the reference named (or the link declared) that simply isn't extracted puts the
+        // target outside the catalog rather than making it missing. The referencing node's own database
+        // is in the catalog by construction, so this only ever fires on a spelled-out qualifier.
+        if (targetDatabase is not null && !HasDatabase(targetServer, targetDatabase))
         {
-            return inDatabase.Count switch
-            {
-                1 => ReferenceResolution.Found(inDatabase[0]),
-                > 1 => ReferenceResolution.Ambiguous,
-                _ => ReferenceResolution.NotFound,
-            };
+            return ReferenceResolution.External(viaLink);
         }
 
-        if (_bareOnServer.TryGetValue($"{fromNode.Server}::{reference.Name}", out List<string>? onServer))
+        bool databaseWasStated = statedDatabase is not null;
+
+        return string.IsNullOrWhiteSpace(reference.Schema)
+            ? ResolveBare(reference.Name, targetServer, targetDatabase, viaLink)
+            : ResolveQualified(fromNode, reference, targetServer, targetDatabase, databaseWasStated, viaLink);
+    }
+
+    private ReferenceResolution ResolveQualified(
+        CatalogNode fromNode,
+        ObjectRef reference,
+        string targetServer,
+        string? targetDatabase,
+        bool databaseWasStated,
+        LinkedServerLink? viaLink)
+    {
+        string qualifiedName = $"{reference.Schema}.{reference.Name}";
+
+        if (targetDatabase is not null
+            && _qualified.TryGetValue($"{targetServer}::{targetDatabase}::{qualifiedName}", out string? inDatabase))
         {
-            return onServer.Count switch
+            return ReferenceResolution.Found(inDatabase, viaLink);
+        }
+
+        // Everything below widens past the database the reference was assumed to mean. A reference that
+        // spelled its database (or crossed a link that declared one) already said where to look, so
+        // there's nothing to widen to: it's missing where it claimed to be.
+        if (databaseWasStated)
+        {
+            return ReferenceResolution.NotFound;
+        }
+
+        if (Unique(_qualifiedOnServer, $"{targetServer}::{qualifiedName}") is { } onServer)
+        {
+            return onServer.Kind == ReferenceResolutionKind.Resolved
+                ? ReferenceResolution.Found(onServer.NodeId!, viaLink)
+                : onServer;
+        }
+
+        // Last resort: the same schema-qualified name on a server one link away. Only a single candidate
+        // across all of them counts - the point is to connect a reference the DDL under-qualified, not to
+        // pick a winner between two plausible targets. A reference that already named its link has had
+        // its one hop; fanning out from there would be inventing a route the DDL didn't take.
+        if (viaLink is not null)
+        {
+            return ReferenceResolution.NotFound;
+        }
+
+        string? crossServerMatch = null;
+        LinkedServerLink? crossServerLink = null;
+        foreach (string linkedServer in _linkedServers.ReachableFrom(fromNode.Server))
+        {
+            if (Unique(_qualifiedOnServer, $"{linkedServer}::{qualifiedName}") is not { } linked)
             {
-                1 => ReferenceResolution.Found(onServer[0]),
-                > 1 => ReferenceResolution.Ambiguous,
-                _ => ReferenceResolution.NotFound,
-            };
+                continue;
+            }
+
+            if (linked.Kind == ReferenceResolutionKind.Ambiguous || crossServerMatch is not null)
+            {
+                return ReferenceResolution.Ambiguous;
+            }
+
+            crossServerMatch = linked.NodeId;
+            crossServerLink = _linkedServers.LinkTo(fromNode.Server, linkedServer);
+        }
+
+        return crossServerMatch is not null
+            ? ReferenceResolution.Found(crossServerMatch, crossServerLink)
+            : ReferenceResolution.NotFound;
+    }
+
+    private ReferenceResolution ResolveBare(string name, string targetServer, string? targetDatabase, LinkedServerLink? viaLink)
+    {
+        if (targetDatabase is not null && Unique(_bareInDatabase, $"{targetServer}::{targetDatabase}::{name}") is { } inDatabase)
+        {
+            return inDatabase.Kind == ReferenceResolutionKind.Resolved
+                ? ReferenceResolution.Found(inDatabase.NodeId!, viaLink)
+                : inDatabase;
+        }
+
+        if (Unique(_bareOnServer, $"{targetServer}::{name}") is { } onServer)
+        {
+            return onServer.Kind == ReferenceResolutionKind.Resolved
+                ? ReferenceResolution.Found(onServer.NodeId!, viaLink)
+                : onServer;
         }
 
         return ReferenceResolution.NotFound;
+    }
+
+    private bool HasDatabase(string server, string database) =>
+        _databasesByServer.TryGetValue(server, out HashSet<string>? databases) && databases.Contains(database);
+
+    /// <summary>Resolved when exactly one node is indexed under <paramref name="key"/>, Ambiguous when several, null (keep looking) when none.</summary>
+    private static ReferenceResolution? Unique(Dictionary<string, List<string>> index, string key)
+    {
+        if (!index.TryGetValue(key, out List<string>? matches))
+        {
+            return null;
+        }
+
+        return matches.Count switch
+        {
+            1 => ReferenceResolution.Found(matches[0]),
+            > 1 => ReferenceResolution.Ambiguous,
+            _ => null,
+        };
     }
 }

@@ -144,12 +144,18 @@ internal static class MsSqlQueries
         ORDER BY sch.name, o.name, c.column_id;
         """;
 
-    /// <summary>Row counts and reserved/data/index size (KB) - the same sys.dm_db_partition_stats/sys.allocation_units aggregation sp_spaceused uses.</summary>
+    /// <summary>
+    /// Row counts and reserved/data/index size (KB) - the same sys.dm_db_partition_stats/sys.allocation_units
+    /// aggregation sp_spaceused uses. ROWCOUNT is a reserved word (SET ROWCOUNT), so that alias has to be
+    /// bracketed or the whole batch fails to parse - "Incorrect syntax near the keyword 'RowCount'" - and
+    /// takes every table's volume metrics for that database with it. The brackets are SQL syntax only:
+    /// the column still comes back named RowCount for Dapper to map.
+    /// </summary>
     public const string TableVolume = """
         SELECT
             sch.name AS SchemaName,
             t.name   AS TableName,
-            SUM(CASE WHEN i.index_id IN (0, 1) THEN p.rows ELSE 0 END) AS RowCount,
+            SUM(CASE WHEN i.index_id IN (0, 1) THEN p.rows ELSE 0 END) AS [RowCount],
             SUM(a.total_pages) * 8 AS ReservedKB,
             SUM(CASE WHEN i.index_id IN (0, 1) THEN a.used_pages ELSE 0 END) * 8 AS DataKB,
             SUM(CASE WHEN i.index_id > 1 THEN a.used_pages ELSE 0 END) * 8 AS IndexKB
@@ -193,7 +199,7 @@ internal static class MsSqlQueries
             sch.name AS SchemaName,
             t.name   AS TableName,
             s.name   AS StatName,
-            sp.rows AS Rows,
+            sp.rows AS [Rows],
             sp.rows_sampled AS RowsSampled,
             sp.steps AS Steps,
             sp.modification_counter AS ModificationCounter,
