@@ -34,8 +34,16 @@ grammar/**/Generated/*.tokens
 
 # Visual Studio / Rider / VS Code
 .vs/
-.vscode/
 .idea/
+
+# VS Code: ignore per-user state, but keep the shared workspace config that
+# points the C# Dev Kit at cli/SyncSql.slnx and Vitest at site/ - without it
+# neither Test Explorer finds any tests (the solution isn't at the repo root).
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
 *.suo
 *.user
 *.userosscache

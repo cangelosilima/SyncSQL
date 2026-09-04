@@ -222,6 +222,96 @@ variables. The pipeline keeps the credentials in masked CI/CD variables
 named that way and passes them to the CLI as parameters - see
 [`cli/docs/cli.md`](cli/docs/cli.md)'s "Credentials".
 
+## Development environment
+
+### Prerequisites
+
+| Tool | Version | Needed for |
+|------|---------|------------|
+| [.NET SDK](https://dotnet.microsoft.com/download) | **10.0** (pinned by [`global.json`](global.json)) | building, testing and running the `syncsql` CLI |
+| [Node.js](https://nodejs.org/) | 20 or newer | building and testing the catalog site |
+| Visual Studio 2026, VS Code, or Rider | see below | optional, but this repo ships editor config for VS Code |
+
+The SDK is pinned in `global.json`, so `dotnet` fails with an explicit
+"requested SDK version not found" rather than half-loading the solution if
+.NET 10 is missing. `cli/SyncSql.slnx` is the [XML solution
+format](https://devblogs.microsoft.com/dotnet/introducing-slnx-support-dotnet-cli/),
+which needs Visual Studio 17.13+ (17.14+ to build `net10.0`) or a current
+C# Dev Kit — older tooling does not recognise the file and will act as if
+the repository contains no projects at all.
+
+### Restore and run everything
+
+```sh
+# .NET CLI - note the solution lives in cli/, not at the repository root
+cd cli
+dotnet restore SyncSql.slnx
+dotnet build   SyncSql.slnx
+dotnet test    SyncSql.slnx
+
+# Catalog site
+cd ../site
+npm install
+npm test             # Vitest, single run
+npx vitest           # Vitest, watch mode
+npm run build        # typecheck, build, stage the vendored AI model
+```
+
+### Editors
+
+[`.vscode/`](.vscode) is checked in (only the shared files — per-user state
+stays ignored) and is what makes both test suites discoverable:
+
+- **`settings.json`** sets `dotnet.defaultSolution` to `cli/SyncSql.slnx`
+  and points the Vitest extension at `site/vitest.config.ts`.
+- **`extensions.json`** recommends the two extensions that actually
+  populate Test Explorer: **C# Dev Kit** (`ms-dotnettools.csdevkit`) and
+  **Vitest** (`vitest.explorer`).
+- **`tasks.json`** / **`launch.json`** provide build/test tasks and a debug
+  target for the CLI.
+
+Open the repository root; both suites appear in the Test Explorer view
+(`View → Testing`).
+
+#### Test Explorer shows no tests
+
+The two suites are discovered by two different extensions, so they fail
+independently.
+
+**No .NET tests.** The usual cause is that the C# Dev Kit never loaded a
+project. It only auto-discovers a solution sitting in the folder you
+opened, and this repository's solution is one level down in `cli/`.
+
+1. Install **C# Dev Kit** — the base C# extension alone does not provide
+   Test Explorer integration.
+2. Confirm `.vscode/settings.json` has
+   `"dotnet.defaultSolution": "cli/SyncSql.slnx"`. Opening the `cli/`
+   folder directly works too.
+3. Run `dotnet --version` and check it reports 10.x. Under .NET 8 or 9 the
+   `net10.0` projects fail to load and no tests are discovered.
+4. Build once — `cd cli && dotnet build SyncSql.slnx`. Discovery runs
+   against build output, so a solution that has never been built, or that
+   fails to build, yields an empty list. `dotnet test SyncSql.slnx` from
+   the terminal is the fastest way to tell a discovery problem (tests run
+   fine here, but the tree is empty) from a real build break (this fails
+   too).
+5. `Developer: Reload Window`, then check `Output → C# Dev Kit` and
+   `Output → .NET Test Log` for the actual error.
+
+**No site tests.** Vitest config lives in
+[`site/vitest.config.ts`](site/vitest.config.ts), not at the repository
+root, so the extension has to be told where to find it.
+
+1. Run `npm install` in `site/` — the Vitest extension does nothing until
+   `vitest` is present in `node_modules`.
+2. Install the **Vitest** extension (`vitest.explorer`).
+3. Confirm `npm test` passes in `site/`. If it does and the tree is still
+   empty, the extension is looking in the wrong place: check
+   `vitest.rootConfig` in `.vscode/settings.json`, or open the `site/`
+   folder directly.
+4. Test files must be named `*.test.ts` / `*.test.tsx` (Vitest's default
+   glob) — a file named `*.tests.ts` is not picked up.
+
 ## CI/CD pipeline
 
 The pipeline (`.gitlab-ci.yml` and the modules it includes under
@@ -670,7 +760,8 @@ To work on the site locally:
 ```sh
 cd site
 npm install
-npm run dev
+npm run dev     # dev server
+npm run test    # Vitest, watch mode
 ```
 
 `site/public/data/catalog.json` ships a small demo fixture so `npm run dev`
