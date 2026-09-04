@@ -21,6 +21,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SyncSql.Extraction.MsSql\SyncSql.Extraction.MsSql.csproj" />
+    <!-- Test-only: the real T-SQL parser, so every query in MsSqlQueries can be checked for syntax
+         without a database. See MsSqlQueriesTests. -->
+    <ProjectReference Include="..\..\src\SyncSql.Lineage.MsSql\SyncSql.Lineage.MsSql.csproj" />
   </ItemGroup>
 
 </Project>

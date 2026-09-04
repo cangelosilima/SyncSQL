@@ -481,7 +481,12 @@ size, index fragmentation/usage, and optimizer-statistics graphs, plus the
 latest snapshot's statistics table) whenever a table has history to show;
 it's simply absent for objects with none. Every one of these queries
 degrades independently (with a warning) rather than failing extraction, the
-same posture as every other optional extraction step in this project.
+same posture as every other optional extraction step in this project - and
+that split matters here, because they don't all need the same rights: row
+counts and sizes come from catalog views any reader can see, while the index
+and optimizer-statistics DMVs need `VIEW DATABASE STATE` (or `VIEW SERVER
+STATE`). An extraction login without it still gets volume metrics; the DMV
+parts are skipped with a warning naming the permission.
 
 Tables dropped from the source database keep their existing metrics history
 file rather than being cleaned up - a minor storage cost, not a correctness

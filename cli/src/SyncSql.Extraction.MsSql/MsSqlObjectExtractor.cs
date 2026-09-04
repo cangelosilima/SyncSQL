@@ -248,7 +248,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             () => LoadIndexSectionAsync(connection), server.Name, database, "Index");
 
         Dictionary<string, MetricsSnapshot> snapshotsByKey = options.CaptureMetrics
-            ? await TryLoadAsync(() => LoadMetricsSnapshotsAsync(connection), server.Name, database, "Metrics")
+            ? await LoadMetricsSnapshotsAsync(connection, server.Name, database)
             : [];
 
         foreach (TableRow table in await MsSqlCatalogReader.GetTablesAsync(connection))
@@ -469,12 +469,23 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
         return index;
     }
 
-    private static async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(SqlConnection connection)
+    /// <summary>
+    /// The three metrics queries degrade independently, because they need different permissions: row
+    /// counts and sizes read catalog views any reader can see, while the index and optimizer-statistics
+    /// DMVs need VIEW DATABASE STATE (or VIEW SERVER STATE) - a permission a read-only extraction login
+    /// often doesn't have. Loading them as one unit meant a denied DMV threw away the volume metrics
+    /// too; now a permissions gap costs only the part it actually covers.
+    /// </summary>
+    private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(SqlConnection connection, string serverName, string database)
     {
         DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
         Dictionary<string, MetricsSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (TableVolumeRow row in await MsSqlCatalogReader.GetTableVolumeAsync(connection))
+        List<TableVolumeRow> volumeRows = await TryLoadAsync(
+            async () => new List<TableVolumeRow>(await MsSqlCatalogReader.GetTableVolumeAsync(connection)),
+            serverName, database, "Table volume metrics");
+
+        foreach (TableVolumeRow row in volumeRows)
         {
             string key = $"{row.SchemaName}.{row.TableName}";
             snapshots[key] = new MetricsSnapshot
@@ -487,8 +498,12 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             };
         }
 
+        List<IndexMetricRow> indexRows = await TryLoadAsync(
+            async () => new List<IndexMetricRow>(await MsSqlCatalogReader.GetIndexMetricsAsync(connection)),
+            serverName, database, "Index metrics (needs VIEW DATABASE STATE)");
+
         Dictionary<string, List<CatalogIndexMetric>> indexesByTable = new(StringComparer.OrdinalIgnoreCase);
-        foreach (IndexMetricRow row in await MsSqlCatalogReader.GetIndexMetricsAsync(connection))
+        foreach (IndexMetricRow row in indexRows)
         {
             string key = $"{row.SchemaName}.{row.TableName}";
             if (!indexesByTable.TryGetValue(key, out List<CatalogIndexMetric>? list))
@@ -509,8 +524,12 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             });
         }
 
+        List<OptimizerStatisticRow> statisticRows = await TryLoadAsync(
+            async () => new List<OptimizerStatisticRow>(await MsSqlCatalogReader.GetOptimizerStatisticsAsync(connection)),
+            serverName, database, "Optimizer statistics (needs VIEW DATABASE STATE)");
+
         Dictionary<string, List<CatalogStatMetric>> statsByTable = new(StringComparer.OrdinalIgnoreCase);
-        foreach (OptimizerStatisticRow row in await MsSqlCatalogReader.GetOptimizerStatisticsAsync(connection))
+        foreach (OptimizerStatisticRow row in statisticRows)
         {
             string key = $"{row.SchemaName}.{row.TableName}";
             if (!statsByTable.TryGetValue(key, out List<CatalogStatMetric>? list))

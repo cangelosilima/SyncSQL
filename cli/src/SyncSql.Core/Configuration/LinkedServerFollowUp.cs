@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using SyncSql.Core.Domain;
 
@@ -160,7 +161,11 @@ public static class LinkedServerFollowUpPlanner
     {
         string[] parts = dataSource.Split(',', 2);
         string host = parts[0].Trim();
-        int? port = parts.Length == 2 && int.TryParse(parts[1].Trim(), out int parsed) && parsed > 0 ? parsed : null;
+        int? port = parts.Length == 2
+            && int.TryParse(parts[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int parsed)
+            && parsed > 0
+                ? parsed
+                : null;
         return (host, port);
     }
 

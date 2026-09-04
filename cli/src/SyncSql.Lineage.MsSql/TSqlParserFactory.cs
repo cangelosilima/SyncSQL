@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace SyncSql.Lineage.MsSql;
@@ -28,7 +29,7 @@ public static class TSqlParserFactory
 
         Type parserType = typeof(TSqlFragmentVisitor).Assembly.GetTypes()
             .Where(t => t is { IsPublic: true } && ParserTypeNamePattern.IsMatch(t.Name))
-            .OrderByDescending(t => int.Parse(ParserTypeNamePattern.Match(t.Name).Groups[1].Value))
+            .OrderByDescending(t => int.Parse(ParserTypeNamePattern.Match(t.Name).Groups[1].Value, CultureInfo.InvariantCulture))
             .FirstOrDefault()
             ?? throw new InvalidOperationException("Could not find any TSqlNNNParser type in the loaded ScriptDom assembly.");
 
