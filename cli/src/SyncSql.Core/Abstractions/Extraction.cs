@@ -54,6 +54,14 @@ public sealed record ExtractionOptions
 
     /// <summary>Whether to also capture a volatile metrics snapshot per table (row counts, index fragmentation/usage, optimizer statistics) - see MetricsSnapshot.</summary>
     public bool CaptureMetrics { get; init; } = true;
+
+    /// <summary>
+    /// Whether to also report the linked servers declared on this server in
+    /// <see cref="ExtractionOutcome.DiscoveredLinkedServers"/>, so the caller can follow them up and
+    /// extract what's on the other side. Reading them costs one extra catalog query and never changes
+    /// what gets extracted from *this* server.
+    /// </summary>
+    public bool DiscoverLinkedServers { get; init; }
 }
 
 /// <summary>

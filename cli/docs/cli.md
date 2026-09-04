@@ -130,7 +130,11 @@ syncsql sync --config ./config/servers.json
 
 Exit code `0` if every selected server extracted successfully; `1` if
 any server failed (extraction error or missing credentials). A partial
-failure does not stop the run - other servers still extract.
+failure does not stop the run - other servers still extract. A server
+reached by following a linked server (see `discovery.linkedServers` below)
+is the exception: failing to extract one is logged as a warning and does
+not fail the run, since it's a lead this run chose to chase rather than
+part of the configured job.
 
 `--server-include`/`--server-exclude` make it possible to fan extraction
 out across a fleet as independent parallel jobs, each scoped to one
@@ -263,6 +267,34 @@ extracted.
 - **`serverSelection`**: regex filter over which of the listed servers
   actually run in a given invocation (`sync --server-include`/`--server-exclude`
   override this per run).
+- **`discovery.linkedServers`**: opt-in follow-up of the linked servers a
+  run finds, so `sync` also extracts servers nobody listed by hand:
+
+  ```json
+  "discovery": {
+    "linkedServers": {
+      "enabled": true,
+      "maxDepth": 1,
+      "requireMatchingLogin": true,
+      "restrictToLinkedCatalog": true,
+      "linkNames": { "include": [".*"], "exclude": [] }
+    }
+  }
+  ```
+
+  A followed link becomes a server entry that inherits everything from the
+  one that declared it - port, TLS settings, schema/objectName/objectType
+  filters, and its `credentialsVariablePrefix`, so the *same username and
+  password* are used on the far side. `requireMatchingLogin` (default true)
+  keeps that honest by only following a link whose remote login is that same
+  username or that passes the local login through;
+  `restrictToLinkedCatalog` (default true) limits the follow-up to the
+  database the link pins. `maxDepth` bounds how many links deep the run
+  goes (0 disables it). Non-SQL-Server links, links without a data source,
+  and links to a host a configured server already covers are skipped with a
+  logged reason; Oracle database links are not followed. Discovered servers
+  are named after the link, which is also their output path segment. See the
+  main [README](../../README.md#following-linked-servers).
 
 Filtering is regex-based (.NET regex syntax) and works at every level:
 server, database, schema, and individual object name. An exclude match

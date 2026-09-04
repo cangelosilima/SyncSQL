@@ -9,7 +9,6 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
-    <InvariantGlobalization>true</InvariantGlobalization>
 
     <!-- CA1848/CA1873 push toward LoggerMessage source-generated delegates, which pays off in hot
          library paths but is needless boilerplate for a CLI that logs a handful of times per
@@ -27,5 +26,22 @@
 
   <!-- Test projects opt out of TreatWarningsAsErrors friction (e.g. xUnit
        analyzer suggestions) by overriding after import - see each .Tests.csproj. -->
+
+  <!--
+    Globalization invariant mode must stay OFF. Oracle.ManagedDataAccess.Core refuses to initialize
+    under it - OracleConnection.OpenAsync throws "Globalization Invariant Mode is not supported" - so
+    turning it on breaks every Oracle extraction the moment a sync reaches an Oracle server, long
+    after the build that introduced it went green. It was on here once for exactly that reason; this
+    guard turns a re-introduction (in this file, a project file, or a `-p:InvariantGlobalization=true`
+    on the command line) back into a build failure instead of a runtime one.
+
+    The cost of full globalization is that culture-sensitive conversions are no longer implicitly
+    invariant, so every one of them says which culture it means - see the CA1304/CA1305/CA1310 family,
+    which the SDK stops suppressing once this is off.
+  -->
+  <Target Name="GuardGlobalizationIsNotInvariant" BeforeTargets="Build" Condition="'$(InvariantGlobalization)' == 'true'">
+    <Error Code="SYNCSQL0001"
+           Text="InvariantGlobalization is enabled for $(MSBuildProjectName). Oracle.ManagedDataAccess.Core throws 'Globalization Invariant Mode is not supported' at connection time, so this setting must stay off - see the comment in cli/Directory.Build.props." />
+  </Target>
 
 </Project>

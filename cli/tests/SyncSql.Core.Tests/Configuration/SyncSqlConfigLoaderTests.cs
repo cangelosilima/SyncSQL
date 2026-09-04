@@ -76,6 +76,69 @@ public class SyncSqlConfigLoaderTests
     }
 
     [Fact]
+    public async Task LoadAsync_NoDiscoveryBlock_DefaultsToNotFollowingLinkedServers()
+    {
+        string path = await WriteTempConfigAsync("""
+            {"servers":[{"name":"S","type":"mssql","host":"h","credentialsVariablePrefix":"S"}]}
+            """);
+
+        SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(path);
+
+        Assert.False(config.Discovery.LinkedServers.Enabled);
+        Assert.Equal(1, config.Discovery.LinkedServers.MaxDepth);
+        Assert.True(config.Discovery.LinkedServers.RequireMatchingLogin);
+        Assert.True(config.Discovery.LinkedServers.RestrictToLinkedCatalog);
+    }
+
+    [Fact]
+    public async Task LoadAsync_DiscoveryBlock_IsParsed()
+    {
+        string path = await WriteTempConfigAsync("""
+            {
+              "discovery":{"linkedServers":{"enabled":true,"maxDepth":2,"requireMatchingLogin":false,"linkNames":{"exclude":["^TEMP_"]}}},
+              "servers":[{"name":"S","type":"mssql","host":"h","credentialsVariablePrefix":"S"}]
+            }
+            """);
+
+        SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(path);
+
+        Assert.True(config.Discovery.LinkedServers.Enabled);
+        Assert.Equal(2, config.Discovery.LinkedServers.MaxDepth);
+        Assert.False(config.Discovery.LinkedServers.RequireMatchingLogin);
+        Assert.False(config.Discovery.LinkedServers.LinkNames.IsAllowed("TEMP_LINK"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_NegativeDiscoveryDepth_Throws()
+    {
+        string path = await WriteTempConfigAsync("""
+            {
+              "discovery":{"linkedServers":{"enabled":true,"maxDepth":-1}},
+              "servers":[{"name":"S","type":"mssql","host":"h","credentialsVariablePrefix":"S"}]
+            }
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(
+            () => SyncSqlConfigLoader.LoadAsync(path));
+        Assert.Contains("maxDepth", ex.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_InvalidRegexInDiscoveryLinkNames_Throws()
+    {
+        string path = await WriteTempConfigAsync("""
+            {
+              "discovery":{"linkedServers":{"linkNames":{"include":["["]}}},
+              "servers":[{"name":"S","type":"mssql","host":"h","credentialsVariablePrefix":"S"}]
+            }
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(
+            () => SyncSqlConfigLoader.LoadAsync(path));
+        Assert.Contains("discovery.linkedServers.linkNames", ex.Message);
+    }
+
+    [Fact]
     public async Task LoadAsync_ValidConfig_ParsesServersAndFilters()
     {
         string path = await WriteTempConfigAsync("""

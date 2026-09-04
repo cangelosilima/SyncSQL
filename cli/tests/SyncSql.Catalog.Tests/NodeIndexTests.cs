@@ -18,6 +18,19 @@ public class NodeIndexTests
         SizeBytes = 0,
     };
 
+    private static CatalogNode LinkNode(string server, string name, string dataSource, string? catalog = null) => new()
+    {
+        Id = $"{server}/_ServerLevel/LinkedServers/{name}",
+        Server = server,
+        Database = "_ServerLevel",
+        Type = "LinkedServers",
+        Name = name,
+        QualifiedName = name,
+        Path = "irrelevant",
+        Ddl = $"EXEC sp_addlinkedserver\n    @server = N'{name}',\n    @datasrc = N'{dataSource}',\n    @catalog = N'{catalog}';",
+        SizeBytes = 0,
+    };
+
     [Fact]
     public void Resolve_SchemaQualified_ResolvesWithinServerAndDatabase()
     {
@@ -108,5 +121,186 @@ public class NodeIndexTests
 
         Assert.Equal(ReferenceResolutionKind.NotFound, resolution.Kind);
         Assert.Null(resolution.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_SchemaQualified_MissingLocally_WidensToOtherDatabasesOnSameServer()
+    {
+        CatalogNode remoteOrders = Node("SQLPROD01", "SalesDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([remoteOrders, caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders"));
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(remoteOrders.Id, resolution.NodeId);
+        Assert.Null(resolution.ViaLink);
+    }
+
+    [Fact]
+    public void Resolve_SchemaQualified_SameNameInTwoOtherDatabases_IsAmbiguous()
+    {
+        CatalogNode salesOrders = Node("SQLPROD01", "SalesDb", "dbo", "Orders");
+        CatalogNode archiveOrders = Node("SQLPROD01", "ArchiveDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([salesOrders, archiveOrders, caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders"));
+
+        Assert.Equal(ReferenceResolutionKind.Ambiguous, resolution.Kind);
+        Assert.Null(resolution.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_DatabaseQualified_ResolvesInThatDatabase()
+    {
+        CatalogNode salesOrders = Node("SQLPROD01", "SalesDb", "dbo", "Orders");
+        CatalogNode appOrders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([salesOrders, appOrders, caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Database = "SalesDb" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(salesOrders.Id, resolution.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_DatabaseQualified_DatabaseInCatalogButObjectMissing_IsNotFound()
+    {
+        CatalogNode salesCustomers = Node("SQLPROD01", "SalesDb", "dbo", "Customers");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([salesCustomers, caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Database = "SalesDb" });
+
+        Assert.Equal(ReferenceResolutionKind.NotFound, resolution.Kind);
+    }
+
+    [Fact]
+    public void Resolve_DatabaseQualified_DatabaseNotExtracted_IsExternalNotOrphaned()
+    {
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Database = "NobodyExtractsThis" });
+
+        Assert.Equal(ReferenceResolutionKind.External, resolution.Kind);
+        Assert.Null(resolution.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_AcrossLinkedServer_ResolvesOnTheServerTheLinkPointsAt()
+    {
+        CatalogNode remoteOrders = Node("SQLPROD02", "SalesDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        CatalogNode link = LinkNode("SQLPROD01", "SQLPROD02", "sqlprod02.example.com,1433");
+        NodeIndex index = new([remoteOrders, caller, link], LinkedServerMap.FromNodes([remoteOrders, caller, link]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Database = "SalesDb", Server = "SQLPROD02" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(remoteOrders.Id, resolution.NodeId);
+        Assert.Equal(link.Id, resolution.ViaLink?.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_AcrossLinkedServer_UsesTheDatabaseTheLinkPinsWhenTheReferenceOmitsOne()
+    {
+        CatalogNode remoteOrders = Node("SQLPROD02", "SalesDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        CatalogNode link = LinkNode("SQLPROD01", "SALES_LINK", "SQLPROD02", catalog: "SalesDb");
+        NodeIndex index = new([remoteOrders, caller, link], LinkedServerMap.FromNodes([remoteOrders, caller, link]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Server = "SALES_LINK" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(remoteOrders.Id, resolution.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_AcrossUnknownLinkedServer_IsExternalNotOrphaned()
+    {
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([caller], LinkedServerMap.FromNodes([caller]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Server = "SOME_OTHER_FLEET" });
+
+        Assert.Equal(ReferenceResolutionKind.External, resolution.Kind);
+        Assert.Null(resolution.ViaLink);
+    }
+
+    [Fact]
+    public void Resolve_UnqualifiedByServer_FallsBackToALinkedServerWhenNothingLocalMatches()
+    {
+        CatalogNode remoteOrders = Node("SQLPROD02", "SalesDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        CatalogNode link = LinkNode("SQLPROD01", "SQLPROD02", "sqlprod02");
+        NodeIndex index = new([remoteOrders, caller, link], LinkedServerMap.FromNodes([remoteOrders, caller, link]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders"));
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(remoteOrders.Id, resolution.NodeId);
+        Assert.Equal(link.Id, resolution.ViaLink?.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_LocalMatchWins_OverALinkedServerCandidate()
+    {
+        CatalogNode localOrders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
+        CatalogNode remoteOrders = Node("SQLPROD02", "SalesDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        CatalogNode link = LinkNode("SQLPROD01", "SQLPROD02", "sqlprod02");
+        NodeIndex index = new([localOrders, remoteOrders, caller, link], LinkedServerMap.FromNodes([localOrders, remoteOrders, caller, link]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders"));
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(localOrders.Id, resolution.NodeId);
+        Assert.Null(resolution.ViaLink);
+    }
+
+    [Fact]
+    public void Resolve_BareName_DoesNotCrossALinkedServer()
+    {
+        CatalogNode remoteOrders = Node("SQLPROD02", "SalesDb", null, "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        CatalogNode link = LinkNode("SQLPROD01", "SQLPROD02", "sqlprod02");
+        NodeIndex index = new([remoteOrders, caller, link], LinkedServerMap.FromNodes([remoteOrders, caller, link]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(null, "Orders"));
+
+        Assert.Equal(ReferenceResolutionKind.NotFound, resolution.Kind);
+    }
+
+    [Fact]
+    public void Resolve_FourPartNameSpellingOutItsOwnServer_StaysLocal()
+    {
+        CatalogNode orders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([orders, caller]);
+
+        ReferenceResolution resolution = index.Resolve(
+            caller, new ObjectRef("dbo", "Orders") { Database = "AppDb", Server = "SQLPROD01" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(orders.Id, resolution.NodeId);
+        Assert.Null(resolution.ViaLink);
+    }
+
+    [Fact]
+    public void Resolve_AcrossALoopbackLink_StaysLocalWithoutALinkHop()
+    {
+        CatalogNode orders = Node("SQLPROD01", "AppDb", "dbo", "Orders");
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        CatalogNode link = LinkNode("SQLPROD01", "SELFLINK", "SQLPROD01", catalog: "AppDb");
+        NodeIndex index = new([orders, caller, link], LinkedServerMap.FromNodes([orders, caller, link]));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Server = "SELFLINK" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(orders.Id, resolution.NodeId);
+        Assert.Null(resolution.ViaLink);
     }
 }

@@ -77,6 +77,7 @@ PublishProfiles/
 node_modules/
 dist/
 .npm/
+.npm-cache/
 .pnpm-store/
 .yarn/cache/
 .yarn/install-state.gz

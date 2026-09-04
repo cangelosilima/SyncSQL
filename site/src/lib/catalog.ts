@@ -1,4 +1,4 @@
-import type { Catalog, CatalogNode, CatalogOrphanedReference } from '../types'
+import type { Catalog, CatalogLinkedServerReference, CatalogNode, CatalogOrphanedReference } from '../types'
 
 export interface CatalogIndex {
   catalog: Catalog
@@ -10,6 +10,10 @@ export interface CatalogIndex {
   tree: TreeServer[]
   /** Node id -> orphaned references found in that node's own DDL. */
   orphanedByFrom: Map<string, CatalogOrphanedReference[]>
+  /** Linked server / database link node id -> every reference the fleet makes through it. */
+  linkedServerRefsByLink: Map<string, CatalogLinkedServerReference[]>
+  /** Node id -> the references that object makes across a linked server / database link. */
+  linkedServerRefsByFrom: Map<string, CatalogLinkedServerReference[]>
 }
 
 export interface TreeServer {
@@ -37,6 +41,26 @@ export interface TreeType {
 }
 
 export const NO_SCHEMA_LABEL = '(server-level)'
+
+/** Object types whose nodes are a link to another server rather than something inside a database. */
+export const LINK_TYPES = ['LinkedServers', 'DatabaseLinks']
+
+export function isLinkNode(node: CatalogNode): boolean {
+  return LINK_TYPES.includes(node.type)
+}
+
+/**
+ * A reference rendered the way its DDL wrote it - "LNK.OtherDb.dbo.Orders", "OtherDb.dbo.Orders",
+ * "dbo.Orders" - keeping only the parts that were actually there.
+ */
+export function qualifiedRefName(ref: {
+  server?: string | null
+  database?: string | null
+  schema?: string | null
+  name: string
+}): string {
+  return [ref.server, ref.database, ref.schema, ref.name].filter((part): part is string => !!part).join('.')
+}
 
 export async function loadCatalog(): Promise<CatalogIndex> {
   const res = await fetch(`${import.meta.env.BASE_URL}data/catalog.json`)
@@ -70,7 +94,26 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
     orphanedByFrom.get(ref.from)!.push(ref)
   }
 
-  return { catalog, byId, outgoing, incoming, edgeColumns, tree, orphanedByFrom }
+  const linkedServerRefsByLink = new Map<string, CatalogLinkedServerReference[]>()
+  const linkedServerRefsByFrom = new Map<string, CatalogLinkedServerReference[]>()
+  for (const ref of catalog.linkedServerReferences ?? []) {
+    if (!linkedServerRefsByLink.has(ref.linkedServer)) linkedServerRefsByLink.set(ref.linkedServer, [])
+    linkedServerRefsByLink.get(ref.linkedServer)!.push(ref)
+    if (!linkedServerRefsByFrom.has(ref.from)) linkedServerRefsByFrom.set(ref.from, [])
+    linkedServerRefsByFrom.get(ref.from)!.push(ref)
+  }
+
+  return {
+    catalog,
+    byId,
+    outgoing,
+    incoming,
+    edgeColumns,
+    tree,
+    orphanedByFrom,
+    linkedServerRefsByLink,
+    linkedServerRefsByFrom,
+  }
 }
 
 function buildTree(nodes: CatalogNode[]): TreeServer[] {

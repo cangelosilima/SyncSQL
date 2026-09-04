@@ -14,6 +14,9 @@ public sealed record SyncSqlConfig
     [JsonPropertyName("serverSelection")]
     public NameFilter ServerSelection { get; init; } = new();
 
+    [JsonPropertyName("discovery")]
+    public DiscoveryConfig Discovery { get; init; } = new();
+
     [JsonPropertyName("servers")]
     public required IReadOnlyList<ServerConfig> Servers { get; init; }
 }

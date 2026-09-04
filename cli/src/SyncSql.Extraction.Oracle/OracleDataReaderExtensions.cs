@@ -1,4 +1,5 @@
-﻿using Oracle.ManagedDataAccess.Client;
+﻿using System.Globalization;
+using Oracle.ManagedDataAccess.Client;
 
 namespace SyncSql.Extraction.Oracle;
 
@@ -20,10 +21,15 @@ internal static class OracleDataReaderExtensions
         return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     }
 
+    /// <summary>
+    /// Numeric columns come back as whatever Oracle's provider decided to box (OracleDecimal, decimal,
+    /// long, ...), so the conversion goes through Convert - explicitly invariant, because the value is a
+    /// machine number from a catalog view, not something formatted for a human in the runner's locale.
+    /// </summary>
     public static long? GetNullableInt64(this OracleDataReader reader, string column)
     {
         int ordinal = reader.GetOrdinal(column);
-        return reader.IsDBNull(ordinal) ? null : Convert.ToInt64(reader.GetValue(ordinal));
+        return reader.IsDBNull(ordinal) ? null : Convert.ToInt64(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
     }
 
     public static DateTime? GetNullableDateTime(this OracleDataReader reader, string column)

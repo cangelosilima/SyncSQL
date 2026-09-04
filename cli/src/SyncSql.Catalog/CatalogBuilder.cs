@@ -41,14 +41,25 @@ public sealed class CatalogBuilder(
             }
         }
 
-        NodeIndex nodeIndex = new(nodes);
+        LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
+        NodeIndex nodeIndex = new(nodes, linkedServers);
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation("Inferring lineage edges");
-        (List<CatalogEdge> edges, Dictionary<string, LineageAnalysisResult> analysisByNodeId, List<CatalogOrphanedReference> orphanedReferences) = InferLineage(nodes, nodeIndex);
+        LineageInferenceResult lineage = InferLineage(nodes, nodeIndex);
+        List<CatalogEdge> edges = lineage.Edges;
+        Dictionary<string, LineageAnalysisResult> analysisByNodeId = lineage.AnalysisByNodeId;
+        List<CatalogOrphanedReference> orphanedReferences = lineage.OrphanedReferences;
         if (orphanedReferences.Count > 0)
         {
             logger.LogWarning("Found {Count} orphaned reference(s) - an object's DDL refers to something that no longer exists in scope", orphanedReferences.Count);
+        }
+        if (lineage.LinkedServerReferences.Count > 0)
+        {
+            logger.LogInformation(
+                "Followed {Count} reference(s) across a linked server / database link, {Unresolved} of them to objects outside the catalog's scope",
+                lineage.LinkedServerReferences.Count,
+                lineage.LinkedServerReferences.Count(r => r.To is null));
         }
 
         logger.LogInformation("Detecting column-level references for inferred edges");
@@ -111,6 +122,7 @@ public sealed class CatalogBuilder(
             RecentChanges = recentChanges,
             CoChangePairs = coChangePairs,
             OrphanedReferences = orphanedReferences,
+            LinkedServerReferences = lineage.LinkedServerReferences,
         };
     }
 
@@ -155,13 +167,27 @@ public sealed class CatalogBuilder(
         };
     }
 
-    private (List<CatalogEdge> Edges, Dictionary<string, LineageAnalysisResult> AnalysisByNodeId, List<CatalogOrphanedReference> OrphanedReferences) InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex)
+    /// <summary>What one pass of lineage inference produced, beyond the edges themselves.</summary>
+    private sealed record LineageInferenceResult
+    {
+        public required List<CatalogEdge> Edges { get; init; }
+
+        public required Dictionary<string, LineageAnalysisResult> AnalysisByNodeId { get; init; }
+
+        public required List<CatalogOrphanedReference> OrphanedReferences { get; init; }
+
+        public required List<CatalogLinkedServerReference> LinkedServerReferences { get; init; }
+    }
+
+    private LineageInferenceResult InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex)
     {
         HashSet<string> edgeKeys = [];
         List<CatalogEdge> edges = [];
         Dictionary<string, LineageAnalysisResult> analysisByNodeId = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> orphanKeys = [];
         List<CatalogOrphanedReference> orphanedReferences = [];
+        HashSet<string> linkedReferenceKeys = [];
+        List<CatalogLinkedServerReference> linkedServerReferences = [];
 
         foreach (CatalogNode node in nodes)
         {
@@ -186,11 +212,58 @@ public sealed class CatalogBuilder(
             foreach (ObjectRef reference in analysis.ObjectRefs)
             {
                 ReferenceResolution resolution = nodeIndex.Resolve(node, reference);
+
+                // A reference that crossed a linked server / database link is recorded against that
+                // link whether or not the target itself is extracted, so the link object can list
+                // everything reached through it - including the parts of the fleet nobody extracts.
+                if (resolution.ViaLink is { } link)
+                {
+                    if (linkedReferenceKeys.Add($"{node.Id}|{link.NodeId}|{reference.Database}|{reference.Schema}|{reference.Name}"))
+                    {
+                        linkedServerReferences.Add(new CatalogLinkedServerReference
+                        {
+                            LinkedServer = link.NodeId,
+                            From = node.Id,
+                            To = resolution.NodeId,
+                            Database = reference.Database ?? link.DefaultDatabase,
+                            Schema = reference.Schema,
+                            Name = reference.Name,
+                        });
+                    }
+
+                    // The link itself becomes a hop in the graph: the caller depends on the link, and
+                    // the link on whatever it reaches. Drawing it that way (rather than one direct edge
+                    // to the remote object) is what makes "which objects go through this linked server"
+                    // answerable from the lineage graph, and keeps a hop out of the catalog's scope
+                    // visible instead of silently absent.
+                    AddEdge(node.Id, link.NodeId);
+                    if (resolution.NodeId is { } linkedTargetId)
+                    {
+                        AddEdge(link.NodeId, linkedTargetId);
+                    }
+
+                    // The link landed on a server and database the catalog does have, and the object
+                    // still isn't there - that's dangling in exactly the same way a local miss is, so it
+                    // belongs in the orphan list too (an out-of-scope hop resolves as External and
+                    // deliberately doesn't).
+                    if (resolution.Kind != ReferenceResolutionKind.NotFound)
+                    {
+                        continue;
+                    }
+                }
+
                 if (resolution.Kind == ReferenceResolutionKind.NotFound)
                 {
-                    if (orphanKeys.Add($"{node.Id}|{reference.Schema}|{reference.Name}"))
+                    if (orphanKeys.Add($"{node.Id}|{reference.Server}|{reference.Database}|{reference.Schema}|{reference.Name}"))
                     {
-                        orphanedReferences.Add(new CatalogOrphanedReference { From = node.Id, Schema = reference.Schema, Name = reference.Name });
+                        orphanedReferences.Add(new CatalogOrphanedReference
+                        {
+                            From = node.Id,
+                            Server = reference.Server,
+                            Database = reference.Database,
+                            Schema = reference.Schema,
+                            Name = reference.Name,
+                        });
                     }
                     continue;
                 }
@@ -200,10 +273,7 @@ public sealed class CatalogBuilder(
                     continue;
                 }
 
-                if (edgeKeys.Add($"{node.Id}|{targetId}"))
-                {
-                    edges.Add(new CatalogEdge { From = node.Id, To = targetId });
-                }
+                AddEdge(node.Id, targetId);
             }
         }
 
@@ -213,7 +283,32 @@ public sealed class CatalogBuilder(
             return byFrom != 0 ? byFrom : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
 
-        return (edges, analysisByNodeId, orphanedReferences);
+        linkedServerReferences.Sort((a, b) =>
+        {
+            int byLink = string.Compare(a.LinkedServer, b.LinkedServer, StringComparison.OrdinalIgnoreCase);
+            if (byLink != 0)
+            {
+                return byLink;
+            }
+            int byName = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            return byName != 0 ? byName : string.Compare(a.From, b.From, StringComparison.OrdinalIgnoreCase);
+        });
+
+        return new LineageInferenceResult
+        {
+            Edges = edges,
+            AnalysisByNodeId = analysisByNodeId,
+            OrphanedReferences = orphanedReferences,
+            LinkedServerReferences = linkedServerReferences,
+        };
+
+        void AddEdge(string from, string to)
+        {
+            if (from != to && edgeKeys.Add($"{from}|{to}"))
+            {
+                edges.Add(new CatalogEdge { From = from, To = to });
+            }
+        }
     }
 
     private static void TagColumnReferences(

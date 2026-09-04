@@ -36,11 +36,25 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
     {
         List<ExtractedObject> objects = [];
         Dictionary<string, MetricsSnapshot> metrics = [];
+        List<DiscoveredLinkedServer> discoveredLinkedServers = [];
 
-        if (filters.ObjectTypes.Contains("LinkedServers"))
+        // One read of sys.servers serves both callers: the LinkedServers objects to diff, and the leads
+        // the caller may want to follow up on (see LinkedServerFollowUpPlanner).
+        if (filters.ObjectTypes.Contains("LinkedServers") || options.DiscoverLinkedServers)
         {
             await using SqlConnection masterConnection = await MsSqlConnectionFactory.OpenAsync(server, "master", options.Credentials, cancellationToken);
-            await ExtractLinkedServersAsync(masterConnection, server, filters, objects);
+            IReadOnlyList<IGrouping<string, LinkedServerRow>> linkedServers =
+                [.. (await MsSqlCatalogReader.GetLinkedServersAsync(masterConnection)).GroupBy(r => r.LinkedServerName, StringComparer.OrdinalIgnoreCase)];
+
+            if (filters.ObjectTypes.Contains("LinkedServers"))
+            {
+                AddLinkedServerObjects(linkedServers, server, filters, objects);
+            }
+
+            if (options.DiscoverLinkedServers)
+            {
+                discoveredLinkedServers = [.. linkedServers.Select(ToDiscoveredLinkedServer)];
+            }
         }
 
         await using SqlConnection dbListConnection = await MsSqlConnectionFactory.OpenAsync(server, "master", options.Credentials, cancellationToken);
@@ -58,13 +72,40 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
         }
 
-        return new ExtractionOutcome { Objects = objects, MetricsSnapshots = metrics };
+        return new ExtractionOutcome
+        {
+            Objects = objects,
+            MetricsSnapshots = metrics,
+            DiscoveredLinkedServers = discoveredLinkedServers,
+        };
     }
 
-    private static async Task ExtractLinkedServersAsync(SqlConnection connection, ServerConfig server, EffectiveFilters filters, List<ExtractedObject> objects)
+    /// <summary>
+    /// One linked server as a follow-up lead: where it points, which database it pins, and which remote
+    /// login it maps to - the last one being what decides whether the credentials in hand will work on
+    /// the far side. sys.linked_logins.uses_self_credential = 1 means the local login is passed through
+    /// unchanged, i.e. the same username reaches the other side; 0 means the mapped remote_name is used
+    /// instead.
+    /// </summary>
+    private static DiscoveredLinkedServer ToDiscoveredLinkedServer(IGrouping<string, LinkedServerRow> group)
     {
-        IEnumerable<LinkedServerRow> rows = await MsSqlCatalogReader.GetLinkedServersAsync(connection);
-        foreach (IGrouping<string, LinkedServerRow> group in rows.GroupBy(r => r.LinkedServerName, StringComparer.OrdinalIgnoreCase))
+        LinkedServerRow first = group.First();
+        return new DiscoveredLinkedServer
+        {
+            Name = group.Key,
+            Product = first.Product,
+            Provider = first.Provider,
+            DataSource = first.DataSource,
+            Catalog = first.Catalog,
+            RemoteLoginNames = [.. group.Select(r => r.RemoteLoginName).Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name!).Distinct(StringComparer.OrdinalIgnoreCase)],
+            UsesLocalLogin = group.Any(r => r.UsesSelfCredential == true),
+        };
+    }
+
+    private static void AddLinkedServerObjects(
+        IEnumerable<IGrouping<string, LinkedServerRow>> linkedServers, ServerConfig server, EffectiveFilters filters, List<ExtractedObject> objects)
+    {
+        foreach (IGrouping<string, LinkedServerRow> group in linkedServers)
         {
             if (!filters.ObjectNames.IsAllowed(group.Key))
             {
@@ -207,7 +248,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             () => LoadIndexSectionAsync(connection), server.Name, database, "Index");
 
         Dictionary<string, MetricsSnapshot> snapshotsByKey = options.CaptureMetrics
-            ? await TryLoadAsync(() => LoadMetricsSnapshotsAsync(connection), server.Name, database, "Metrics")
+            ? await LoadMetricsSnapshotsAsync(connection, server.Name, database)
             : [];
 
         foreach (TableRow table in await MsSqlCatalogReader.GetTablesAsync(connection))
@@ -428,12 +469,23 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
         return index;
     }
 
-    private static async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(SqlConnection connection)
+    /// <summary>
+    /// The three metrics queries degrade independently, because they need different permissions: row
+    /// counts and sizes read catalog views any reader can see, while the index and optimizer-statistics
+    /// DMVs need VIEW DATABASE STATE (or VIEW SERVER STATE) - a permission a read-only extraction login
+    /// often doesn't have. Loading them as one unit meant a denied DMV threw away the volume metrics
+    /// too; now a permissions gap costs only the part it actually covers.
+    /// </summary>
+    private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(SqlConnection connection, string serverName, string database)
     {
         DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
         Dictionary<string, MetricsSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (TableVolumeRow row in await MsSqlCatalogReader.GetTableVolumeAsync(connection))
+        List<TableVolumeRow> volumeRows = await TryLoadAsync(
+            async () => new List<TableVolumeRow>(await MsSqlCatalogReader.GetTableVolumeAsync(connection)),
+            serverName, database, "Table volume metrics");
+
+        foreach (TableVolumeRow row in volumeRows)
         {
             string key = $"{row.SchemaName}.{row.TableName}";
             snapshots[key] = new MetricsSnapshot
@@ -446,8 +498,12 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             };
         }
 
+        List<IndexMetricRow> indexRows = await TryLoadAsync(
+            async () => new List<IndexMetricRow>(await MsSqlCatalogReader.GetIndexMetricsAsync(connection)),
+            serverName, database, "Index metrics (needs VIEW DATABASE STATE)");
+
         Dictionary<string, List<CatalogIndexMetric>> indexesByTable = new(StringComparer.OrdinalIgnoreCase);
-        foreach (IndexMetricRow row in await MsSqlCatalogReader.GetIndexMetricsAsync(connection))
+        foreach (IndexMetricRow row in indexRows)
         {
             string key = $"{row.SchemaName}.{row.TableName}";
             if (!indexesByTable.TryGetValue(key, out List<CatalogIndexMetric>? list))
@@ -468,8 +524,12 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
             });
         }
 
+        List<OptimizerStatisticRow> statisticRows = await TryLoadAsync(
+            async () => new List<OptimizerStatisticRow>(await MsSqlCatalogReader.GetOptimizerStatisticsAsync(connection)),
+            serverName, database, "Optimizer statistics (needs VIEW DATABASE STATE)");
+
         Dictionary<string, List<CatalogStatMetric>> statsByTable = new(StringComparer.OrdinalIgnoreCase);
-        foreach (OptimizerStatisticRow row in await MsSqlCatalogReader.GetOptimizerStatisticsAsync(connection))
+        foreach (OptimizerStatisticRow row in statisticRows)
         {
             string key = $"{row.SchemaName}.{row.TableName}";
             if (!statsByTable.TryGetValue(key, out List<CatalogStatMetric>? list))

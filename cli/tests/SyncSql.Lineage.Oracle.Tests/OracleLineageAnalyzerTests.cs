@@ -131,4 +131,27 @@ public class OracleLineageAnalyzerTests
 
         Assert.NotNull(result);
     }
+
+    [Fact]
+    public void Analyze_ReferenceAcrossADatabaseLink_KeepsTheLinkName()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE OR REPLACE VIEW "APP"."REMOTE_ORDERS" AS
+            SELECT o.order_id
+            FROM app.orders@sales_link o;
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Server: "sales_link", Schema: "app", Name: "orders" });
+    }
+
+    [Fact]
+    public void Analyze_ReferenceWithoutADatabaseLink_LeavesTheServerUnset()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE OR REPLACE VIEW "APP"."LOCAL_ORDERS" AS
+            SELECT o.order_id FROM app.orders o;
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Server: null, Schema: "app", Name: "orders" });
+    }
 }
