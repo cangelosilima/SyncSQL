@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
+import HelpButton from '../components/HelpButton'
 import TypeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/TypeActivityHeatmap'
 import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
@@ -30,7 +31,10 @@ export default function Home() {
 
   return (
     <div className="page">
-      <h1>Overview</h1>
+      <h1 className="page-title">
+        Overview
+        <HelpButton topic="overview" />
+      </h1>
       <div className="sync-line">
         <span className="sync-line-badge">
           <span className="status-dot" /> Synced

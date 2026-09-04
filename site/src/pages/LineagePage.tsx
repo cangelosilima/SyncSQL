@@ -6,6 +6,7 @@ import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import CsvExportButton from '../components/CsvExportButton'
+import HelpButton from '../components/HelpButton'
 import { getNeighborhoodIds } from '../lib/neighborhood'
 import { findObjectsForGrantee, getSuggestedGrantees } from '../lib/grants'
 import { filterByContent } from '../lib/contentSearch'
@@ -138,7 +139,10 @@ export default function LineagePage() {
   return (
     <div className="page page--wide">
       <div className="lineage-header-row">
-        <h1>Lineage explorer</h1>
+        <h1 className="page-title">
+          Lineage explorer
+          <HelpButton topic="lineage" />
+        </h1>
         <button type="button" className="lineage-share-btn" onClick={copyShareableLink}>
           {copied ? 'Copied!' : 'Copy link'}
         </button>

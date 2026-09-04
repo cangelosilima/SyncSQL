@@ -17,7 +17,8 @@ noisy.
 
 ## Screenshots
 
-**Overview** — a console-style shell (dark chrome topbar, monospace type) around
+**Overview** — a dense data-terminal shell (fixed chrome topbar carrying the
+brand mark, nav and per-server connection status) around
 a quick-stats row (objects, commits mined, lineage edges, last change), a
 per-type change-activity heatmap (one row per object type, one cell per
 week, each row tinted with that type's own color), recently changed
@@ -68,6 +69,13 @@ object's own page, in addition to the Overview panel above.
 picks any two revisions (including the current definition) for a diff.
 
 ![Object detail side-by-side diff](docs/screenshots/object-diff.png)
+
+**In-app help** — every page's heading carries a **?** that opens that page's
+own Markdown guide over the current view: what the page is for, what each
+panel means, and where its data comes from. The guides live as `.md` files
+in `site/src/help/` and are bundled with the site.
+
+![Explorer page guide](docs/screenshots/help-panel.png)
 
 **Light and dark themes** — a toggle in the top right, persisted per browser.
 
@@ -360,7 +368,9 @@ a database, a credential, or a git remote.
 `site/` is a React + TypeScript + Vite app (source checked into this repo,
 built fresh by the `pages` job on every scheduled run), styled as a dense
 data-terminal with a light/dark toggle (top right; light is the default -
-see "Theme" below):
+see "Theme" below). Every page carries a **?** next to its heading that
+opens that page's own Markdown guide without leaving the view (see
+"In-app help" below):
 
 - **Overview** — a quick-stats row (objects, commits mined, lineage edges,
   last change), a per-type change-activity heatmap (one row per object type
@@ -490,6 +500,46 @@ There is no separate tree sidebar (Server → Database → Schema → Type →
 Object) — Explorer's filter bar plus sortable columns cover browsing, and
 every other page (Lineage, Overview, History) links directly to object
 detail pages.
+
+### In-app help
+
+Every page's heading carries a **?** button. It opens that page's guide -
+what the page is for, what each panel means, which control does what, and
+where the data behind it comes from - in a dialog over the current view, so
+the filters, drill-down and scroll position you were working with survive
+reading the help. `Esc`, the close button, or a click outside dismisses it.
+
+The guides are ordinary Markdown files, one per screen, living next to the
+app code:
+
+```
+site/src/help/overview.md    Overview
+site/src/help/explorer.md    Explorer
+site/src/help/ai.md          AI filter assistant
+site/src/help/lineage.md     Lineage explorer
+site/src/help/history.md     History
+site/src/help/object.md      Object detail
+```
+
+They are inlined into the bundle at build time (Vite's `?raw` import) rather
+than fetched at runtime, so help works on a Pages deployment served from a
+subpath the build doesn't know about, and keeps working offline once the
+site has loaded. `site/src/help/index.ts` maps each screen to its file and
+splits the document's leading `#` heading off to use as the dialog title -
+the `.md` files stay complete, readable documents on their own.
+
+Rendering is done by a small Markdown subset of our own
+(`site/src/lib/markdown.ts` + `site/src/components/Markdown.tsx`): headings,
+paragraphs, lists, fenced code and inline code/bold/italic/link. It exists
+instead of a Markdown dependency because the guides are content we write
+ourselves, and it renders to real React elements - never
+`dangerouslySetInnerHTML` - with link hrefs restricted to http(s), `mailto:`
+and in-site routes.
+
+To edit a guide, edit its `.md` file; nothing else needs touching. To add a
+screen: drop a new `.md` next to the others, add it to the `HelpTopic` union
+and the `helpGuides` map in `site/src/help/index.ts`, and render
+`<HelpButton topic="..." />` inside that page's `<h1 className="page-title">`.
 
 ### Theme
 

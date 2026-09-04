@@ -8,6 +8,7 @@ import MetricsPanels from '../components/MetricsPanels'
 import DiffView from '../components/DiffView'
 import RelatedObjects from '../components/RelatedObjects'
 import CsvExportButton from '../components/CsvExportButton'
+import HelpButton from '../components/HelpButton'
 import { isLinkNode, qualifiedRefName } from '../lib/catalog'
 import { epochOf } from '../lib/analytics'
 import { csvFileName } from '../lib/csv'
@@ -81,8 +82,9 @@ export default function ObjectPage() {
       <p className="breadcrumb">
         <Link to="/explorer">Explorer</Link> / {node.qualifiedName}
       </p>
-      <h1>
+      <h1 className="page-title">
         {node.qualifiedName} <TypeBadge type={node.type} />
+        <HelpButton topic="object" />
       </h1>
       <p className="breadcrumb">
         {node.server} &rarr; {node.database}
