@@ -16,7 +16,7 @@ internal static class CatalogCommand
         Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string?> objectsRootOption = new("--objects-root")
         {
-            Description = $"Root of the extracted tree (server/database/type/[schema/]object.sql). Default: <output-root>/{SyncSqlPaths.ObjectsDirectoryName}, i.e. what `syncsql sync` just wrote.",
+            Description = "Root of the extracted tree (server/database/type/[schema/]object.sql). Default: <output-root>, i.e. what `syncsql sync` just wrote.",
         };
         Option<string?> outputOption = new("--output")
         {
@@ -28,8 +28,8 @@ internal static class CatalogCommand
         };
         Option<string> pathPrefixOption = new("--path-prefix")
         {
-            Description = "Folder inside --repo-root holding the extracted tree.",
-            DefaultValueFactory = _ => SyncSqlPaths.ObjectsDirectoryName,
+            Description = "Folder inside --repo-root holding the extracted tree. Default: empty, i.e. the tree starts at the repository root with the server name.",
+            DefaultValueFactory = _ => SyncSqlPaths.DefaultPathPrefix,
         };
         Option<int> historyLimitOption = new("--history-limit")
         {
@@ -76,14 +76,14 @@ internal static class CatalogCommand
             ICatalogBuilder catalogBuilder = services.GetRequiredService<ICatalogBuilder>();
 
             string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
-            string objectsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(objectsRootOption), outputRoot, SyncSqlPaths.ObjectsDirectoryName);
+            string objectsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(objectsRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
             string outputPath = SyncSqlPaths.Resolve(parseResult.GetValue(outputOption), outputRoot, SyncSqlPaths.CatalogFileName);
 
             CatalogBuildRequest request = new()
             {
                 ObjectsRoot = objectsRoot,
                 RepoRoot = ToFullPathOrNull(parseResult.GetValue(repoRootOption)),
-                PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.ObjectsDirectoryName,
+                PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.DefaultPathPrefix,
                 HistoryLimit = parseResult.GetValue(historyLimitOption),
                 MaxVersionsPerObject = parseResult.GetValue(maxVersionsOption),
                 MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),

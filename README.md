@@ -89,9 +89,9 @@ flowchart TD
 
     subgraph sync["CI stage: sync - one job running scripts/Publish-SyncSqlObjects.ps1"]
         direction TB
-        clone["git clone --history-limit commits deep,<br/>replace pathPrefix/ with the staged tree -<br/>dropped objects show up as deletions"]
-        metrics["syncsql metrics update<br/>folds this run's snapshots into repo/metrics/<br/>(outside pathPrefix - accumulates across runs)"]
-        catalog["syncsql catalog build<br/>structure + lineage (real parser per engine)<br/>+ history mined read-only from this repo's<br/>own git log + metrics/ per node,<br/>writes pathPrefix/catalog.json"]
+        clone["git clone --history-limit commits deep,<br/>replace the published server trees with the staged one -<br/>dropped objects show up as deletions"]
+        metrics["syncsql metrics update<br/>folds this run's snapshots into repo/metrics/<br/>(alongside the server trees - accumulates across runs)"]
+        catalog["syncsql catalog build<br/>structure + lineage (real parser per engine)<br/>+ history mined read-only from this repo's<br/>own git log + metrics/ per node,<br/>writes catalog.json"]
         commit["git commit + push:<br/>extracted objects + catalog.json<br/>+ updated metrics/ tree, all in one commit"]
         clone --> metrics --> catalog --> commit
     end
@@ -196,6 +196,15 @@ for the full schema; in short:
   [`.gitlab/README.md`](.gitlab/README.md)'s
   "Required CI/CD variables" for the token that requires. Set it to a
   full URL to push into a different project instead.
+
+  `pathPrefix` says where inside that repository the extracted tree lives.
+  It defaults to empty: the tree starts at the repository root, so the first
+  path segment of every published file is the server it came from
+  (`SQLPROD01/AppDb/Tables/dbo/Orders.sql`), with `catalog.json` and the
+  `metrics/` history tree beside it. Set it to a folder name to nest the whole
+  tree one level down instead - worth doing when you publish into a repository
+  that holds other things too, and what an existing SyncSQL repository already
+  did under `objects`.
 - `defaults` / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
   (`Schemas`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
@@ -391,7 +400,8 @@ see "Theme" below):
   that picks any two revisions (including the current definition) for a
   side-by-side diff, and "depends on" / "used by" lineage lists annotated
   with column tags (expandable past the first few) with an embedded
-  neighborhood graph.
+  neighborhood graph. Hub objects are handled specially — see "Objects with
+  too many dependencies" below.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
   `@xyflow/react` + `dagre` auto-layout, with two modes (tabs):
   - **Browse** — the object filter bar and a DDL content search box (same
@@ -787,6 +797,55 @@ the optional behavior so catalog publishing is not blocked by LFS or proxy
 availability. Vendored sources and checksums live under
 `site/vendor/ai/all-MiniLM-L6-v2/`; only verified files are copied to `dist`.
 
+### Objects with too many dependencies
+
+A dispatcher procedure with three hundred dependencies, or a core table five
+hundred objects read from, breaks every "just list them" design: a flat list
+of links answers no question anybody actually has about a hub, and a graph
+with that many nodes is a hairball that takes a second to lay out and can't
+be read afterwards. Three places adapt instead of degrading:
+
+- **Object detail, "Depends on" / "Used by"** — up to a dozen entries these
+  stay the plain list they always were. Past that they switch to a
+  summary-first panel: a per-type breakdown (`Tables 212`, `Views 9`,
+  `StoredProcedures 3`) that doubles as a one-click type filter, a search box
+  matching any part of a related object's identity (server, database, schema,
+  type or name), a **Group by** selector (type / database / schema / server),
+  and collapsible groups — expanded from the top until the page has enough
+  rows to be worth reading, each capped with a "Show all N".
+- **Neighborhood and lineage graphs** — a focused graph over its node budget
+  collapses same-type neighbours into a single dashed node carrying the count
+  (`212 Tables`), wired to the focus in the direction its members sit. Small
+  groups are collapsed last, so the two procedures and one trigger around a
+  hub stay individually visible while the two hundred tables become one node.
+  Clicking a bundle lists what's inside it rather than expanding it in place —
+  expanding it would just rebuild the hairball, and the lists above are where
+  every name is meant to be read.
+- **Lineage explorer, over-sized selections** — a filter matching more objects
+  than the graph will draw no longer dead-ends on a warning. It shows what the
+  selection is actually made of — counts by server, by database and by type —
+  with every row a one-click narrowing of the filter.
+
+### CSV export
+
+Anywhere the site shows a list worth taking elsewhere, an **Export CSV**
+button writes exactly the rows currently on screen:
+
+| Where | What the file holds |
+|-------|---------------------|
+| Explorer | Every object matching the current filter — identity, description, size, dependency/dependent counts, change count, last changed. The whole filter, not just the first 500 rows the table renders. |
+| Object detail, header | That one object's details, same columns. |
+| Object detail, Columns | Column name, data type, description. |
+| Object detail, Access | Grantee, grantee type, permission, state, column. |
+| Object detail, Lineage | Both directions as flat rows — direction, target identity, and the column-level tags for that edge. |
+| Lineage → Access | One row per permission across every object matching the grantee search. |
+
+Files are UTF-8 **with a BOM** (without it Excel reads them in the machine's
+ANSI codepage and mangles every accented object name and description) and
+CRLF-terminated per RFC 4180. Cell values that a spreadsheet would otherwise
+evaluate as a formula are prefixed with an apostrophe, since this content
+comes straight out of somebody's database.
+
 ## Running the extraction locally
 
 Nothing here needs CI, and nothing needs to be exported: credentials and
@@ -807,8 +866,9 @@ three work.)
 
 `sync` is purely local: with no path parameters it reads
 `./config/servers.json` and leaves extracted objects under
-`./syncsql-output/objects` and metrics snapshots under
-`./syncsql-output/metrics-snapshot` (`--staging-root` /
+`./syncsql-output` — starting at the server name, e.g.
+`./syncsql-output/SQLPROD01/AppDb/Tables/dbo/Orders.sql` — and metrics
+snapshots under `./syncsql-output/metrics-snapshot` (`--staging-root` /
 `--metrics-snapshot-root` / `--output-root` override that). The other
 commands default to the same layout, so the chain needs no arguments:
 
@@ -837,7 +897,7 @@ including the dry run that stops before committing:
 
 ```powershell
 pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
-  -ExtractedObjectsDir ./syncsql-output/objects `
+  -ExtractedObjectsDir ./syncsql-output `
   -MetricsSnapshotDir ./syncsql-output/metrics-snapshot `
   -ConfigPath ./config/servers.json `
   -SkipPush

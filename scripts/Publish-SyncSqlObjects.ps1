@@ -22,11 +22,24 @@
     this process's environment - never written to disk and never embedded in the remote URL.
 
 .PARAMETER ExtractedObjectsDir
-    Directory holding the merged `syncsql sync --staging-root` output to publish.
+    Directory holding the merged `syncsql sync --staging-root` output to publish. Its immediate children
+    are the server directories, which is exactly how they land in the target repository.
+
+.PARAMETER PathPrefix
+    Folder inside the clone the object tree replaces. Defaults to config `git.pathPrefix`, then to empty -
+    the tree is published at the repository root, so the first path segment is the server name. With an
+    empty prefix the script replaces only the server directories it owns rather than wiping the clone,
+    which would take .git with it; see .gitlab/README.md's "Wipe and repopulate".
 
 .PARAMETER MetricsSnapshotDir
     Directory holding this run's `syncsql sync --metrics-snapshot-root` output. Omit (or point at a
     directory that does not exist) to skip the metrics history update entirely.
+
+.PARAMETER MetricsSnapshotDirName
+    Name of the snapshot folder as it appears inside -ExtractedObjectsDir. Only used to recognize and
+    skip it: `syncsql sync`'s defaults put the snapshot and metrics folders next to the server
+    directories under one output root, so -ExtractedObjectsDir can be that root without those two (and
+    a catalog.json left over from a local `catalog build`) being mistaken for servers and published.
 
 .PARAMETER ConfigPath
     config/servers.json, read only to default the git settings below. Omit to rely purely on parameters.
@@ -38,7 +51,7 @@
     Do everything except the push - useful for a local dry run against a real clone.
 
 .EXAMPLE
-    ./scripts/Publish-SyncSqlObjects.ps1 -ExtractedObjectsDir ./syncsql-output/objects `
+    ./scripts/Publish-SyncSqlObjects.ps1 -ExtractedObjectsDir ./syncsql-output `
         -MetricsSnapshotDir ./syncsql-output/metrics-snapshot -ConfigPath ./config/servers.json -SkipPush
 
 .LINK
@@ -67,6 +80,8 @@ param(
     [string] $CommitMessage,
 
     [string] $MetricsHistoryDirName = 'metrics',
+
+    [string] $MetricsSnapshotDirName = 'metrics-snapshot',
 
     [string] $CatalogFileName = 'catalog.json',
 
@@ -175,6 +190,65 @@ function Resolve-PushToken {
     return $null
 }
 
+function Remove-SyncSqlServerDirectories {
+    <#
+        .SYNOPSIS
+            Deletes the server directories a previous run published at the root of the clone, so objects
+            dropped from the fleet show up as deletions instead of lingering forever.
+        .DESCRIPTION
+            Only reached when -PathPrefix is empty, i.e. the extracted tree starts at the repository root
+            with the server name. There is no folder to wipe in that layout, and wiping the clone itself
+            would take .git - and any other content the repository holds - with it, so the set of
+            directories this tool owns is worked out explicitly instead:
+
+              * the top-level directories this run is about to write, and
+              * the servers the previous run recorded in catalog.json - which is what makes a server that
+                stopped being extracted disappear from git rather than go stale.
+
+            Anything else at the root (.git, the metrics history folder, a README, the catalog file) is
+            left untouched. Returns the names it removed.
+    #>
+    param(
+        [Parameter(Mandatory)][string] $CloneDirectory,
+        [object[]] $ExtractedEntries = @(),
+        [Parameter(Mandatory)][string] $CatalogFileName
+    )
+
+    $owned = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($entry in $ExtractedEntries) {
+        if ($entry.PSIsContainer) { [void] $owned.Add($entry.Name) }
+    }
+
+    $previousCatalog = Join-Path $CloneDirectory $CatalogFileName
+    if (Test-Path -LiteralPath $previousCatalog -PathType Leaf) {
+        try {
+            $catalog = Get-Content -LiteralPath $previousCatalog -Raw | ConvertFrom-Json
+            foreach ($server in @(Get-JsonProperty $catalog 'servers')) {
+                if ($server -is [string] -and -not [string]::IsNullOrWhiteSpace($server)) { [void] $owned.Add($server) }
+            }
+        }
+        catch {
+            # A catalog.json that cannot be parsed (hand-edited, truncated, written by a much older
+            # version) is not worth failing the publish over: this run still replaces everything it is
+            # about to write, it just cannot also clean up a server it no longer extracts.
+            Write-Warning "Could not read the previous $CatalogFileName to find stale servers: $($_.Exception.Message)"
+        }
+    }
+
+    $removed = @()
+    foreach ($name in $owned) {
+        if ($name -eq '.git') { continue }
+        $path = Join-Path $CloneDirectory $name
+        if (Test-Path -LiteralPath $path -PathType Container) {
+            Remove-Item -LiteralPath $path -Recurse -Force
+            $removed += $name
+        }
+    }
+
+    return $removed
+}
+
 $createdCloneDirectory = $false
 
 try {
@@ -188,7 +262,9 @@ try {
     }
 
     $Branch          = Resolve-Setting $Branch          (Get-JsonProperty $gitConfig 'branch')          'main'
-    $PathPrefix      = Resolve-Setting $PathPrefix      (Get-JsonProperty $gitConfig 'pathPrefix')      'objects'
+    # Empty by default: the extracted tree starts at the repository root, so the first path segment of
+    # every published file is the server it came from.
+    $PathPrefix      = Resolve-Setting $PathPrefix      (Get-JsonProperty $gitConfig 'pathPrefix')      ''
     $CommitUserName  = Resolve-Setting $CommitUserName  (Get-JsonProperty $gitConfig 'commitUserName')  'SyncSQL Bot'
     $CommitUserEmail = Resolve-Setting $CommitUserEmail (Get-JsonProperty $gitConfig 'commitUserEmail') 'syncsql-bot@example.com'
     $CommitMessage   = Resolve-Setting $CommitMessage   (Get-JsonProperty $gitConfig 'commitMessage')   'chore(sync): update database objects'
@@ -249,19 +325,50 @@ try {
     # ------------------------------------------------- replace the object tree
     # Wiped and repopulated every run, so an object dropped from the source database (or excluded by an
     # updated filter) shows up as a deletion in git instead of lingering forever.
-    $targetDir = Join-Path $CloneDirectory $PathPrefix
-    Write-Step "Replacing '$PathPrefix' with the extracted tree from $ExtractedObjectsDir"
-    if (Test-Path -LiteralPath $targetDir) {
-        Remove-Item -LiteralPath $targetDir -Recurse -Force
-    }
-    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+    $targetDir = if ([string]::IsNullOrWhiteSpace($PathPrefix)) { $CloneDirectory } else { Join-Path $CloneDirectory $PathPrefix }
+    $prefixLabel = if ([string]::IsNullOrWhiteSpace($PathPrefix)) { 'the repository root' } else { "'$PathPrefix'" }
+    Write-Step "Replacing the extracted tree under $prefixLabel with $ExtractedObjectsDir"
 
-    $extractedEntries = @(Get-ChildItem -LiteralPath $ExtractedObjectsDir -Force)
-    if ($extractedEntries.Count -eq 0) {
+    # The extracted tree is exactly the server directories; `syncsql sync`'s own defaults put the
+    # metrics folders and a locally built catalog.json beside them under one output root, so those are
+    # recognized and skipped rather than published as if they were servers.
+    $skipNames = @(@($MetricsHistoryDirName, $MetricsSnapshotDirName, $CatalogFileName) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $serverEntries = @()
+    foreach ($entry in @(Get-ChildItem -LiteralPath $ExtractedObjectsDir -Force)) {
+        if (-not $entry.PSIsContainer) {
+            Write-Warning "Skipping '$($entry.Name)': the extracted tree holds one directory per server, not loose files."
+            continue
+        }
+        if ($skipNames -contains $entry.Name) {
+            Write-Step "Skipping '$($entry.Name)' - not part of the extracted object tree."
+            continue
+        }
+        $serverEntries += $entry
+    }
+
+    if ($serverEntries.Count -eq 0) {
         Write-Warning "No extracted objects found under $ExtractedObjectsDir - publishing an empty tree."
     }
+
+    if ([string]::IsNullOrWhiteSpace($PathPrefix)) {
+        # With no prefix the target IS the clone, so wiping it wholesale would take .git (and anything
+        # else the repository holds) with it. Only the server directories this tool owns are removed:
+        # the ones this run is about to write, plus the ones the previous run recorded in catalog.json -
+        # which is how a server that stopped being extracted still shows up as a deletion.
+        $ownedNames = @(Remove-SyncSqlServerDirectories -CloneDirectory $CloneDirectory `
+            -ExtractedEntries $serverEntries -CatalogFileName $CatalogFileName)
+        Write-Step "Removed $($ownedNames.Count) previously published server director(ies) from the repository root"
+    }
     else {
-        Copy-Item -Path (Join-Path $ExtractedObjectsDir '*') -Destination $targetDir -Recurse -Force
+        if (Test-Path -LiteralPath $targetDir) {
+            Remove-Item -LiteralPath $targetDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+    }
+
+    foreach ($entry in $serverEntries) {
+        Copy-Item -LiteralPath $entry.FullName -Destination $targetDir -Recurse -Force
     }
 
     # ---------------------------------------------------------- metrics history

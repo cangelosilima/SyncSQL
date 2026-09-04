@@ -4,6 +4,9 @@ import { useCatalog } from '../lib/CatalogContext'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
+import CsvExportButton from '../components/CsvExportButton'
+import { csvFileName } from '../lib/csv'
+import { objectColumns } from '../lib/catalogCsv'
 import { filterByContent } from '../lib/contentSearch'
 import { epochOf } from '../lib/analytics'
 import { useDebouncedValue } from '../lib/useDebouncedValue'
@@ -69,7 +72,15 @@ export default function Explorer() {
 
   return (
     <div className="page page--wide">
-      <h1>Explorer</h1>
+      <div className="lineage-header-row">
+        <h1>Explorer</h1>
+        <CsvExportButton
+          rows={sorted}
+          columns={objectColumns(index)}
+          filename={csvFileName('syncsql-objects')}
+          title={`Download all ${sorted.length} matching object(s) as CSV - the whole filter, not just the rows on screen`}
+        />
+      </div>
       <p className="muted">
         {filtered.length} of {nodes.length} object(s) match
         {tokens.length > 0 || debouncedContentQuery.trim() ? ' the current filter' : ''}.

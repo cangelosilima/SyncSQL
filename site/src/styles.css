@@ -1814,3 +1814,250 @@ a {
     margin-left: 0;
   }
 }
+
+/* Large dependency sets: summary-first "Depends on / Used by" panels
+   (components/RelatedObjects.tsx). A handful of related objects still renders
+   as the plain .related-list above; everything below only kicks in once a hub
+   object has more of them than anyone can read as a flat list. */
+
+.related-panel {
+  min-width: 0;
+}
+
+.related-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.related-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.related-type-chip:hover {
+  border-color: var(--accent);
+}
+
+.related-type-chip--active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.related-type-chip-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.related-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.related-search {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.related-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.related-groupby {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.related-groupby select {
+  padding: 0.25rem 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-size: 0.75rem;
+}
+
+.related-count-line {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 0.78rem;
+}
+
+.related-group {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  margin-bottom: 0.35rem;
+  background: var(--surface);
+}
+
+.related-group-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.related-group-summary:hover {
+  color: var(--accent);
+}
+
+.related-group-caret {
+  color: var(--text-muted);
+}
+
+.related-group-count {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.related-group .related-list {
+  padding: 0 0.5rem 0.4rem 1.1rem;
+  margin: 0;
+}
+
+.related-more,
+.related-reset {
+  margin: 0 0.5rem 0.45rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px dashed var(--border);
+  border-radius: 2px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.related-more:hover,
+.related-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Bundled neighbours in the lineage graph (components/LineageGraph.tsx) */
+
+.lineage-bundle-hint {
+  margin: 0.25rem 0 0.4rem;
+  font-size: 0.78rem;
+}
+
+.lineage-bundle-panel {
+  max-height: 55%;
+  overflow-y: auto;
+}
+
+.lineage-bundle-list {
+  margin-top: 0.3rem;
+  columns: 2;
+  column-gap: 1rem;
+}
+
+/* "Too many objects to graph" breakdown (pages/LineagePage.tsx) */
+
+.selection-breakdown p {
+  margin: 0 0 0.75rem;
+}
+
+.selection-breakdown-axes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.selection-breakdown-axis h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.selection-breakdown-axis ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.selection-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.2rem 0.35rem;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: var(--text);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.selection-breakdown-row:hover {
+  background: var(--surface-alt);
+  color: var(--accent);
+}
+
+.selection-breakdown-row--static {
+  cursor: default;
+}
+
+.selection-breakdown-row--static:hover {
+  background: none;
+  color: var(--text);
+}
+
+.selection-breakdown-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-breakdown-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.selection-breakdown-rest {
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+}
+
+/* Section header holding more than one action (object page "Access") */
+
+.section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
