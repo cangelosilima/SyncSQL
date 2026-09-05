@@ -31,6 +31,14 @@ const MAX_SHEET_NAME_LENGTH = 31
 /** Characters Excel forbids in a worksheet name. */
 const ILLEGAL_SHEET_NAME_CHARS = /[:\\/?*[\]]/g
 
+/**
+ * Names Excel reserves for itself and refuses to accept - "History" is taken by
+ * shared-workbook change tracking. Nothing about the name looks special, so this
+ * is the kind of thing you only discover by writing a real file; the guard is
+ * here so a future sheet can't rediscover it.
+ */
+const RESERVED_SHEET_NAMES = ['history']
+
 /** Wide enough to read, narrow enough that a DDL column doesn't push everything else off screen. */
 const MIN_COLUMN_WIDTH = 10
 const MAX_COLUMN_WIDTH = 60
@@ -50,7 +58,10 @@ export function sheet<T>(name: string, rows: readonly T[], columns: readonly Csv
 
 /** A sheet name Excel will accept, unique within `taken` (which this adds to). */
 export function sanitizeSheetName(name: string, taken: Set<string>): string {
-  const cleaned = name.replace(ILLEGAL_SHEET_NAME_CHARS, ' ').trim() || 'Sheet'
+  let cleaned = name.replace(ILLEGAL_SHEET_NAME_CHARS, ' ').trim() || 'Sheet'
+  if (RESERVED_SHEET_NAMES.includes(cleaned.toLowerCase())) {
+    cleaned = `${cleaned} (sheet)`
+  }
   let candidate = cleaned.slice(0, MAX_SHEET_NAME_LENGTH)
 
   // Excel compares sheet names case-insensitively, so uniqueness has to as well.

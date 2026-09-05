@@ -161,7 +161,9 @@ export function objectWorkbookSheets(index: CatalogIndex, node: CatalogNode): Sh
     sheets.push(sheet('Metrics', node.metrics, metricColumns))
   }
   if (node.history.length > 0) {
-    sheets.push(sheet('History', node.history, historyColumns))
+    // Named as the page names the section - and "History" alone is a name Excel
+    // reserves for shared-workbook change tracking and refuses outright.
+    sheets.push(sheet('Change history', node.history, historyColumns))
   }
   if (node.ddl) {
     const lines: DdlLine[] = node.ddl.split('\n').map((text, i) => ({ line: i + 1, text }))

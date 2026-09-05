@@ -548,7 +548,7 @@ function ColumnLineagePanel({
               </li>
             ))}
           </ul>
-          <LineageGraph nodeIds={[node.id, ...consumers.map((c) => c.id)]} focusId={node.id} height={280} />
+          <LineageGraph nodeIds={[node.id, ...consumers.map((c) => c.id)]} focusId={node.id} height={360} />
         </>
       )}
     </div>

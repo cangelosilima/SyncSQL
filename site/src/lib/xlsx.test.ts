@@ -53,6 +53,12 @@ describe('sanitizeSheetName', () => {
   it('falls back to a usable name when everything is stripped', () => {
     expect(sanitizeSheetName('///', new Set())).toBe('Sheet')
   })
+
+  /** Excel reserves "History" for shared-workbook change tracking and rejects the sheet outright. */
+  it('renames a name Excel reserves for itself', () => {
+    expect(sanitizeSheetName('History', new Set())).toBe('History (sheet)')
+    expect(sanitizeSheetName('history', new Set())).toBe('history (sheet)')
+  })
 })
 
 describe('toCellValue', () => {
