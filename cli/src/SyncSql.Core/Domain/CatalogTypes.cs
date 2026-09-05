@@ -95,6 +95,15 @@ public sealed record CatalogEdge
 
     [JsonPropertyName("columns")]
     public IReadOnlyList<string> Columns { get; init; } = [];
+
+    /// <summary>
+    /// True when the only thing that produced this edge was SQL built as a string at runtime
+    /// (<see cref="ReferenceOrigin.Dynamic"/>). Surfaced in the site so a reader can tell a reference the
+    /// parser read off real DDL from one recovered out of a literal. An edge backed by both a static and a
+    /// dynamic reference is not dynamic - the static one already stands on its own.
+    /// </summary>
+    [JsonPropertyName("dynamic")]
+    public bool Dynamic { get; init; }
 }
 
 /// <summary>One commit that touched at least one catalogued object, for the global History timeline.</summary>
@@ -157,6 +166,35 @@ public sealed record CatalogOrphanedReference
 }
 
 /// <summary>
+/// A reference to something the database engine itself provides rather than something anybody extracted -
+/// T-SQL's <c>sp_executesql</c>, <c>sys.objects</c>, <c>master.dbo.xp_cmdshell</c>; PL/SQL's
+/// <c>DBMS_OUTPUT</c>, <c>ALL_TAB_COLUMNS</c>. These resolve to nothing in the catalog, but they are not
+/// missing and never were, so reporting them as orphaned references (which is what happened before this
+/// existed, whenever <c>master</c>/<c>SYS</c> did not happen to be extracted) is pure noise. They get no
+/// lineage edge either - a graph edge to "the engine" says nothing - but they are collected here so the
+/// information isn't simply thrown away: an object's page can list which built-ins it leans on.
+/// </summary>
+public sealed record CatalogSystemReference
+{
+    [JsonPropertyName("from")]
+    public required string From { get; init; }
+
+    /// <summary>The linked server / database link the reference named, when it named one.</summary>
+    [JsonPropertyName("server")]
+    public string? Server { get; init; }
+
+    /// <summary>The database the reference named, when it named one (e.g. <c>master</c>).</summary>
+    [JsonPropertyName("database")]
+    public string? Database { get; init; }
+
+    [JsonPropertyName("schema")]
+    public string? Schema { get; init; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+}
+
+/// <summary>
 /// One reference that crosses a linked server / database link: which object made it, which link it
 /// crossed, the target as the DDL wrote it, and the target node when the catalog has it extracted (null
 /// when the hop leaves the catalog's scope). Collected so a link object can list everything reached
@@ -184,6 +222,10 @@ public sealed record CatalogLinkedServerReference
 
     [JsonPropertyName("name")]
     public required string Name { get; init; }
+
+    /// <summary>True when only dynamically-built SQL (an <c>OPENQUERY</c> body, an <c>EXEC ... AT link</c>) made this reference.</summary>
+    [JsonPropertyName("dynamic")]
+    public bool Dynamic { get; init; }
 }
 
 /// <summary>The full catalog.json document consumed by site/.</summary>
@@ -212,6 +254,9 @@ public sealed record Catalog
 
     [JsonPropertyName("orphanedReferences")]
     public IReadOnlyList<CatalogOrphanedReference> OrphanedReferences { get; init; } = [];
+
+    [JsonPropertyName("systemReferences")]
+    public IReadOnlyList<CatalogSystemReference> SystemReferences { get; init; } = [];
 
     [JsonPropertyName("linkedServerReferences")]
     public IReadOnlyList<CatalogLinkedServerReference> LinkedServerReferences { get; init; } = [];

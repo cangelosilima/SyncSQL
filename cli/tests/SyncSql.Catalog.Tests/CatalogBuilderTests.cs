@@ -19,7 +19,7 @@ public sealed class CatalogBuilderTests : IDisposable
     public CatalogBuilderTests()
     {
         _mssqlAnalyzer.Engine.Returns(DatabaseEngine.MsSql);
-        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(LineageAnalysisResult.Empty);
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(LineageAnalysisResult.Empty);
         _lineageAnalyzerResolver.Resolve(DatabaseEngine.MsSql).Returns(_mssqlAnalyzer);
         _clock.UtcNow.Returns(FixedNow);
     }
@@ -133,7 +133,7 @@ public sealed class CatalogBuilderTests : IDisposable
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase) { ["o"] = new ObjectRef("dbo", "Orders") },
             ColumnRefs = [new ColumnRef("o", "Id"), new ColumnRef("o", "CustomerId")],
         };
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("FROM dbo.Orders", StringComparison.Ordinal))).Returns(referencesOrders);
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("FROM dbo.Orders", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(referencesOrders);
 
         CatalogBuilder builder = CreateBuilder();
         Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
@@ -152,7 +152,7 @@ public sealed class CatalogBuilderTests : IDisposable
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM dbo.NoSuchTable;");
         string procId = NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder");
-        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "NoSuchTable")],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -174,7 +174,7 @@ public sealed class CatalogBuilderTests : IDisposable
     {
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM dbo.NoSuchTable; SELECT 2 FROM dbo.NoSuchTable;");
-        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "NoSuchTable"), new ObjectRef("dbo", "NoSuchTable")],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -194,7 +194,7 @@ public sealed class CatalogBuilderTests : IDisposable
         WriteObjectFile("SQLPROD01", "AppDb", "Tables", "sales", "Orders", "CREATE TABLE sales.Orders (Id INT);");
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM Orders;");
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef(null, "Orders")],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -213,7 +213,7 @@ public sealed class CatalogBuilderTests : IDisposable
     {
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "Zeta", "CREATE PROCEDURE dbo.Zeta AS SELECT 1 FROM dbo.Missing;");
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "Alpha", "CREATE PROCEDURE dbo.Alpha AS SELECT 1 FROM dbo.Missing;");
-        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "Missing")],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -234,7 +234,7 @@ public sealed class CatalogBuilderTests : IDisposable
         WriteObjectFile("SQLPROD01", "AppDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM dbo.Orders; SELECT 2 FROM dbo.Orders;");
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "Orders"), new ObjectRef("dbo", "Orders")],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -251,7 +251,7 @@ public sealed class CatalogBuilderTests : IDisposable
     public async Task BuildAsync_ObjectFileWithoutEngineHeader_SkipsLineageInferenceWithoutError()
     {
         WriteObjectFile("SQLPROD01", "AppDb", "Tables", "dbo", "Legacy", "CREATE TABLE dbo.Legacy (Id INT);", engine: null);
-        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(_ => throw new InvalidOperationException("lineage should not run for a node with no engine"));
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(_ => throw new InvalidOperationException("lineage should not run for a node with no engine"));
 
         CatalogBuilder builder = CreateBuilder();
         Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
@@ -346,7 +346,7 @@ public sealed class CatalogBuilderTests : IDisposable
         WriteObjectFile("SQLPROD01", "SalesDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM SalesDb.dbo.Orders;");
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "SalesDb" }],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -367,7 +367,7 @@ public sealed class CatalogBuilderTests : IDisposable
     {
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM NobodyExtractsThis.dbo.Orders;");
-        _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "NobodyExtractsThis" }],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -388,7 +388,7 @@ public sealed class CatalogBuilderTests : IDisposable
         WriteObjectFile("SQLPROD02", "SalesDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM SALES_LINK.SalesDb.dbo.Orders;");
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "SalesDb", Server = "SALES_LINK" }],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -422,7 +422,7 @@ public sealed class CatalogBuilderTests : IDisposable
         WriteObjectFile("SQLPROD01", "_ServerLevel", "LinkedServers", null, "VENDOR", LinkedServerDdl("VENDOR", "vendor-host.example.net", "VendorDb"));
         WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
             "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM VENDOR.VendorDb.dbo.Orders;");
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal))).Returns(new LineageAnalysisResult
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
         {
             ObjectRefs = [new ObjectRef("dbo", "Orders") { Database = "VendorDb", Server = "VENDOR" }],
             Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
@@ -444,6 +444,116 @@ public sealed class CatalogBuilderTests : IDisposable
         Assert.Equal(linkId, reference.LinkedServer);
         Assert.Null(reference.To);
         Assert.Equal("VendorDb", reference.Database);
+    }
+
+    private static LineageAnalysisResult Refs(params ObjectRef[] objectRefs) => new()
+    {
+        ObjectRefs = objectRefs,
+        Aliases = new Dictionary<string, ObjectRef>(StringComparer.OrdinalIgnoreCase),
+        ColumnRefs = [],
+    };
+
+    [Fact]
+    public async Task BuildAsync_SystemObjectReference_IsRecordedRatherThanFlaggedAsOrphaned()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS EXEC sp_executesql N'SELECT 1';");
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(Refs(new ObjectRef(null, "sp_executesql")));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        Assert.Empty(catalog.OrphanedReferences);
+        Assert.Empty(catalog.Edges);
+        CatalogSystemReference system = Assert.Single(catalog.SystemReferences);
+        Assert.Equal(NodeId("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder"), system.From);
+        Assert.Equal("sp_executesql", system.Name);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DynamicReferenceThatResolvesNowhere_IsNotFlaggedAsOrphaned()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS EXEC ('SELECT 1 FROM dbo.MaybeNotATable');");
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>())
+            .Returns(Refs(new ObjectRef("dbo", "MaybeNotATable") { Origin = ReferenceOrigin.Dynamic }));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        Assert.Empty(catalog.Edges);
+        Assert.Empty(catalog.OrphanedReferences);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DynamicReference_ProducesAnEdgeMarkedDynamic()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS EXEC ('SELECT 1 FROM dbo.Orders');");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>())
+            .Returns(Refs(new ObjectRef("dbo", "Orders") { Origin = ReferenceOrigin.Dynamic }));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogEdge edge = Assert.Single(catalog.Edges);
+        Assert.True(edge.Dynamic);
+    }
+
+    /// <summary>Once anything reads the relationship off real DDL, the edge stops being a best-effort finding.</summary>
+    [Fact]
+    public async Task BuildAsync_EdgeBackedByBothAStaticAndADynamicReference_IsNotMarkedDynamic()
+    {
+        WriteObjectFile("SQLPROD01", "AppDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
+        WriteObjectFile("SQLPROD01", "AppDb", "StoredProcedures", "dbo", "GetOrder",
+            "CREATE PROCEDURE dbo.GetOrder AS SELECT 1 FROM dbo.Orders;");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("GetOrder", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>())
+            .Returns(Refs(
+                new ObjectRef("dbo", "Orders") { Origin = ReferenceOrigin.Dynamic },
+                new ObjectRef("dbo", "Orders")));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogEdge edge = Assert.Single(catalog.Edges);
+        Assert.False(edge.Dynamic);
+    }
+
+    /// <summary>
+    /// The reported scenario, end to end: a function reaching a remote function through OPENQUERY inside
+    /// dynamically-built SQL. MsSqlLineageAnalyzerTests proves the analyzer recovers that reference with
+    /// Server = "SIG"; this proves what the catalog then does with it - a real hop through the link, and
+    /// no orphaned reference anywhere.
+    /// </summary>
+    [Fact]
+    public async Task BuildAsync_DynamicReferenceAcrossALinkedServer_DrawsTheHopAndListsItOnTheLink()
+    {
+        WriteObjectFile("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SIG", LinkedServerDdl("SIG", "SQLPROD02", "SigDb"));
+        WriteObjectFile("SQLPROD02", "SigDb", "Functions", "dbo", "fns_Sig_Open_GetTransactionCode",
+            "CREATE FUNCTION dbo.fns_Sig_Open_GetTransactionCode() RETURNS VARCHAR(50) AS BEGIN RETURN ''; END");
+        WriteObjectFile("SQLPROD01", "AppDb", "Functions", "dbo", "fns_Opn_Sig_GetTransactionCode",
+            "CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode() RETURNS VARCHAR(50) AS BEGIN RETURN ''; END");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("fns_Opn_Sig", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>())
+            .Returns(Refs(
+                new ObjectRef("dbo", "fns_Sig_Open_GetTransactionCode") { Server = "SIG", Origin = ReferenceOrigin.Dynamic },
+                new ObjectRef(null, "sp_executesql")));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        string callerId = NodeId("SQLPROD01", "AppDb", "Functions", "dbo", "fns_Opn_Sig_GetTransactionCode");
+        string linkId = NodeId("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SIG");
+        string remoteId = NodeId("SQLPROD02", "SigDb", "Functions", "dbo", "fns_Sig_Open_GetTransactionCode");
+
+        Assert.Contains(catalog.Edges, e => e.From == callerId && e.To == linkId);
+        Assert.Contains(catalog.Edges, e => e.From == linkId && e.To == remoteId);
+        Assert.Empty(catalog.OrphanedReferences);
+        Assert.Single(catalog.SystemReferences);
+
+        CatalogLinkedServerReference reference = Assert.Single(catalog.LinkedServerReferences);
+        Assert.Equal(remoteId, reference.To);
+        Assert.True(reference.Dynamic);
     }
 
     public void Dispose()
