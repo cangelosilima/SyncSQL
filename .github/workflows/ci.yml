@@ -79,13 +79,16 @@ jobs:
           dotnet test SyncSql.slnx --configuration Release --no-build
           --logger "console;verbosity=normal"
           --logger "trx;LogFileName=test-results.trx"
+          --collect "XPlat Code Coverage"
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cli-test-results-${{ matrix.os }}
-          path: cli/tests/**/TestResults/*.trx
+          path: |
+            cli/tests/**/TestResults/*.trx
+            cli/tests/**/TestResults/**/coverage.cobertura.xml
           if-no-files-found: ignore
 
   site:
@@ -113,7 +116,15 @@ jobs:
         run: npm ci
 
       - name: Test
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload site coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-coverage-${{ matrix.os }}
+          path: site/coverage/
+          if-no-files-found: ignore
 
       # GitHub is the enforcement point for the vendored browser model. GitLab
       # Pages deliberately treats it as optional so the core catalog still

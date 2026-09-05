@@ -17,7 +17,7 @@ public sealed class CatalogBuilder(
     ILineageAnalyzerResolver lineageAnalyzerResolver,
     IGitHistoryMiner gitHistoryMiner,
     IMetricsHistoryStore metricsHistoryStore,
-    IClock clock,
+    TimeProvider timeProvider,
     ILogger<CatalogBuilder> logger) : ICatalogBuilder
 {
     public async Task<Core.Domain.Catalog> BuildAsync(CatalogBuildRequest request, CancellationToken cancellationToken)
@@ -114,7 +114,7 @@ public sealed class CatalogBuilder(
 
         return new Core.Domain.Catalog
         {
-            GeneratedAt = clock.UtcNow,
+            GeneratedAt = timeProvider.GetUtcNow(),
             Servers = [.. nodes.Select(n => n.Server).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)],
             TypeCounts = typeCounts,
             Nodes = nodes,

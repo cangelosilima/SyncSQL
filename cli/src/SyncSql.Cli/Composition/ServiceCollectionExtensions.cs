@@ -15,7 +15,7 @@ internal static class ServiceCollectionExtensions
 {
     public static void AddSyncSqlServices(IServiceCollection services)
     {
-        services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton(TimeProvider.System);
         // The environment stays the last-resort credential source; `sync` layers its --db-user/
         // --db-password/--credentials-file parameters on top of whatever this returns.
         services.AddSingleton<ICredentialProvider, EnvironmentCredentialProvider>();

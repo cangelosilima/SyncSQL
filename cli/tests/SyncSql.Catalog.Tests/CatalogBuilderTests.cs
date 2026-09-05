@@ -14,7 +14,7 @@ public sealed class CatalogBuilderTests : IDisposable
     private readonly ILineageAnalyzer _mssqlAnalyzer = Substitute.For<ILineageAnalyzer>();
     private readonly IGitHistoryMiner _gitHistoryMiner = Substitute.For<IGitHistoryMiner>();
     private readonly IMetricsHistoryStore _metricsHistoryStore = Substitute.For<IMetricsHistoryStore>();
-    private readonly IClock _clock = Substitute.For<IClock>();
+    private readonly TestTimeProvider _timeProvider = new(FixedNow);
     private static readonly DateTimeOffset FixedNow = DateTimeOffset.Parse("2026-06-01T12:00:00Z");
 
     public CatalogBuilderTests()
@@ -22,14 +22,13 @@ public sealed class CatalogBuilderTests : IDisposable
         _mssqlAnalyzer.Engine.Returns(DatabaseEngine.MsSql);
         _mssqlAnalyzer.Analyze(Arg.Any<string>()).Returns(LineageAnalysisResult.Empty);
         _lineageAnalyzerResolver.Resolve(DatabaseEngine.MsSql).Returns(_mssqlAnalyzer);
-        _clock.UtcNow.Returns(FixedNow);
     }
 
     private CatalogBuilder CreateBuilder() => new(
         _lineageAnalyzerResolver,
         _gitHistoryMiner,
         _metricsHistoryStore,
-        _clock,
+        _timeProvider,
         NullLogger<CatalogBuilder>.Instance);
 
     private void WriteObjectFile(
@@ -92,7 +91,7 @@ public sealed class CatalogBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildAsync_EmptyTree_ProducesEmptyCatalogAtGeneratedAtFromClock()
+    public async Task BuildAsync_EmptyTree_ProducesEmptyCatalogAtGeneratedAtFromTimeProvider()
     {
         CatalogBuilder builder = CreateBuilder();
 

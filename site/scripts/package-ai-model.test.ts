@@ -8,6 +8,20 @@ import { describe, expect, it } from 'vitest'
 const script = path.resolve('scripts/package-ai-model.mjs')
 
 describe('optional AI model packaging', () => {
+  it.each(['true', 'false'])('preserves vendored checksums with core.autocrlf=%s', (autocrlf) => {
+    const modelPath = 'site/vendor/ai/all-MiniLM-L6-v2'
+    const manifest = JSON.parse(readFileSync(path.resolve('..', modelPath, 'manifest.json'), 'utf8')) as {
+      files: { path: string; size: number; sha256: string }[]
+    }
+    for (const entry of manifest.files.filter((file) => !file.path.endsWith('.onnx'))) {
+      // Apply checkout filters to committed bytes using the working tree's attributes.
+      // This reproduces Windows checkout conversion even when this test runs on Linux.
+      const bytes = execFileSync('git', ['-c', `core.autocrlf=${autocrlf}`, 'cat-file', '--filters', `HEAD:${modelPath}/${entry.path}`])
+      expect(bytes.length, entry.path).toBe(entry.size)
+      expect(createHash('sha256').update(bytes).digest('hex'), entry.path).toBe(entry.sha256)
+    }
+  })
+
   it('packages verified files and enables the capability', () => {
     const fixture = createFixture('real model bytes')
     run([], fixture.source, fixture.output)

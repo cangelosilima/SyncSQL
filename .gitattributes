@@ -4,4 +4,7 @@ grammar/**/Generated/*.cs -whitespace
 
 # Browser AI weights are vendored for same-origin GitLab Pages delivery, but
 # kept outside Vite's public tree so an unresolved pointer is never published.
+# Checksums cover the exact upstream bytes, including line endings. Disable
+# text conversion for every vendored asset, even on core.autocrlf=true checkouts.
+site/vendor/ai/** -text
 site/vendor/ai/**/*.onnx filter=lfs diff=lfs merge=lfs -text
