@@ -31,6 +31,15 @@ export function getEdgeColumns(index: CatalogIndex, fromId: string, toId: string
   return index.edgeColumns.get(`${fromId}|${toId}`) ?? []
 }
 
+/**
+ * True when nothing but dynamically-built SQL produced this edge - the parser found
+ * it inside an OPENQUERY body or an EXEC'd string, not on the parse tree. Worth
+ * showing, because it is a weaker claim than an ordinary reference.
+ */
+export function isDynamicEdge(index: CatalogIndex, fromId: string, toId: string): boolean {
+  return index.dynamicEdges.has(`${fromId}|${toId}`)
+}
+
 /** Marks a synthetic node id as a bundle rather than a real catalog object. */
 export const BUNDLE_ID_PREFIX = '__bundle__'
 

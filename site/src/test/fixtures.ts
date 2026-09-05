@@ -44,5 +44,7 @@ export function makeCatalog(overrides: Partial<Catalog> = {}): Catalog {
     recentChanges: overrides.recentChanges ?? [],
     coChangePairs: overrides.coChangePairs ?? [],
     orphanedReferences: overrides.orphanedReferences,
+    systemReferences: overrides.systemReferences,
+    linkedServerReferences: overrides.linkedServerReferences,
   }
 }

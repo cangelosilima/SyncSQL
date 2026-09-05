@@ -1,4 +1,10 @@
-import type { Catalog, CatalogLinkedServerReference, CatalogNode, CatalogOrphanedReference } from '../types'
+import type {
+  Catalog,
+  CatalogLinkedServerReference,
+  CatalogNode,
+  CatalogOrphanedReference,
+  CatalogSystemReference,
+} from '../types'
 
 export interface CatalogIndex {
   catalog: Catalog
@@ -10,6 +16,10 @@ export interface CatalogIndex {
   tree: TreeServer[]
   /** Node id -> orphaned references found in that node's own DDL. */
   orphanedByFrom: Map<string, CatalogOrphanedReference[]>
+  /** Node id -> the engine-provided objects that node's DDL uses (sp_executesql, sys.*, DBMS_*). */
+  systemRefsByFrom: Map<string, CatalogSystemReference[]>
+  /** "from|to" for every edge that only dynamically-built SQL produced (see CatalogEdge.dynamic). */
+  dynamicEdges: Set<string>
   /** Linked server / database link node id -> every reference the fleet makes through it. */
   linkedServerRefsByLink: Map<string, CatalogLinkedServerReference[]>
   /** Node id -> the references that object makes across a linked server / database link. */
@@ -78,12 +88,14 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
   const outgoing = new Map<string, string[]>()
   const incoming = new Map<string, string[]>()
   const edgeColumns = new Map<string, string[]>()
+  const dynamicEdges = new Set<string>()
   for (const edge of catalog.edges) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, [])
     outgoing.get(edge.from)!.push(edge.to)
     if (!incoming.has(edge.to)) incoming.set(edge.to, [])
     incoming.get(edge.to)!.push(edge.from)
     if (edge.columns && edge.columns.length > 0) edgeColumns.set(`${edge.from}|${edge.to}`, edge.columns)
+    if (edge.dynamic) dynamicEdges.add(`${edge.from}|${edge.to}`)
   }
 
   const tree = buildTree(catalog.nodes)
@@ -92,6 +104,12 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
   for (const ref of catalog.orphanedReferences ?? []) {
     if (!orphanedByFrom.has(ref.from)) orphanedByFrom.set(ref.from, [])
     orphanedByFrom.get(ref.from)!.push(ref)
+  }
+
+  const systemRefsByFrom = new Map<string, CatalogSystemReference[]>()
+  for (const ref of catalog.systemReferences ?? []) {
+    if (!systemRefsByFrom.has(ref.from)) systemRefsByFrom.set(ref.from, [])
+    systemRefsByFrom.get(ref.from)!.push(ref)
   }
 
   const linkedServerRefsByLink = new Map<string, CatalogLinkedServerReference[]>()
@@ -111,6 +129,8 @@ export function buildIndex(catalog: Catalog): CatalogIndex {
     edgeColumns,
     tree,
     orphanedByFrom,
+    systemRefsByFrom,
+    dynamicEdges,
     linkedServerRefsByLink,
     linkedServerRefsByFrom,
   }

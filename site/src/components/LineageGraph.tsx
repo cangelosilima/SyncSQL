@@ -13,6 +13,8 @@ interface EdgeColumnData extends Record<string, unknown> {
   from: string
   to: string
   columns: string[]
+  /** Only dynamically-built SQL produced this edge (see CatalogEdge.dynamic). */
+  dynamic?: boolean
 }
 
 interface LineageGraphProps {
@@ -87,11 +89,16 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         if (!idSet.has(to)) continue
         const columns = index.edgeColumns.get(`${from}|${to}`) ?? []
         const hasColumns = columns.length > 0
+        // An edge only dynamically-built SQL produced is drawn dashed: the same
+        // relationship, held with less certainty than one read off the parse tree.
+        const dynamic = index.dynamicEdges.has(`${from}|${to}`)
         const label = hasColumns
           ? columns.length > EDGE_LABEL_CAP
             ? `${columns.slice(0, EDGE_LABEL_CAP).join(', ')}, +${columns.length - EDGE_LABEL_CAP} (click)`
             : columns.join(', ')
-          : undefined
+          : dynamic
+            ? 'dynamic'
+            : undefined
         flowEdges.push({
           id: `${from}->${to}`,
           source: from,
@@ -101,8 +108,12 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
           labelStyle: { fill: 'var(--text-muted)', fontSize: 10 },
           labelBgStyle: { fill: 'var(--surface)' },
           labelBgPadding: [3, 2],
-          style: { stroke: hasColumns ? 'var(--accent)' : 'var(--border)', strokeWidth: hasColumns ? 1.5 : 1 },
-          data: { from, to, columns },
+          style: {
+            stroke: hasColumns ? 'var(--accent)' : 'var(--border)',
+            strokeWidth: hasColumns ? 1.5 : 1,
+            strokeDasharray: dynamic ? '4 3' : undefined,
+          },
+          data: { from, to, columns, dynamic },
         })
       }
     }

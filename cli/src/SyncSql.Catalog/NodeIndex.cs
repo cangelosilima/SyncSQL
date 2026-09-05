@@ -174,7 +174,13 @@ internal sealed class NodeIndex
         // is in the catalog by construction, so this only ever fires on a spelled-out qualifier.
         if (targetDatabase is not null && !HasDatabase(targetServer, targetDatabase))
         {
-            return ReferenceResolution.External(viaLink);
+            // "master.dbo.xp_cmdshell" lands here rather than below, because master is usually not
+            // extracted. It is still a built-in, and saying so is more useful than "outside the catalog":
+            // nothing was ever going to extract it. Nothing in the catalog can be shadowed by this, since
+            // by definition no node lives in a database that isn't there.
+            return SystemObjectCatalog.IsSystemObject(fromNode.Engine, reference)
+                ? ReferenceResolution.System
+                : ReferenceResolution.External(viaLink);
         }
 
         bool databaseWasStated = statedDatabase is not null;

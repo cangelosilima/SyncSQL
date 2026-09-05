@@ -45,24 +45,28 @@ export function toCsv<T>(rows: readonly T[], columns: readonly CsvColumn<T>[], d
   return lines.join(ROW_SEPARATOR) + ROW_SEPARATOR
 }
 
-/** Turns an object id (or any label) into a filename-safe stem, so "SQLPROD01/AppDb/Tables/dbo/Orders" downloads as something a filesystem accepts. */
-export function csvFileName(...parts: (string | null | undefined)[]): string {
+/**
+ * Turns an object id (or any label) into a filename-safe stem plus the given
+ * extension, so "SQLPROD01/AppDb/Tables/dbo/Orders" downloads as something a
+ * filesystem accepts. Shared with the XLSX export so both produce the same name
+ * for the same object, differing only in suffix.
+ */
+export function exportFileName(extension: string, ...parts: (string | null | undefined)[]): string {
   const stem = parts
     .filter((part): part is string => Boolean(part && part.trim()))
     .join('-')
     .replace(/[^A-Za-z0-9._-]+/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^-|-$/g, '')
-  return `${stem || 'syncsql-export'}.csv`
+  return `${stem || 'syncsql-export'}.${extension}`
 }
 
-/**
- * Saves CSV text as a download. The UTF-8 BOM is deliberate: without it Excel
- * reads the file in the machine's ANSI codepage and mangles every accented
- * object name and description - the exact content this export exists to carry.
- */
-export function downloadCsv(csv: string, filename: string): void {
-  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+export function csvFileName(...parts: (string | null | undefined)[]): string {
+  return exportFileName('csv', ...parts)
+}
+
+/** Hands a blob to the browser as a download. */
+export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -71,4 +75,13 @@ export function downloadCsv(csv: string, filename: string): void {
   anchor.click()
   document.body.removeChild(anchor)
   URL.revokeObjectURL(url)
+}
+
+/**
+ * Saves CSV text as a download. The UTF-8 BOM is deliberate: without it Excel
+ * reads the file in the machine's ANSI codepage and mangles every accented
+ * object name and description - the exact content this export exists to carry.
+ */
+export function downloadCsv(csv: string, filename: string): void {
+  downloadBlob(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }), filename)
 }

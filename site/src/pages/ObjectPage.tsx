@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
@@ -8,11 +8,15 @@ import MetricsPanels from '../components/MetricsPanels'
 import DiffView from '../components/DiffView'
 import RelatedObjects from '../components/RelatedObjects'
 import CsvExportButton from '../components/CsvExportButton'
+import XlsxExportButton from '../components/XlsxExportButton'
 import HelpButton from '../components/HelpButton'
 import { isLinkNode, qualifiedRefName } from '../lib/catalog'
 import { epochOf } from '../lib/analytics'
 import { csvFileName } from '../lib/csv'
+import { xlsxFileName } from '../lib/xlsx'
+import { objectWorkbookSheets } from '../lib/catalogXlsx'
 import { columnColumns, dependencyColumns, dependencyRows, grantColumns, objectColumns } from '../lib/catalogCsv'
+import { getColumnConsumers, getColumnUsageCount, getColumnUsageCounts } from '../lib/columnLineage'
 import type { CatalogNode, CatalogObjectVersion } from '../types'
 
 /** Synthetic sha standing in for the object's current (uncommitted-to-history) DDL, selectable in compare mode alongside real revisions. */
@@ -34,6 +38,7 @@ export default function ObjectPage() {
   const outgoing = index?.outgoing.get(id) ?? []
   const incoming = index?.incoming.get(id) ?? []
   const orphanedRefs = index?.orphanedByFrom.get(id) ?? []
+  const systemRefs = index?.systemRefsByFrom.get(id) ?? []
   const refsThroughThisLink = index?.linkedServerRefsByLink.get(id) ?? []
   const refsAcrossLinks = index?.linkedServerRefsByFrom.get(id) ?? []
 
@@ -49,6 +54,23 @@ export default function ObjectPage() {
     }
     return [...byTarget.values()].sort((a, b) => a.label.localeCompare(b.label))
   }, [refsThroughThisLink])
+
+  // Which column's lineage is open, mirrored to ?column= so the view is linkable -
+  // "here is who reads Orders.CustomerId" is a thing worth sending someone.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedColumn = searchParams.get('column')
+  function selectColumn(column: string | null) {
+    const next = new URLSearchParams(searchParams)
+    if (column) next.set('column', column)
+    else next.delete('column')
+    setSearchParams(next, { replace: true })
+  }
+
+  const columnUsage = useMemo(() => (index ? getColumnUsageCounts(index, id) : new Map<string, number>()), [index, id])
+  const columnConsumers = useMemo(
+    () => (index && selectedColumn ? getColumnConsumers(index, id, selectedColumn) : []),
+    [index, id, selectedColumn],
+  )
 
   const [viewingVersion, setViewingVersion] = useState<CatalogObjectVersion | null>(null)
   const [compareMode, setCompareMode] = useState(false)
@@ -122,6 +144,11 @@ export default function ObjectPage() {
           filename={csvFileName(node.id, 'details')}
           label="Export details CSV"
         />
+        <XlsxExportButton
+          sheets={() => objectWorkbookSheets(index, node)}
+          filename={xlsxFileName(node.id)}
+          title="Download every section of this page as one workbook - a worksheet per section"
+        />
       </div>
 
       {orphanedRefs.length > 0 && (
@@ -140,6 +167,24 @@ export default function ObjectPage() {
             ))}
           </ul>
         </div>
+      )}
+
+      {systemRefs.length > 0 && (
+        <>
+          <h2>System objects referenced</h2>
+          <p className="muted overview-panel-hint">
+            Objects the database engine provides rather than anything the pipeline extracts - <code>sp_executesql</code>,{' '}
+            <code>sys.*</code>, Oracle&apos;s <code>DBMS_*</code>. They resolve to nothing in the catalog, but they are
+            not missing, so they are listed here instead of counted as orphaned references.
+          </p>
+          <span className="column-tags">
+            {systemRefs.map((ref, i) => (
+              <span key={`${ref.database ?? ''}|${ref.schema ?? ''}|${ref.name}|${i}`} className="column-tag">
+                {qualifiedRefName(ref)}
+              </span>
+            ))}
+          </span>
+        </>
       )}
 
       {isLinkNode(node) && (
@@ -208,6 +253,14 @@ export default function ObjectPage() {
                         <code>{qualifiedRefName(ref)}</code> <span className="muted">(not extracted)</span>
                       </>
                     )}
+                    {ref.dynamic && (
+                      <span
+                        className="column-tag column-tag--dynamic"
+                        title="Recovered from SQL built as a string at runtime (an OPENQUERY body, an EXEC ... AT link) rather than read off the parse tree."
+                      >
+                        dynamic
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -228,18 +281,50 @@ export default function ObjectPage() {
                 <th>Name</th>
                 <th>Type</th>
                 <th>Description</th>
+                <th>Used by</th>
               </tr>
             </thead>
             <tbody>
-              {node.columns.map((col) => (
-                <tr key={col.name}>
-                  <td>{col.name}</td>
-                  <td className="mono-cell">{col.dataType ?? <span className="muted">-</span>}</td>
-                  <td>{col.description ?? <span className="muted">-</span>}</td>
-                </tr>
-              ))}
+              {node.columns.map((col) => {
+                const uses = getColumnUsageCount(columnUsage, col.name)
+                const open = selectedColumn?.toLowerCase() === col.name.toLowerCase()
+                return (
+                  <tr key={col.name} className={open ? 'columns-row--selected' : undefined}>
+                    <td>{col.name}</td>
+                    <td className="mono-cell">{col.dataType ?? <span className="muted">-</span>}</td>
+                    <td>{col.description ?? <span className="muted">-</span>}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="column-lineage-btn"
+                        aria-expanded={open}
+                        onClick={() => selectColumn(open ? null : col.name)}
+                        title={
+                          uses > 0
+                            ? `Show the ${uses} object(s) known to reference ${col.name}`
+                            : `No object in the catalog is known to reference ${col.name}`
+                        }
+                      >
+                        {uses > 0 ? `${uses} object${uses === 1 ? '' : 's'}` : 'none'}
+                        <span className="column-lineage-btn-caret" aria-hidden="true">
+                          {open ? ' ▾' : ' ▸'}
+                        </span>
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
+
+          {selectedColumn && (
+            <ColumnLineagePanel
+              node={node}
+              column={selectedColumn}
+              consumers={columnConsumers}
+              onClose={() => selectColumn(null)}
+            />
+          )}
         </>
       )}
 
@@ -407,6 +492,63 @@ export default function ObjectPage() {
             <Link to={`/lineage?focus=${encodeURIComponent(node.id)}`}>Open in full lineage explorer &rarr;</Link>
           </div>
           <LineageGraph nodeIds={neighborhoodIds} focusId={node.id} height={360} maxNodes={NEIGHBORHOOD_GRAPH_CAP} />
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Lineage for one column: the objects whose DDL was seen reading it, and a graph of just
+ * those. Deliberately one-directional - see lib/columnLineage.ts for why "what feeds this
+ * column" isn't shown rather than guessed at.
+ */
+function ColumnLineagePanel({
+  node,
+  column,
+  consumers,
+  onClose,
+}: {
+  node: CatalogNode
+  column: string
+  consumers: CatalogNode[]
+  onClose: () => void
+}) {
+  return (
+    <div className="column-lineage-panel">
+      <div className="lineage-graph-header">
+        <h3>
+          Lineage for <code>{column}</code>
+        </h3>
+        <div className="section-actions">
+          <Link to={`/lineage?focus=${encodeURIComponent(node.id)}`}>Open in Lineage &rarr;</Link>
+          <button type="button" className="lineage-nav-clear" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+
+      {consumers.length === 0 ? (
+        <p className="muted">
+          No object in the catalog is known to reference <code>{column}</code>. That is not proof nothing does: the
+          signal comes from qualified &quot;alias.column&quot; references detected in DDL text, so it misses{' '}
+          <code>SELECT *</code>, computed expressions and anything built at runtime.
+        </p>
+      ) : (
+        <>
+          <p className="muted overview-panel-hint">
+            {consumers.length} object{consumers.length === 1 ? '' : 's'} read{consumers.length === 1 ? 's' : ''}{' '}
+            <code>{column}</code>. What <em>feeds</em> this column isn&apos;t shown: that needs expression-level lineage
+            the catalog doesn&apos;t record, and a same-name guess would not be an answer.
+          </p>
+          <ul className="related-list">
+            {consumers.map((consumer) => (
+              <li key={consumer.id}>
+                <Link to={`/object/${consumer.id}`}>{consumer.qualifiedName}</Link> <TypeBadge type={consumer.type} />
+              </li>
+            ))}
+          </ul>
+          <LineageGraph nodeIds={[node.id, ...consumers.map((c) => c.id)]} focusId={node.id} height={280} />
         </>
       )}
     </div>
