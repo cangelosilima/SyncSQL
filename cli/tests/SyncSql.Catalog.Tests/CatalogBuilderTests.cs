@@ -482,6 +482,15 @@ public sealed class CatalogBuilderTests : IDisposable
         string path = Path.Combine(_objectsRoot, ExtractedObjectFile.RelativePath("SQLPROD01", "AppDb", "dbo", "Tables", "Orders").Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, ExtractedObjectFile.Write(obj), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("CREATE TABLE dbo.Orders (Id INT);", node.Ddl);
+        Assert.Equal("Cabeçalho do pedido", node.Description);
+    }
+
     private static LineageAnalysisResult Refs(params ObjectRef[] objectRefs) => new()
     {
         ObjectRefs = objectRefs,
@@ -533,9 +542,8 @@ public sealed class CatalogBuilderTests : IDisposable
         CatalogBuilder builder = CreateBuilder();
         Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
 
-        CatalogNode node = Assert.Single(catalog.Nodes);
-        Assert.Equal("CREATE TABLE dbo.Orders (Id INT);", node.Ddl);
-        Assert.Equal("Cabeçalho do pedido", node.Description);
+        CatalogEdge edge = Assert.Single(catalog.Edges);
+        Assert.True(edge.Dynamic);
     }
 
     [Fact]
@@ -551,8 +559,6 @@ public sealed class CatalogBuilderTests : IDisposable
         Assert.Equal("Pedidos_Coleção", node.Name);
         Assert.Equal("vendas.Pedidos_Coleção", node.QualifiedName);
         Assert.Equal(NodeId("SQLPROD01", "AppDb", "Tables", "vendas", "Pedidos_Coleção"), node.Id);
-        CatalogEdge edge = Assert.Single(catalog.Edges);
-        Assert.True(edge.Dynamic);
     }
 
     /// <summary>Once anything reads the relationship off real DDL, the edge stops being a best-effort finding.</summary>
