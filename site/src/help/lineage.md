@@ -17,9 +17,21 @@ as they do on Explorer) decide which objects enter the graph.
   drill-down focus, hop radius and content search all live in the URL.
   That link is the useful thing to paste into an incident write-up.
 
-Arriving from an object page's "Open in Lineage" link seeds a real filter
-token for that object, so clearing the drill-down narrows back to it rather
-than dumping you into the whole catalog.
+**Filters mean different things depending on whether you are navigating.**
+With nothing focused, they select from the whole catalog. Once you have
+drilled into an object, they narrow *that object's neighborhood* instead - so
+adding "Type is StoredProcedures" while looking at a table shows the
+procedures around it, rather than asking for something that is both. The
+focused object always stays on screen, and the line under the breadcrumb says
+how much of its neighborhood is being hidden.
+
+**Clear focus** converts the navigation into a real name filter as it
+releases it, so you land on that one object rather than the whole catalog.
+
+An edge drawn **dashed and labelled `dynamic`** was recovered from SQL built
+as a string at runtime - an `OPENQUERY` body, an `EXEC` of a literal - rather
+than read off the parse tree. It is a real relationship, held with less
+certainty than the solid ones.
 
 ## Access
 

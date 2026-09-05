@@ -31,8 +31,12 @@ metrics are missing.
 References that resolve to nothing the lookup can reach: the object's own
 database, the rest of its server, or a server one linked server away.
 These are usually a renamed or dropped target whose caller was never
-updated. A reference into a database nobody extracts is *not* counted here,
-so this panel stays quiet on partially-extracted estates.
+updated. The panel's value is in what it leaves out, so several things are
+deliberately not counted: a reference into a database nobody extracts, a
+system object the engine provides (`sp_executesql`, `sys.*`), a temp table or
+CTE the script creates for itself, an ambiguous name, and anything recovered
+from SQL built as a string at runtime. That keeps it quiet on
+partially-extracted estates and on ordinary, correct code.
 
 Only the first 10 are listed; the count in the heading is the real total.
 
