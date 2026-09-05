@@ -16,6 +16,7 @@ staging/
 site/node_modules/
 site/dist/
 site/*.tsbuildinfo
+coverage/
 
 # .NET CLI build output
 cli/**/bin/

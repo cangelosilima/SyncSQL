@@ -170,8 +170,11 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
         Commit? current = null;
         List<string>? currentFiles = null;
 
-        foreach (string line in result.StandardOutput.Split('\n'))
+        // TrimEnd('\r') so a CRLF-separated capture cannot leave a stray CR on the end of every
+        // commit subject (the last field on the line, and the one that reaches the site).
+        foreach (string rawLine in result.StandardOutput.Split('\n'))
         {
+            string line = rawLine.TrimEnd('\r');
             if (line.StartsWith(CommitMarker, StringComparison.Ordinal))
             {
                 if (current is not null)

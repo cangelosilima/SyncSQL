@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿using System.Text;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
@@ -13,7 +14,7 @@ public sealed class CatalogBuilderTests : IDisposable
     private readonly ILineageAnalyzer _mssqlAnalyzer = Substitute.For<ILineageAnalyzer>();
     private readonly IGitHistoryMiner _gitHistoryMiner = Substitute.For<IGitHistoryMiner>();
     private readonly IMetricsHistoryStore _metricsHistoryStore = Substitute.For<IMetricsHistoryStore>();
-    private readonly IClock _clock = Substitute.For<IClock>();
+    private readonly TestTimeProvider _timeProvider = new(FixedNow);
     private static readonly DateTimeOffset FixedNow = DateTimeOffset.Parse("2026-06-01T12:00:00Z");
 
     public CatalogBuilderTests()
@@ -21,14 +22,13 @@ public sealed class CatalogBuilderTests : IDisposable
         _mssqlAnalyzer.Engine.Returns(DatabaseEngine.MsSql);
         _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(LineageAnalysisResult.Empty);
         _lineageAnalyzerResolver.Resolve(DatabaseEngine.MsSql).Returns(_mssqlAnalyzer);
-        _clock.UtcNow.Returns(FixedNow);
     }
 
     private CatalogBuilder CreateBuilder() => new(
         _lineageAnalyzerResolver,
         _gitHistoryMiner,
         _metricsHistoryStore,
-        _clock,
+        _timeProvider,
         NullLogger<CatalogBuilder>.Instance);
 
     private void WriteObjectFile(
@@ -91,7 +91,7 @@ public sealed class CatalogBuilderTests : IDisposable
     }
 
     [Fact]
-    public async Task BuildAsync_EmptyTree_ProducesEmptyCatalogAtGeneratedAtFromClock()
+    public async Task BuildAsync_EmptyTree_ProducesEmptyCatalogAtGeneratedAtFromTimeProvider()
     {
         CatalogBuilder builder = CreateBuilder();
 
@@ -446,6 +446,51 @@ public sealed class CatalogBuilderTests : IDisposable
         Assert.Equal("VendorDb", reference.Database);
     }
 
+    [Fact]
+    public async Task BuildAsync_NestedTree_ProducesForwardSlashIdsAndPathsOnEveryPlatform()
+    {
+        // The tree is walked with the platform's own separator (a backslash on Windows) but its ids
+        // are the keys the site, the metrics snapshots and the git history all join on, so they
+        // stay '/'-separated no matter which OS built the catalog.
+        WriteObjectFile("SQLPROD01", "AppDb", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id INT);");
+        CatalogBuilder builder = CreateBuilder();
+
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders", node.Id);
+        Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders.sql", node.Path);
+        Assert.DoesNotContain('\\', node.Id);
+        Assert.DoesNotContain('\\', node.Path);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ObjectFileWrittenWithAUtf8Bom_StillParsesHeaderAndBody()
+    {
+        // A tree extracted by the PowerShell version this CLI replaced: same format, BOM in front.
+        ExtractedObject obj = new()
+        {
+            Server = "SQLPROD01",
+            Database = "AppDb",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "Orders",
+            Ddl = "CREATE TABLE dbo.Orders (Id INT);",
+            Engine = DatabaseEngine.MsSql,
+            Description = "Cabeçalho do pedido",
+        };
+        string path = Path.Combine(_objectsRoot, ExtractedObjectFile.RelativePath("SQLPROD01", "AppDb", "dbo", "Tables", "Orders").Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, ExtractedObjectFile.Write(obj), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        CatalogBuilder builder = CreateBuilder();
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("CREATE TABLE dbo.Orders (Id INT);", node.Ddl);
+        Assert.Equal("Cabeçalho do pedido", node.Description);
+    }
+
     private static LineageAnalysisResult Refs(params ObjectRef[] objectRefs) => new()
     {
         ObjectRefs = objectRefs,
@@ -499,6 +544,21 @@ public sealed class CatalogBuilderTests : IDisposable
 
         CatalogEdge edge = Assert.Single(catalog.Edges);
         Assert.True(edge.Dynamic);
+    }
+
+    [Fact]
+    public async Task BuildAsync_NonAsciiSchemaAndObjectNames_RoundTripThroughTheFileSystem()
+    {
+        // File names are UTF-8 on both platforms; nothing here may depend on the active code page.
+        WriteObjectFile("SQLPROD01", "AppDb", "Tables", "vendas", "Pedidos_Coleção", "CREATE TABLE vendas.Pedidos_Coleção (Id INT);");
+        CatalogBuilder builder = CreateBuilder();
+
+        Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("Pedidos_Coleção", node.Name);
+        Assert.Equal("vendas.Pedidos_Coleção", node.QualifiedName);
+        Assert.Equal(NodeId("SQLPROD01", "AppDb", "Tables", "vendas", "Pedidos_Coleção"), node.Id);
     }
 
     /// <summary>Once anything reads the relationship off real DDL, the edge stops being a best-effort finding.</summary>

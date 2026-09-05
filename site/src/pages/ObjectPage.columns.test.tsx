@@ -37,7 +37,7 @@ vi.mock('../components/LineageGraph', () => ({
 
 function renderObject(id: string) {
   return render(
-    <MemoryRouter initialEntries={[`/object/${id}`]}>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={[`/object/${id}`]}>
       <Routes>
         <Route path="/object/*" element={<ObjectPage />} />
       </Routes>
@@ -84,7 +84,7 @@ describe('ObjectPage column lineage', () => {
 
   it('opens the column named in ?column= without a click', () => {
     render(
-      <MemoryRouter initialEntries={['/object/orders?column=CustomerId']}>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={['/object/orders?column=CustomerId']}>
         <Routes>
           <Route path="/object/*" element={<ObjectPage />} />
         </Routes>

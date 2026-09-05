@@ -172,6 +172,16 @@ public static class ExtractedObjectFile
         // silently costing the engine header and every "-- === Title ===" section, description,
         // column and grant included - so line endings are normalized here rather than trusted.
         string[] allLines = [.. lines.Select(line => line.EndsWith('\r') ? line[..^1] : line)];
+        if (allLines.Length > 0)
+        {
+            // StreamReader strips a byte-order mark, so File.ReadAllLines never shows one - but
+            // `git show` hands back the blob's bytes verbatim, and files written by the PowerShell
+            // extractor this format was ported from carry a UTF-8 BOM. Left in place it would break
+            // the '-- ' header scan on the very first line, pulling the whole header into the DDL
+            // and losing the engine with it.
+            allLines[0] = allLines[0].TrimStart('\uFEFF');
+        }
+
         int i = 0;
         DatabaseEngine? engine = null;
         while (i < allLines.Length && allLines[i].StartsWith("-- ", StringComparison.Ordinal))

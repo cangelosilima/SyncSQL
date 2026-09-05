@@ -16,7 +16,7 @@ namespace SyncSql.Extraction.MsSql;
 /// servers, and a best-effort replication publication snapshot. A direct port of
 /// SyncSql.MsSql.psm1's Export-SyncSqlMsSqlServer.
 /// </summary>
-public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) : IDatabaseObjectExtractor
+public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, TimeProvider timeProvider) : IDatabaseObjectExtractor
 {
     private static readonly IReadOnlyDictionary<string, string> TypeCodeMap = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -478,7 +478,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger) :
     /// </summary>
     private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(SqlConnection connection, string serverName, string database)
     {
-        DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
+        DateTimeOffset capturedAt = timeProvider.GetUtcNow();
         Dictionary<string, MetricsSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
 
         List<TableVolumeRow> volumeRows = await TryLoadAsync(

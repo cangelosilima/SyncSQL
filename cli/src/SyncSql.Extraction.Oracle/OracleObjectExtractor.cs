@@ -15,7 +15,7 @@ namespace SyncSql.Extraction.Oracle;
 /// SyncSql.Oracle.psm1's Export-SyncSqlOracleServer. Oracle has no "database" concept equivalent to
 /// MSSQL's, so the configured service name is used as the DatabaseName path segment.
 /// </summary>
-public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger) : IDatabaseObjectExtractor
+public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger, TimeProvider timeProvider) : IDatabaseObjectExtractor
 {
     public DatabaseEngine Engine => DatabaseEngine.Oracle;
 
@@ -261,7 +261,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger)
 
     private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(OracleConnection connection, string owner, string serverName, CancellationToken cancellationToken)
     {
-        DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
+        DateTimeOffset capturedAt = timeProvider.GetUtcNow();
         Dictionary<string, MetricsSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
 
         try

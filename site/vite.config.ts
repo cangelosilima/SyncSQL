@@ -7,4 +7,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
+  // The app intentionally ships the browser-side XLSX and graph runtimes as
+  // self-contained chunks. Keep Vite's warning threshold aligned with that
+  // deployment choice while retaining the useful dynamic split.
+  build: {
+    chunkSizeWarningLimit: 1000,
+  },
 })

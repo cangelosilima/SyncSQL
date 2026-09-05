@@ -171,6 +171,89 @@ public sealed class GitHistoryMinerTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task MineAsync_GitOutputSeparatedByCrlf_ParsesDdlAndSubjectWithoutStrayCarriageReturns()
+    {
+        // What a Windows capture used to look like: the log's subject is the last field on its
+        // line, and every marker line in the shown file ends in CR - which no '$'-anchored pattern
+        // in the object-file format matches, so the whole file collapsed into one DDL blob.
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        string log =
+            "@@COMMIT@@abc123@@COMMIT@@2026-01-01T00:00:00+00:00@@COMMIT@@Add Orders table\r\n" +
+            "objects/SQLPROD01/AppDb/Tables/dbo/Orders.sql\r\n";
+        string show =
+            "-- Engine:   mssql\r\n" +
+            "\r\n" +
+            "CREATE TABLE dbo.Orders (Id INT);\r\n" +
+            "\r\n" +
+            "-- === Columns ===\r\n" +
+            "-- [col] Id|int\r\n";
+
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("log")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, log, string.Empty));
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("show")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, show, string.Empty));
+
+        GitHistoryMiningResult result = await _miner.MineAsync(new GitHistoryMiningRequest
+        {
+            RepoRoot = _repoRoot,
+            PathPrefix = "objects",
+            KnownObjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SQLPROD01/AppDb/Tables/dbo/Orders" },
+        }, CancellationToken.None);
+
+        Assert.Equal("Add Orders table", result.RecentChanges[0].Message);
+        ObjectHistoryInfo info = Assert.Single(result.ObjectHistory).Value;
+        Assert.Equal("CREATE TABLE dbo.Orders (Id INT);", info.Versions[0].Ddl);
+    }
+
+    [Fact]
+    public async Task MineAsync_GitShowOutputStartingWithAUtf8Bom_StillParsesDdl()
+    {
+        // `git show` hands back the blob's bytes, byte-order mark included - files written by the
+        // PowerShell extractor have one, and it lands on the first header line.
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        string log =
+            "@@COMMIT@@abc123@@COMMIT@@2026-01-01T00:00:00+00:00@@COMMIT@@Add Orders table\n" +
+            "objects/SQLPROD01/AppDb/Tables/dbo/Orders.sql\n";
+
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("log")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, log, string.Empty));
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("show")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "\uFEFF-- Engine:   mssql\n\nCREATE TABLE dbo.Orders (Id INT);", string.Empty));
+
+        GitHistoryMiningResult result = await _miner.MineAsync(new GitHistoryMiningRequest
+        {
+            RepoRoot = _repoRoot,
+            PathPrefix = "objects",
+            KnownObjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SQLPROD01/AppDb/Tables/dbo/Orders" },
+        }, CancellationToken.None);
+
+        ObjectHistoryInfo info = Assert.Single(result.ObjectHistory).Value;
+        Assert.Equal("CREATE TABLE dbo.Orders (Id INT);", info.Versions[0].Ddl);
+    }
+
+    [Fact]
+    public async Task MineAsync_NonAsciiCommitSubject_IsPreservedVerbatim()
+    {
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        const string subject = "Adiciona descrição da coleção de pedidos";
+        string log =
+            $"@@COMMIT@@abc123@@COMMIT@@2026-01-01T00:00:00+00:00@@COMMIT@@{subject}\n" +
+            "objects/SQLPROD01/AppDb/Tables/dbo/Orders.sql\n";
+
+        _processRunner.RunAsync("git", Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, log, string.Empty));
+
+        GitHistoryMiningResult result = await _miner.MineAsync(new GitHistoryMiningRequest
+        {
+            RepoRoot = _repoRoot,
+            PathPrefix = "objects",
+            KnownObjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SQLPROD01/AppDb/Tables/dbo/Orders" },
+        }, CancellationToken.None);
+
+        Assert.Equal(subject, result.RecentChanges[0].Message);
+    }
+
     public void Dispose()
     {
         try
