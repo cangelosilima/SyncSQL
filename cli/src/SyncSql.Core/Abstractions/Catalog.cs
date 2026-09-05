@@ -20,6 +20,14 @@ public sealed record CatalogBuildRequest
 
     /// <summary>Root of the accumulating metrics history tree. Omit to skip - node.metrics is simply left empty.</summary>
     public string? MetricsRoot { get; init; }
+
+    /// <summary>
+    /// Whether lineage inference also recovers references from SQL built as a string at runtime
+    /// (<c>OPENQUERY</c>, <c>EXEC</c> of a string, a variable assembled and then executed). On by default;
+    /// <c>--no-dynamic-sql</c> turns it off for a build that wants only what the parse tree states
+    /// outright. See <see cref="LineageAnalysisOptions.DynamicSql"/>.
+    /// </summary>
+    public bool DynamicSql { get; init; } = true;
 }
 
 /// <summary>

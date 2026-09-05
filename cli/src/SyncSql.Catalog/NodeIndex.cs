@@ -21,6 +21,14 @@ internal enum ReferenceResolutionKind
     /// extracted, so it must not be reported as an orphan.
     /// </summary>
     External,
+
+    /// <summary>
+    /// The reference names something the engine itself provides - <c>sp_executesql</c>, <c>sys.objects</c>,
+    /// <c>DBMS_OUTPUT</c>. Also not dangling and also not an orphan, but distinct from
+    /// <see cref="External"/> because the reason is different and worth showing: this target isn't
+    /// "somewhere we don't extract", it's built into the database.
+    /// </summary>
+    System,
 }
 
 /// <summary>The outcome of one <see cref="NodeIndex.Resolve"/> lookup.</summary>
@@ -36,6 +44,8 @@ internal readonly record struct ReferenceResolution(ReferenceResolutionKind Kind
     public static readonly ReferenceResolution NotFound = new(ReferenceResolutionKind.NotFound, null);
 
     public static readonly ReferenceResolution Ambiguous = new(ReferenceResolutionKind.Ambiguous, null);
+
+    public static readonly ReferenceResolution System = new(ReferenceResolutionKind.System, null);
 }
 
 /// <summary>
@@ -164,14 +174,28 @@ internal sealed class NodeIndex
         // is in the catalog by construction, so this only ever fires on a spelled-out qualifier.
         if (targetDatabase is not null && !HasDatabase(targetServer, targetDatabase))
         {
-            return ReferenceResolution.External(viaLink);
+            // "master.dbo.xp_cmdshell" lands here rather than below, because master is usually not
+            // extracted. It is still a built-in, and saying so is more useful than "outside the catalog":
+            // nothing was ever going to extract it. Nothing in the catalog can be shadowed by this, since
+            // by definition no node lives in a database that isn't there.
+            return SystemObjectCatalog.IsSystemObject(fromNode.Engine, reference)
+                ? ReferenceResolution.System
+                : ReferenceResolution.External(viaLink);
         }
 
         bool databaseWasStated = statedDatabase is not null;
 
-        return string.IsNullOrWhiteSpace(reference.Schema)
+        ReferenceResolution resolution = string.IsNullOrWhiteSpace(reference.Schema)
             ? ResolveBare(reference.Name, targetServer, targetDatabase, viaLink)
             : ResolveQualified(fromNode, reference, targetServer, targetDatabase, databaseWasStated, viaLink);
+
+        // Built-ins are recognized only once the real lookup has come up empty, never before it. That
+        // ordering is the whole guard: a user object that happens to use a reserved-looking name - a
+        // hand-written dbo.sp_NightlyRollup - is found by the index and returned as itself, and the
+        // engine-built-in rules below only ever get to speak for a name nothing in the catalog answers to.
+        return resolution.Kind == ReferenceResolutionKind.NotFound && SystemObjectCatalog.IsSystemObject(fromNode.Engine, reference)
+            ? ReferenceResolution.System
+            : resolution;
     }
 
     private ReferenceResolution ResolveQualified(

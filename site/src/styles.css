@@ -999,6 +999,15 @@ a {
   color: var(--accent);
 }
 
+/* A reference recovered from SQL built as a string rather than read off the
+   parse tree. Dashed to match the dashed edges the graph draws for the same
+   relationships - a weaker claim, shown as one. */
+.column-tag--dynamic {
+  border-style: dashed;
+  font-style: italic;
+  cursor: help;
+}
+
 /* Grants */
 
 .mono-cell {
@@ -2220,4 +2229,37 @@ a {
 .markdown-code code {
   background: none;
   padding: 0;
+}
+
+/* Per-column lineage drill-down (object page Columns table) */
+
+.column-lineage-btn {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  border-radius: 2px;
+  padding: 0.05rem 0.4rem;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.column-lineage-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.column-lineage-btn-caret {
+  font-size: 0.65rem;
+}
+
+.columns-row--selected > td {
+  background: var(--surface-alt);
+}
+
+.column-lineage-panel {
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--surface-alt);
 }

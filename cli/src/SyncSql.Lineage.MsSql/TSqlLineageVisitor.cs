@@ -1,4 +1,5 @@
-﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using System.Text;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SyncSql.Core.Domain;
 
 namespace SyncSql.Lineage.MsSql;
@@ -9,12 +10,29 @@ namespace SyncSql.Lineage.MsSql;
 /// FROM-clause alias. Overriding Visit(T) rather than ExplicitVisit(T) is deliberate: the base
 /// ExplicitVisit(T) default already calls Visit(T) then AcceptChildren(this), so overriding only Visit
 /// gets automatic recursion into children for free.
+///
+/// Where the tree stops - SQL assembled into a string and executed at runtime - the dynamic overrides
+/// below hand the text to <see cref="DynamicSqlScanner"/> instead. Those are the only places string
+/// content is looked at, and only because they are the places T-SQL actually executes it: an ordinary
+/// literal in a SELECT list is still never treated as SQL.
 /// </summary>
-internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
+/// <param name="dynamicSql">Whether to scan dynamically-built SQL at all (see <see cref="Core.Abstractions.LineageAnalysisOptions"/>).</param>
+internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentVisitor
 {
+    /// <summary>One budget per object, shared by every nested scan this walk starts.</summary>
+    private readonly DynamicSqlScanner.Budget _budget = new();
     public List<ObjectRef> ObjectRefs { get; } = [];
     public Dictionary<string, ObjectRef> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<ColumnRef> ColumnRefs { get; } = [];
+
+    /// <summary>
+    /// Names a <c>WITH</c> clause introduces for the length of one statement. A CTE is referenced exactly
+    /// like a table, so the AST hands it back as an ordinary <see cref="NamedTableReference"/> - and since
+    /// no catalog object answers to it, every CTE used to surface as a dangling reference. The analyzer
+    /// strips unqualified references matching one of these once the walk is over (a CTE can be declared
+    /// after the query that reads it in a recursive form, so filtering mid-walk would be order-dependent).
+    /// </summary>
+    public HashSet<string> CommonTableExpressionNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     // ScriptDom hands back the parts of a 1- to 4-part name individually, so a cross-database
     // ("OtherDb.dbo.Orders") or cross-linked-server ("LNK.OtherDb.dbo.Orders") reference keeps the
@@ -24,12 +42,22 @@ internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
     // means the same thing as "not written".
     private static ObjectRef? FromSchemaObjectName(SchemaObjectName? name)
     {
-        if (name?.BaseIdentifier is null)
+        if (name?.BaseIdentifier?.Value is not { } baseName)
         {
             return null;
         }
 
-        return new ObjectRef(Empty(name.SchemaIdentifier?.Value), name.BaseIdentifier.Value)
+        // "#Staging" / "##Shared" is a temp table: a real object, but one that lives in tempdb for the
+        // length of a session and is created by this very script. Nothing extracts it and nothing ever
+        // will, so letting it through only produced a permanent "orphaned reference" for what is ordinary,
+        // correct T-SQL. Dropping it here rather than at resolution time also keeps it out of Aliases, so
+        // it stops contributing phantom entries to column tagging.
+        if (baseName.StartsWith('#'))
+        {
+            return null;
+        }
+
+        return new ObjectRef(Empty(name.SchemaIdentifier?.Value), baseName)
         {
             Database = Empty(name.DatabaseIdentifier?.Value),
             Server = Empty(name.ServerIdentifier?.Value),
@@ -37,6 +65,17 @@ internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
     }
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    // WITH cte AS (...) - remembered so the analyzer can drop the "references" that reading the CTE back
+    // produces. Overriding Visit still recurses into the CTE's own body, so real tables inside it are
+    // collected as usual.
+    public override void Visit(CommonTableExpression node)
+    {
+        if (node.ExpressionName?.Value is { } name && !string.IsNullOrWhiteSpace(name))
+        {
+            CommonTableExpressionNames.Add(name);
+        }
+    }
 
     // FROM/JOIN/INTO/UPDATE/DELETE targets - anything ScriptDom represents as a plain named table/view
     // reference.
@@ -104,22 +143,147 @@ internal sealed class TSqlLineageVisitor : TSqlFragmentVisitor
         });
     }
 
-    // EXEC/EXECUTE dbo.MyProc ...
+    // EXEC/EXECUTE dbo.MyProc ..., and the string forms - EXEC('...'), EXEC sp_executesql N'...',
+    // EXEC (@sql) AT LNK - whose body is only SQL at runtime.
     public override void Visit(ExecuteStatement node)
     {
-        if (node.ExecuteSpecification?.ExecutableEntity is not ExecutableProcedureReference
-            {
-                ProcedureReference.ProcedureReference.Name: { } procedureName,
-            })
+        if (node.ExecuteSpecification is not { } specification)
         {
             return;
         }
 
-        ObjectRef? objRef = FromSchemaObjectName(procedureName);
-        if (objRef is not null)
+        // "AT LNK" says the statement runs on a linked server, so whatever the body reaches lives there.
+        string? linkedServer = specification.LinkedServer?.Value;
+
+        switch (specification.ExecutableEntity)
         {
-            ObjectRefs.Add(objRef);
+            case ExecutableProcedureReference { ProcedureReference.ProcedureReference.Name: { } procedureName }:
+                if (FromSchemaObjectName(procedureName) is { } objRef)
+                {
+                    ObjectRefs.Add(linkedServer is null ? objRef : objRef with { Server = linkedServer });
+                }
+
+                // sp_executesql's own first argument is the statement being run, so it is dynamic SQL in
+                // exactly the same way EXEC('...') is - the procedure being called just happens to be the
+                // engine's rather than the caller's. Restricted to the procedures that actually execute
+                // their argument: a string passed to somebody's dbo.LogMessage is a message, not SQL, and
+                // scanning it would invent references out of log text.
+                if (ExecutesItsArgument(procedureName))
+                {
+                    ScanParameters(specification.ExecutableEntity, linkedServer);
+                }
+                break;
+
+            case ExecutableStringList strings:
+                // The pieces of "EXEC ('SELECT ... ' + @where)" are concatenated by the engine before it
+                // parses them, so they have to be reassembled before there is anything worth scanning.
+                ScanDynamic(BuildLiteralText(strings.Strings), linkedServer);
+                break;
         }
+    }
+
+    // OPENQUERY(LNK, 'select ...') - the one place a linked server and the remote SQL it runs sit right
+    // next to each other, and the reason a reference found in that literal can be attributed to LNK
+    // rather than left floating.
+    public override void Visit(OpenQueryTableReference node) =>
+        ScanDynamic(node.Query?.Value, node.LinkedServer?.Value);
+
+    // OPENROWSET(..., 'select ...') names a provider and connection string rather than a catalogued
+    // linked server, so its body is scanned without attributing it anywhere.
+    public override void Visit(OpenRowsetTableReference node) => ScanDynamic(node.Query?.Value, null);
+
+    // DECLARE @sql NVARCHAR(MAX) = '...' + @id + '...'
+    public override void Visit(DeclareVariableElement node) => ScanDynamic(BuildLiteralText(node.Value), null);
+
+    // SET @sql = '...' + @id + '...'
+    public override void Visit(SetVariableStatement node) => ScanDynamic(BuildLiteralText(node.Expression), null);
+
+    /// <summary>The system procedures whose argument is itself a batch to run.</summary>
+    private static readonly string[] SqlExecutingProcedures = ["sp_executesql", "sp_execute", "sp_prepexec"];
+
+    /// <summary>True when calling this procedure means "run the string I am passing you".</summary>
+    private static bool ExecutesItsArgument(SchemaObjectName name) =>
+        name.BaseIdentifier?.Value is { } procedure && SqlExecutingProcedures.Contains(procedure, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Scans the arguments of an EXEC, which is where <c>sp_executesql</c> keeps the statement it runs.</summary>
+    private void ScanParameters(ExecutableEntity entity, string? linkedServer)
+    {
+        if (entity.Parameters is null)
+        {
+            return;
+        }
+
+        foreach (ExecuteParameter parameter in entity.Parameters)
+        {
+            ScanDynamic(BuildLiteralText(parameter.ParameterValue), linkedServer);
+        }
+    }
+
+    private void ScanDynamic(string? sql, string? linkedServer)
+    {
+        if (dynamicSql)
+        {
+            DynamicSqlScanner.Scan(sql, linkedServer, 0, _budget, ObjectRefs);
+        }
+    }
+
+    /// <summary>
+    /// Flattens a string-building expression into the text it would produce, with every runtime value
+    /// (a variable, a function call, a column) simply left out. The result is not valid T-SQL and is not
+    /// meant to be - <see cref="DynamicSqlScanner"/> lexes rather than parses precisely so that an
+    /// incomplete fragment still yields the identifiers it contains.
+    /// </summary>
+    private static string? BuildLiteralText(ScalarExpression? expression)
+    {
+        if (expression is null)
+        {
+            return null;
+        }
+
+        StringBuilder builder = new();
+        Append(expression, builder, 0);
+        return builder.Length == 0 ? null : builder.ToString();
+
+        static void Append(ScalarExpression? node, StringBuilder builder, int depth)
+        {
+            // A concatenation is left-deep, so depth tracks the number of "+" operands, not nesting of
+            // different statements; a few dozen is already an unusually long one.
+            if (node is null || depth > 64)
+            {
+                return;
+            }
+
+            switch (node)
+            {
+                case StringLiteral literal:
+                    builder.Append(literal.Value);
+                    break;
+                case BinaryExpression { BinaryExpressionType: BinaryExpressionType.Add or BinaryExpressionType.Concat } binary:
+                    Append(binary.FirstExpression, builder, depth + 1);
+                    Append(binary.SecondExpression, builder, depth + 1);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private static string? BuildLiteralText(IList<ValueExpression>? expressions)
+    {
+        if (expressions is null || expressions.Count == 0)
+        {
+            return null;
+        }
+
+        StringBuilder builder = new();
+        foreach (ValueExpression expression in expressions)
+        {
+            if (BuildLiteralText(expression) is { } text)
+            {
+                builder.Append(text);
+            }
+        }
+        return builder.Length == 0 ? null : builder.ToString();
     }
 
     // alias.column / table.column references - only multi-part ones are useful for column-level
