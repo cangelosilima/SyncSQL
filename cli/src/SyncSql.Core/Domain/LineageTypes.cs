@@ -1,5 +1,20 @@
 ﻿namespace SyncSql.Core.Domain;
 
+/// <summary>Where in an object's DDL a reference was found, which is what decides how much to trust it.</summary>
+public enum ReferenceOrigin
+{
+    /// <summary>Read straight off the parse tree of the object's own DDL - the parser saw a real table/function/procedure reference.</summary>
+    Static,
+
+    /// <summary>
+    /// Recovered from SQL built as a string at runtime (a literal, a concatenation assigned to a variable,
+    /// an <c>OPENQUERY</c> body). Genuinely useful - a great deal of real T-SQL reaches other objects only
+    /// this way - but a weaker signal than a static reference, so it is tagged rather than silently mixed
+    /// in, and a dynamic reference that resolves to nothing is never reported as an orphan.
+    /// </summary>
+    Dynamic,
+}
+
 /// <summary>
 /// A (possibly qualified) reference to another object, as found by lineage analysis. Beyond the schema,
 /// a reference can also name the database it lives in (T-SQL's <c>OtherDb.dbo.Orders</c>) and the server
@@ -14,6 +29,9 @@ public sealed record ObjectRef(string? Schema, string Name)
 
     /// <summary>The linked-server (T-SQL) or database-link (PL/SQL) name the reference crosses, as written. Null for a same-server reference.</summary>
     public string? Server { get; init; }
+
+    /// <summary>Whether the parse tree of the object's own DDL yielded this, or dynamically-built SQL did. Defaults to <see cref="ReferenceOrigin.Static"/>, so every existing construction site keeps its old meaning.</summary>
+    public ReferenceOrigin Origin { get; init; } = ReferenceOrigin.Static;
 }
 
 /// <summary>An "alias.column" (or "table.column") reference found in a source object's DDL.</summary>

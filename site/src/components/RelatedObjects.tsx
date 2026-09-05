@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from './TypeBadge'
 import { colorForType } from '../lib/typeColors'
-import { getEdgeColumns } from '../lib/neighborhood'
+import { getEdgeColumns, isDynamicEdge } from '../lib/neighborhood'
 import { countByType, groupRelated, resolveNodes, searchNodes, GROUP_BY_OPTIONS, type GroupBy } from '../lib/grouping'
 import type { CatalogNode } from '../types'
 
@@ -233,10 +233,19 @@ function RelatedGroupSection({
 function RelatedRow({ node, rootId, direction }: { node: CatalogNode; rootId: string; direction: 'outgoing' | 'incoming' }) {
   const { index } = useCatalog()
   if (!index) return null
-  const columns = direction === 'outgoing' ? getEdgeColumns(index, rootId, node.id) : getEdgeColumns(index, node.id, rootId)
+  const [from, to] = direction === 'outgoing' ? [rootId, node.id] : [node.id, rootId]
+  const columns = getEdgeColumns(index, from, to)
   return (
     <li>
       <Link to={`/object/${node.id}`}>{node.qualifiedName}</Link> <TypeBadge type={node.type} />
+      {isDynamicEdge(index, from, to) && (
+        <span
+          className="column-tag column-tag--dynamic"
+          title="Found in SQL built as a string at runtime (OPENQUERY, EXEC of a string) rather than read off the parse tree - a weaker signal than an ordinary reference."
+        >
+          dynamic
+        </span>
+      )}
       {columns.length > 0 && <ColumnTags columns={columns} />}
     </li>
   )

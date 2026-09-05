@@ -4,7 +4,7 @@ namespace SyncSql.Catalog.Tests;
 
 public class NodeIndexTests
 {
-    private static CatalogNode Node(string server, string database, string? schema, string name, string type = "Tables") => new()
+    private static CatalogNode Node(string server, string database, string? schema, string name, string type = "Tables", DatabaseEngine? engine = null) => new()
     {
         Id = $"{server}/{database}/{type}/{(schema is null ? "" : schema + "/")}{name}",
         Server = server,
@@ -16,6 +16,7 @@ public class NodeIndexTests
         Path = "irrelevant",
         Ddl = "irrelevant",
         SizeBytes = 0,
+        Engine = engine,
     };
 
     private static CatalogNode LinkNode(string server, string name, string dataSource, string? catalog = null) => new()
@@ -302,5 +303,82 @@ public class NodeIndexTests
         Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
         Assert.Equal(orders.Id, resolution.NodeId);
         Assert.Null(resolution.ViaLink);
+    }
+
+    [Theory]
+    [InlineData(null, "sp_executesql")]
+    [InlineData(null, "xp_cmdshell")]
+    [InlineData("sys", "objects")]
+    [InlineData("INFORMATION_SCHEMA", "COLUMNS")]
+    [InlineData("dbo", "sp_who2")]
+    public void Resolve_EngineProvidedObject_IsSystemRatherThanAnOrphan(string? schema, string name)
+    {
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures", engine: DatabaseEngine.MsSql);
+        NodeIndex index = new([caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef(schema, name));
+
+        Assert.Equal(ReferenceResolutionKind.System, resolution.Kind);
+        Assert.Null(resolution.NodeId);
+    }
+
+    [Fact]
+    public void Resolve_SystemDatabaseQualifiedBuiltin_IsSystemEvenWhenMasterIsNotExtracted()
+    {
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures", engine: DatabaseEngine.MsSql);
+        NodeIndex index = new([caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "xp_cmdshell") { Database = "master" });
+
+        Assert.Equal(ReferenceResolutionKind.System, resolution.Kind);
+    }
+
+    /// <summary>
+    /// The built-in rules are only ever consulted after the real lookup fails, so somebody's own
+    /// procedure that borrows a reserved-looking prefix still resolves to itself.
+    /// </summary>
+    [Fact]
+    public void Resolve_UserObjectWithASystemLookingName_StillResolvesToItself()
+    {
+        CatalogNode helper = Node("SQLPROD01", "AppDb", "dbo", "sp_MyHelper", type: "StoredProcedures", engine: DatabaseEngine.MsSql);
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures", engine: DatabaseEngine.MsSql);
+        NodeIndex index = new([helper, caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "sp_MyHelper"));
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(helper.Id, resolution.NodeId);
+    }
+
+    /// <summary>A prefixed name under somebody's own schema is a user object, and a missing one is worth reporting.</summary>
+    [Fact]
+    public void Resolve_SystemPrefixUnderAUserSchema_IsStillAnOrphan()
+    {
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures", engine: DatabaseEngine.MsSql);
+        NodeIndex index = new([caller]);
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("app", "sp_Nightly"));
+
+        Assert.Equal(ReferenceResolutionKind.NotFound, resolution.Kind);
+    }
+
+    [Fact]
+    public void Resolve_OracleBuiltinPackage_IsSystem()
+    {
+        CatalogNode caller = Node("ORCL01", "APPDB", "APP", "LOAD_ORDERS", type: "Procedures", engine: DatabaseEngine.Oracle);
+        NodeIndex index = new([caller]);
+
+        Assert.Equal(ReferenceResolutionKind.System, index.Resolve(caller, new ObjectRef(null, "DBMS_OUTPUT")).Kind);
+        Assert.Equal(ReferenceResolutionKind.System, index.Resolve(caller, new ObjectRef("SYS", "DUAL")).Kind);
+    }
+
+    /// <summary>A node with no engine tag gets no built-in treatment - the same "don't guess" posture lineage inference already takes for it.</summary>
+    [Fact]
+    public void Resolve_UntaggedEngine_DoesNotApplyBuiltinRules()
+    {
+        CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
+        NodeIndex index = new([caller]);
+
+        Assert.Equal(ReferenceResolutionKind.NotFound, index.Resolve(caller, new ObjectRef(null, "sp_executesql")).Kind);
     }
 }

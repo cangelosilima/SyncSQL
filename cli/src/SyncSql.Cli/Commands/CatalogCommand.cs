@@ -55,6 +55,10 @@ internal static class CatalogCommand
         {
             Description = $"Root of the accumulating metrics history tree (`metrics update`'s --history-root, e.g. <output-root>/{SyncSqlPaths.MetricsHistoryDirectoryName}). Omit to skip - node.metrics is left empty.",
         };
+        Option<bool> noDynamicSqlOption = new("--no-dynamic-sql")
+        {
+            Description = "Skip recovering references from SQL built as a string at runtime (OPENQUERY, EXEC of a string, a variable assembled then executed). Those references are tagged `dynamic` in catalog.json rather than mixed in with the rest, so the default is to collect them.",
+        };
 
         Command buildCommand = new("build", "Build catalog.json from an extracted-objects tree.")
         {
@@ -68,6 +72,7 @@ internal static class CatalogCommand
             maxHistoryCallsOption,
             maxCoChangeOption,
             metricsRootOption,
+            noDynamicSqlOption,
         };
 
         buildCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -89,6 +94,7 @@ internal static class CatalogCommand
                 MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
                 MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
                 MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
+                DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
             };
 
             try

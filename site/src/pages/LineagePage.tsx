@@ -14,7 +14,7 @@ import { useDebouncedValue } from '../lib/useDebouncedValue'
 import { groupRelated, type GroupBy } from '../lib/grouping'
 import { csvFileName } from '../lib/csv'
 import { objectGrantColumns, type ObjectGrantRow } from '../lib/catalogCsv'
-import { decodeTokensFromUrl, encodeTokensForUrl, type FilterToken } from '../lib/filters'
+import { decodeTokensFromUrl, encodeTokensForUrl, newTokenId, type FilterToken } from '../lib/filters'
 import type { CatalogNode } from '../types'
 
 const GRAPH_CAP = 300
@@ -32,17 +32,18 @@ export default function LineagePage() {
   const [copied, setCopied] = useState(false)
 
   // Browse-mode state. A ?filter=<encoded tokens> param (from a copied
-  // shareable link - see the URL-sync effect below) takes precedence.
-  // Otherwise, arriving with just ?focus=<id> (from an object page's "Open
-  // in full lineage explorer" link) both focuses that object AND seeds a
-  // real filter token for it, so clearing focus lands on "just this object"
-  // rather than dumping back out to the whole unfiltered catalog.
-  const [tokens, setTokens] = useState<FilterToken[]>(() => {
-    if (initialFilterParam) return decodeTokensFromUrl(initialFilterParam)
-    if (!initialFocus) return []
-    const node = index?.byId.get(initialFocus)
-    return node ? [{ id: 'seed-focus', attribute: 'name', operator: 'is', values: [node.qualifiedName] }] : []
-  })
+  // shareable link - see the URL-sync effect below) is the only thing that
+  // seeds tokens now.
+  //
+  // Arriving with ?focus=<id> deliberately seeds *no* token. It used to seed
+  // "Name is <that object>", which read sensibly on its own but made every
+  // filter added afterwards nonsense: the tokens are ANDed, so adding "Type
+  // is StoredProcedures" while looking at a table asked for an object that is
+  // both, and the graph emptied. Navigation identity belongs in focusStack;
+  // clearFocus() seeds that name token at the moment focus is released, which
+  // is what the seeding was actually for - not dumping the reader back into
+  // the whole unfiltered catalog.
+  const [tokens, setTokens] = useState<FilterToken[]>(() => decodeTokensFromUrl(initialFilterParam))
   const [focusStack, setFocusStack] = useState<string[]>(initialFocus ? [initialFocus] : [])
   const [hops, setHops] = useState<(typeof HOP_OPTIONS)[number]>(
     (HOP_OPTIONS as readonly number[]).includes(initialHops) ? (initialHops as (typeof HOP_OPTIONS)[number]) : 1,
@@ -82,7 +83,24 @@ export default function LineagePage() {
   )
 
   const baseIds = mode === 'access' ? grantMatches.map((m) => m.node.id) : filtered.map((n) => n.id)
-  const nodeIds = currentFocus ? neighborhoodIds : baseIds
+
+  // While navigating a specific object, filters narrow *what is around it*
+  // rather than re-selecting from the whole catalog. That is what someone
+  // adding "Type is StoredProcedures" to a table's neighborhood is asking for
+  // - show me the procedures near this - and the previous behaviour (drop the
+  // focus, then AND the tokens against every node) answered a different
+  // question with an empty graph. The focus object itself is always kept, so
+  // the graph never renders rootless no matter how narrow the filter is.
+  const nodeIds = useMemo(() => {
+    if (!currentFocus) return baseIds
+    if (mode !== 'browse') return neighborhoodIds
+    const allowed = new Set(filtered.map((n) => n.id))
+    return neighborhoodIds.filter((id) => id === currentFocus || allowed.has(id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFocus, mode, neighborhoodIds, filtered, baseIds.join(',')])
+
+  /** How much of the focused object's neighborhood the current filters are hiding. */
+  const narrowedFrom = currentFocus ? neighborhoodIds.length : 0
 
   // Keeps the URL a live, shareable snapshot of the current Browse-mode
   // view (filter tokens, drill-down focus, hop radius, content search) -
@@ -120,7 +138,16 @@ export default function LineagePage() {
     setFocusStack((prev) => prev.slice(0, i + 1))
   }
 
+  // Releasing focus keeps you on the object you were looking at rather than
+  // dumping you into the whole catalog - by turning the navigation into a real
+  // filter token at exactly the moment it stops being navigation. (Seeding
+  // that token up front instead is what used to break every filter added
+  // while navigating; see the tokens initializer.)
   function clearFocus() {
+    const node = currentFocus ? index?.byId.get(currentFocus) : undefined
+    if (node && !tokens.some((t) => t.attribute === 'name' && t.values.includes(node.qualifiedName))) {
+      setTokens([...tokens, { id: newTokenId(), attribute: 'name', operator: 'is', values: [node.qualifiedName] }])
+    }
     setFocusStack([])
   }
 
@@ -159,22 +186,21 @@ export default function LineagePage() {
 
       {mode === 'browse' ? (
         <>
+          {/* Filters no longer clear the focus: while navigating an object they
+              narrow its neighborhood, which is what someone filtering a
+              drilled-into graph is asking for. The placeholder says which of
+              the two is happening. */}
           <FilterBar
             nodes={allNodes}
             tokens={tokens}
-            onChange={(next) => {
-              setTokens(next)
-              setFocusStack([])
-            }}
-            placeholder="Filter the graph... (server, database, schema, type, name)"
+            onChange={setTokens}
+            placeholder={
+              currentFocus
+                ? 'Filter what surrounds this object... (server, database, schema, type, name)'
+                : 'Filter the graph... (server, database, schema, type, name)'
+            }
           />
-          <ContentSearchBar
-            value={contentQuery}
-            onChange={(v) => {
-              setContentQuery(v)
-              setFocusStack([])
-            }}
-          />
+          <ContentSearchBar value={contentQuery} onChange={setContentQuery} />
         </>
       ) : (
         <>
@@ -332,6 +358,14 @@ export default function LineagePage() {
             </select>
           </label>
         </div>
+      ) : null}
+
+      {currentFocus ? (
+        <p className="muted" style={{ margin: '0.5rem 0' }}>
+          {nodeIds.length < narrowedFrom
+            ? `Showing ${nodeIds.length} of ${narrowedFrom} objects around ${index.byId.get(currentFocus)?.qualifiedName ?? currentFocus} - the filters above narrow this neighborhood, not the whole catalog.`
+            : `${nodeIds.length} object(s) around ${index.byId.get(currentFocus)?.qualifiedName ?? currentFocus}. Filter above to narrow this neighborhood, or clear the focus to search the whole catalog.`}
+        </p>
       ) : (
         <p className="muted" style={{ margin: '0.5rem 0' }}>
           {nodeIds.length} object(s) shown.{' '}
@@ -349,8 +383,7 @@ export default function LineagePage() {
             // filter tokens, so there'd be nothing for a click to narrow there.
             mode === 'browse'
               ? (attribute, value) => {
-                  setTokens([...tokens, { id: `narrow-${attribute}-${Date.now()}`, attribute, operator: 'is', values: [value] }])
-                  setFocusStack([])
+                  setTokens([...tokens, { id: newTokenId(), attribute, operator: 'is', values: [value] }])
                 }
               : undefined
           }

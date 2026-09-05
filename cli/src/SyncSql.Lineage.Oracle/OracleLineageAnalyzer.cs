@@ -19,7 +19,12 @@ public sealed class OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
 {
     public DatabaseEngine Engine => DatabaseEngine.Oracle;
 
-    public LineageAnalysisResult Analyze(string ddl)
+    /// <summary>
+    /// <paramref name="options"/> is accepted for the shared <see cref="ILineageAnalyzer"/> contract and
+    /// deliberately unused: PL/SQL's dynamic SQL (<c>EXECUTE IMMEDIATE</c>) has no equivalent scanner yet,
+    /// so there is nothing here for the flag to turn on or off.
+    /// </summary>
+    public LineageAnalysisResult Analyze(string ddl, LineageAnalysisOptions? options = null)
     {
         if (string.IsNullOrWhiteSpace(ddl))
         {

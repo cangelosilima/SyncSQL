@@ -5,11 +5,12 @@
     "SQLPROD01"
   ],
   "typeCounts": {
-    "LinkedServers": 1,
-    "Tables": 3,
+    "Functions": 1,
+    "LinkedServers": 2,
+    "Replication": 1,
     "StoredProcedures": 1,
-    "Views": 1,
-    "Replication": 1
+    "Tables": 3,
+    "Views": 1
   },
   "nodes": [
     {
@@ -1472,6 +1473,54 @@
           ]
         }
       ]
+    },
+    {
+      "id": "SQLPROD01/_ServerLevel/LinkedServers/SIG",
+      "server": "SQLPROD01",
+      "database": "_ServerLevel",
+      "schema": null,
+      "type": "LinkedServers",
+      "name": "SIG",
+      "qualifiedName": "SIG",
+      "path": "SQLPROD01/_ServerLevel/LinkedServers/SIG.sql",
+      "ddl": "EXEC sp_addlinkedserver\n    @server = N'SIG',\n    @srvproduct = N'SQL Server',\n    @provider = N'SQLNCLI',\n    @datasrc = N'sig-host.example.net',\n    @catalog = N'SigDb';",
+      "description": "Billing system the transaction-code lookup reaches through.",
+      "columns": [],
+      "sections": [],
+      "sizeBytes": 190,
+      "changeCount": 0,
+      "lastChangedAt": null,
+      "history": [],
+      "grants": [],
+      "metrics": []
+    },
+    {
+      "id": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode",
+      "server": "SQLPROD01",
+      "database": "AppDb",
+      "schema": "dbo",
+      "type": "Functions",
+      "name": "fns_Opn_Sig_GetTransactionCode",
+      "qualifiedName": "dbo.fns_Opn_Sig_GetTransactionCode",
+      "path": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode.sql",
+      "ddl": "CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode(@Id_Boleta CHAR(13))\nRETURNS VARCHAR(50)\nAS\nBEGIN\n    DECLARE @Result TABLE (TransactionCode VARCHAR(50));\n    DECLARE @SQL NVARCHAR(MAX) =\n        'SELECT TransactionCode FROM OPENQUERY(SIG, ''SELECT dbo.fns_Sig_Open_GetTransactionCode('''\n        + @Id_Boleta + ''') AS TransactionCode'')';\n\n    INSERT INTO @Result (TransactionCode)\n    EXEC sp_executesql @SQL;\n\n    RETURN (SELECT TOP 1 TransactionCode FROM @Result);\nEND",
+      "description": "Looks a boleta's transaction code up in the SIG billing system.",
+      "columns": [],
+      "sections": [],
+      "sizeBytes": 520,
+      "changeCount": 0,
+      "lastChangedAt": null,
+      "history": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "openmkt",
+          "granteeType": "SQL_USER",
+          "column": null
+        }
+      ],
+      "metrics": []
     }
   ],
   "edges": [
@@ -1519,6 +1568,12 @@
       "from": "SQLPROD01/AppDb/Replication/Orders_Pub",
       "to": "SQLPROD01/AppDb/Tables/dbo/Users",
       "columns": []
+    },
+    {
+      "from": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode",
+      "to": "SQLPROD01/_ServerLevel/LinkedServers/SIG",
+      "columns": [],
+      "dynamic": true
     }
   ],
   "recentChanges": [
@@ -1649,6 +1704,26 @@
       "from": "SQLPROD01/AppDb/StoredProcedures/dbo/usp_GetUserOrders",
       "schema": "dbo",
       "name": "ArchivedOrders"
+    }
+  ],
+  "linkedServerReferences": [
+    {
+      "linkedServer": "SQLPROD01/_ServerLevel/LinkedServers/SIG",
+      "from": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode",
+      "to": null,
+      "database": "SigDb",
+      "schema": "dbo",
+      "name": "fns_Sig_Open_GetTransactionCode",
+      "dynamic": true
+    }
+  ],
+  "systemReferences": [
+    {
+      "from": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode",
+      "server": null,
+      "database": null,
+      "schema": null,
+      "name": "sp_executesql"
     }
   ]
 }

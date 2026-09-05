@@ -93,6 +93,14 @@ export interface CatalogEdge {
   to: string
   /** Best-effort: names of `to`'s columns detected as referenced from `from`'s DDL. */
   columns: string[]
+  /**
+   * True when only SQL built as a string at runtime (an `OPENQUERY` body, an
+   * `EXEC` of a literal, a variable assembled then executed) produced this edge -
+   * a weaker signal than one read off the parse tree. Absent on catalogs built
+   * before this field existed; an edge that any static reference also backs is
+   * never marked.
+   */
+  dynamic?: boolean
 }
 
 export interface CatalogCommit {
@@ -127,6 +135,21 @@ export interface CatalogOrphanedReference {
 }
 
 /**
+ * A reference to something the database engine provides rather than something anybody
+ * extracted - `sp_executesql`, `sys.objects`, `DBMS_OUTPUT`. It resolves to nothing in
+ * the catalog, but it is not missing and never was, so it is listed separately instead
+ * of being counted as an orphaned reference. See README's "Orphaned reference detection".
+ */
+export interface CatalogSystemReference {
+  /** Node id of the object whose DDL makes the reference. */
+  from: string
+  server?: string | null
+  database?: string | null
+  schema: string | null
+  name: string
+}
+
+/**
  * One reference that crosses a linked server / database link: who makes it, which link it crosses, the
  * target as the DDL writes it, and the target node when the catalog has it extracted (null when the hop
  * lands outside the catalog's scope).
@@ -141,6 +164,8 @@ export interface CatalogLinkedServerReference {
   database?: string | null
   schema: string | null
   name: string
+  /** True when only dynamically-built SQL made this reference (see `CatalogEdge.dynamic`). */
+  dynamic?: boolean
 }
 
 export interface Catalog {
@@ -153,5 +178,6 @@ export interface Catalog {
   coChangePairs: CoChangePair[]
   /** Absent on catalogs built before this field existed - treat as empty. */
   orphanedReferences?: CatalogOrphanedReference[]
+  systemReferences?: CatalogSystemReference[]
   linkedServerReferences?: CatalogLinkedServerReference[]
 }

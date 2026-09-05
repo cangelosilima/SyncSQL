@@ -46,13 +46,17 @@ public sealed class CatalogBuilder(
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation("Inferring lineage edges");
-        LineageInferenceResult lineage = InferLineage(nodes, nodeIndex);
+        LineageInferenceResult lineage = InferLineage(nodes, nodeIndex, new LineageAnalysisOptions { DynamicSql = request.DynamicSql });
         List<CatalogEdge> edges = lineage.Edges;
         Dictionary<string, LineageAnalysisResult> analysisByNodeId = lineage.AnalysisByNodeId;
         List<CatalogOrphanedReference> orphanedReferences = lineage.OrphanedReferences;
         if (orphanedReferences.Count > 0)
         {
             logger.LogWarning("Found {Count} orphaned reference(s) - an object's DDL refers to something that no longer exists in scope", orphanedReferences.Count);
+        }
+        if (lineage.SystemReferences.Count > 0)
+        {
+            logger.LogInformation("Recognized {Count} reference(s) to engine-provided objects (not orphans)", lineage.SystemReferences.Count);
         }
         if (lineage.LinkedServerReferences.Count > 0)
         {
@@ -122,6 +126,7 @@ public sealed class CatalogBuilder(
             RecentChanges = recentChanges,
             CoChangePairs = coChangePairs,
             OrphanedReferences = orphanedReferences,
+            SystemReferences = lineage.SystemReferences,
             LinkedServerReferences = lineage.LinkedServerReferences,
         };
     }
@@ -177,17 +182,23 @@ public sealed class CatalogBuilder(
         public required List<CatalogOrphanedReference> OrphanedReferences { get; init; }
 
         public required List<CatalogLinkedServerReference> LinkedServerReferences { get; init; }
+
+        public required List<CatalogSystemReference> SystemReferences { get; init; }
     }
 
-    private LineageInferenceResult InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex)
+    private LineageInferenceResult InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex, LineageAnalysisOptions analysisOptions)
     {
-        HashSet<string> edgeKeys = [];
+        // Index rather than a set: an edge already recorded from a dynamic reference has to be
+        // upgradeable when a static one turns up for the same pair.
+        Dictionary<string, int> edgeIndexByKey = [];
         List<CatalogEdge> edges = [];
         Dictionary<string, LineageAnalysisResult> analysisByNodeId = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> orphanKeys = [];
         List<CatalogOrphanedReference> orphanedReferences = [];
-        HashSet<string> linkedReferenceKeys = [];
+        Dictionary<string, int> linkedReferenceIndexByKey = [];
         List<CatalogLinkedServerReference> linkedServerReferences = [];
+        HashSet<string> systemKeys = [];
+        List<CatalogSystemReference> systemReferences = [];
 
         foreach (CatalogNode node in nodes)
         {
@@ -206,20 +217,49 @@ public sealed class CatalogBuilder(
             }
 
             ILineageAnalyzer analyzer = lineageAnalyzerResolver.Resolve(engine);
-            LineageAnalysisResult analysis = analyzer.Analyze(scanText);
+            LineageAnalysisResult analysis = analyzer.Analyze(scanText, analysisOptions);
             analysisByNodeId[node.Id] = analysis;
 
             foreach (ObjectRef reference in analysis.ObjectRefs)
             {
                 ReferenceResolution resolution = nodeIndex.Resolve(node, reference);
+                bool dynamic = reference.Origin == ReferenceOrigin.Dynamic;
+
+                // Something the engine ships rather than something anybody extracted. No edge (an edge to
+                // "the database itself" says nothing) and emphatically no orphan - it is recorded on its
+                // own so the object's page can still show what built-ins it leans on.
+                if (resolution.Kind == ReferenceResolutionKind.System)
+                {
+                    if (systemKeys.Add($"{node.Id}|{reference.Server}|{reference.Database}|{reference.Schema}|{reference.Name}"))
+                    {
+                        systemReferences.Add(new CatalogSystemReference
+                        {
+                            From = node.Id,
+                            Server = reference.Server,
+                            Database = reference.Database,
+                            Schema = reference.Schema,
+                            Name = reference.Name,
+                        });
+                    }
+                    continue;
+                }
 
                 // A reference that crossed a linked server / database link is recorded against that
                 // link whether or not the target itself is extracted, so the link object can list
                 // everything reached through it - including the parts of the fleet nobody extracts.
                 if (resolution.ViaLink is { } link)
                 {
-                    if (linkedReferenceKeys.Add($"{node.Id}|{link.NodeId}|{reference.Database}|{reference.Schema}|{reference.Name}"))
+                    string linkedKey = $"{node.Id}|{link.NodeId}|{reference.Database}|{reference.Schema}|{reference.Name}";
+                    if (linkedReferenceIndexByKey.TryGetValue(linkedKey, out int existingLinked))
                     {
+                        if (!dynamic && linkedServerReferences[existingLinked].Dynamic)
+                        {
+                            linkedServerReferences[existingLinked] = linkedServerReferences[existingLinked] with { Dynamic = false };
+                        }
+                    }
+                    else
+                    {
+                        linkedReferenceIndexByKey[linkedKey] = linkedServerReferences.Count;
                         linkedServerReferences.Add(new CatalogLinkedServerReference
                         {
                             LinkedServer = link.NodeId,
@@ -228,6 +268,7 @@ public sealed class CatalogBuilder(
                             Database = reference.Database ?? link.DefaultDatabase,
                             Schema = reference.Schema,
                             Name = reference.Name,
+                            Dynamic = dynamic,
                         });
                     }
 
@@ -236,10 +277,10 @@ public sealed class CatalogBuilder(
                     // to the remote object) is what makes "which objects go through this linked server"
                     // answerable from the lineage graph, and keeps a hop out of the catalog's scope
                     // visible instead of silently absent.
-                    AddEdge(node.Id, link.NodeId);
+                    AddEdge(node.Id, link.NodeId, dynamic);
                     if (resolution.NodeId is { } linkedTargetId)
                     {
-                        AddEdge(link.NodeId, linkedTargetId);
+                        AddEdge(link.NodeId, linkedTargetId, dynamic);
                     }
 
                     // The link landed on a server and database the catalog does have, and the object
@@ -254,6 +295,16 @@ public sealed class CatalogBuilder(
 
                 if (resolution.Kind == ReferenceResolutionKind.NotFound)
                 {
+                    // A name recovered from SQL that only exists as a string is a good enough signal to
+                    // draw an edge with when it resolves, and nowhere near good enough to accuse anybody
+                    // with when it doesn't: the text may be assembled from values this analysis cannot
+                    // know. Reporting those as dangling would flood the one list that is meant to be
+                    // actionable, so a dynamic miss is simply dropped.
+                    if (dynamic)
+                    {
+                        continue;
+                    }
+
                     if (orphanKeys.Add($"{node.Id}|{reference.Server}|{reference.Database}|{reference.Schema}|{reference.Name}"))
                     {
                         orphanedReferences.Add(new CatalogOrphanedReference
@@ -273,7 +324,7 @@ public sealed class CatalogBuilder(
                     continue;
                 }
 
-                AddEdge(node.Id, targetId);
+                AddEdge(node.Id, targetId, dynamic);
             }
         }
 
@@ -294,20 +345,42 @@ public sealed class CatalogBuilder(
             return byName != 0 ? byName : string.Compare(a.From, b.From, StringComparison.OrdinalIgnoreCase);
         });
 
+        systemReferences.Sort((a, b) =>
+        {
+            int byFrom = string.Compare(a.From, b.From, StringComparison.OrdinalIgnoreCase);
+            return byFrom != 0 ? byFrom : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        });
+
         return new LineageInferenceResult
         {
             Edges = edges,
             AnalysisByNodeId = analysisByNodeId,
             OrphanedReferences = orphanedReferences,
             LinkedServerReferences = linkedServerReferences,
+            SystemReferences = systemReferences,
         };
 
-        void AddEdge(string from, string to)
+        void AddEdge(string from, string to, bool dynamic)
         {
-            if (from != to && edgeKeys.Add($"{from}|{to}"))
+            if (from == to)
             {
-                edges.Add(new CatalogEdge { From = from, To = to });
+                return;
             }
+
+            string key = $"{from}|{to}";
+            if (edgeIndexByKey.TryGetValue(key, out int existing))
+            {
+                // Static beats dynamic: once anything has read this relationship off real DDL, the edge
+                // stops being a best-effort finding, however it was first discovered.
+                if (!dynamic && edges[existing].Dynamic)
+                {
+                    edges[existing] = edges[existing] with { Dynamic = false };
+                }
+                return;
+            }
+
+            edgeIndexByKey[key] = edges.Count;
+            edges.Add(new CatalogEdge { From = from, To = to, Dynamic = dynamic });
         }
     }
 

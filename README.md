@@ -149,6 +149,7 @@ syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
                        [--max-co-change-commit-size] [--metrics-root]
+                       [--no-dynamic-sql]
 syncsql metrics update [--output-root] [--snapshot-root <path>] [--history-root <path>]
                         [--history-limit]
 syncsql lint [--output-root] [--path <file-or-dir>...] [--fail-on warning|error]
@@ -418,10 +419,16 @@ opens that page's own Markdown guide without leaving the view (see
     as Explorer's) together drive which objects are shown. Clicking a node
     drills the graph into that object's own neighborhood in place
     (breadcrumb trail, Back button, adjustable 1/2/3-hop radius) rather than
-    leaving the page; double-click opens that object's full detail page. An
-    object page's "Open in full lineage explorer" link lands here with an
-    actual filter token seeded for that object, so clearing the drill-down
-    focus narrows back to it instead of dumping out to the whole catalog.
+    leaving the page; double-click opens that object's full detail page.
+
+    While an object is focused, the filter bar and content search **narrow
+    that object's neighborhood** rather than re-selecting from the whole
+    catalog — "Type is StoredProcedures" while looking at a table means "show
+    me the procedures around this", and the focused object itself is always
+    kept so the graph never renders rootless. **Clear focus** turns the
+    navigation into a real name filter at that moment, so releasing it lands
+    on that one object instead of dumping out to the whole catalog.
+
     The current filter tokens, drill-down focus, hop radius, and content
     search are all kept live in the URL, so **Copy link** hands over an
     exact, shareable snapshot of the current view — handy for incident
@@ -477,12 +484,14 @@ dispatches to that engine's analyzer when building the catalog:
     invocations), `FOREIGN KEY` references, and alias-bound column
     references are all read off the parse tree.
 
-Neither engine matches identifiers inside string literals or comments
-(including Oracle's `q'...'` alternative quoting), misreads `SELECT *`/
-computed columns as references, or guesses an alias's target from nearby
-text rather than the parser's own binding. Any node missing an `Engine` tag
-(an extraction from before that header field existed) is simply skipped for
-lineage inference rather than guessed at.
+Neither engine matches identifiers inside comments (including Oracle's
+`q'...'` alternative quoting), misreads `SELECT *`/computed columns as
+references, or guesses an alias's target from nearby text rather than the
+parser's own binding. A string literal is not treated as SQL either, with one
+deliberate exception: the handful of places T-SQL genuinely *executes* one -
+see [Dynamic SQL and OPENQUERY](#dynamic-sql-and-openquery). Any node missing
+an `Engine` tag (an extraction from before that header field existed) is
+simply skipped for lineage inference rather than guessed at.
 
 A reference that names a database or a linked server / database link keeps
 those qualifiers and is resolved against them - see
@@ -490,11 +499,11 @@ those qualifiers and is resolved against them - see
 link itself drawn as an explicit hop in the graph rather than an invisible
 one.
 
-None of this is a certified lineage report - it will still miss dynamic SQL
-and anything built at runtime, and a traversal that crosses a linked-server/
-DB-link boundary (in the "most referenced indirectly" analytics) still stops
-one hop past that boundary rather than fanning out across a remote server's
-own dependency graph. The site says as much on its overview page.
+None of this is a certified lineage report - it will still miss anything
+assembled from values only known at runtime, and a traversal that crosses a
+linked-server/DB-link boundary (in the "most referenced indirectly" analytics)
+still stops one hop past that boundary rather than fanning out across a remote
+server's own dependency graph. The site says as much on its overview page.
 
 There is no separate tree sidebar (Server → Database → Schema → Type →
 Object) — Explorer's filter bar plus sortable columns cover browsing, and
@@ -654,11 +663,20 @@ referenced on that edge - using each engine's own analyzer for both the
 edge and the alias binding, so `alias.column` resolves to the exact table
 that alias was declared against on the parse tree, not a guess from nearby
 text. This still isn't a certified column-level lineage report - it will
-miss dynamic SQL, `SELECT *`, and computed/aliased column expressions.
+miss `SELECT *`, computed/aliased column expressions, and anything a
+dynamically-built statement assembles from values only known at runtime.
 
 This shows up as column tags next to each entry in an object's "depends
 on"/"used by" lists, and as highlighted, labeled edges in the Lineage
-graph.
+graph. Each row of an object's **Columns** table also carries the count of
+objects known to read that column, and opens a panel listing them with a
+graph of just those - shareable, since the open column is kept in the URL.
+
+Only that one direction is offered. An edge records the *target's* column
+names, so "who reads this column" is answerable exactly; "what feeds this
+column" would need expression-level lineage, which nothing here records. A
+same-name guess presented as an answer would be worse than the honest
+absence, so the panel says what the signal is and what it misses instead.
 
 ### Where a reference is looked up
 
@@ -691,6 +709,85 @@ is never downgraded to a bare-name guess, and a bare name (no schema at
 all) never crosses a server boundary - it's too weak a signal to carry that
 far.
 
+### Dynamic SQL and OPENQUERY
+
+A great deal of real T-SQL reaches other objects only through SQL built as a
+string: `OPENQUERY(LNK, 'select ...')`, `EXEC ('...') AT LNK`, a variable
+assembled by concatenation and then executed. None of that is on the parse
+tree, so all of it used to be invisible - an object whose only job was calling
+a remote function looked like it depended on nothing at all.
+
+`DynamicSqlScanner` recovers those references. **It lexes rather than
+re-parses**, and that is the whole design: in `'SELECT dbo.Fn(' + @id + ') AS
+x'` the interpolated variable splits the statement across two literals, so
+neither half is valid T-SQL on its own and the assembled text isn't either -
+the runtime value is unknown. Insisting on a clean parse would therefore find
+nothing in exactly the cases this exists for. ScriptDom's own lexer still
+divides an incomplete fragment into real identifiers, strings and comments,
+which is all that is needed - and unlike a regex it cannot mistake a name
+inside a comment or a nested literal for a reference.
+
+Precision comes from being narrow:
+
+- **Only literals T-SQL actually executes are scanned** - an `OPENQUERY` body,
+  an `EXEC` of a string, `sp_executesql`'s argument, a value assigned to a
+  variable. An ordinary literal in a `SELECT` list is still never treated as
+  SQL.
+- **Only schema-qualified names in a reference position** are collected (after
+  `FROM`/`JOIN`/`EXEC`/… or immediately before an opening parenthesis), so a
+  dynamically built `o.OrderId` doesn't invent a schema called `o`. A bare name
+  is as untrustworthy here as it is anywhere else, and is left alone.
+- **The enclosing linked server comes with it.** A name found inside
+  `OPENQUERY(SIG, '...')` is attributed to `SIG`, which is what turns it into a
+  real hop through that link (see
+  [Linked servers as lineage hops](#linked-servers-as-lineage-hops)) rather
+  than a floating reference. `EXEC ... AT LNK` works the same way.
+- Literal nesting is followed a few levels deep, under a per-object budget, so
+  a procedure that builds SQL in a loop cannot blow up catalog build time.
+
+Everything found this way is tagged, reaching `catalog.json` as
+`edge.dynamic`. The site draws those edges dashed and labels them `dynamic`,
+because a reference recovered from a string is a weaker claim than one read off
+the parse tree. Most importantly, **a dynamic reference that resolves to
+nothing is never reported as an orphan** - the text may be assembled from
+values this analysis cannot know, and guesses do not belong in the one list
+that is meant to be actionable.
+
+`syncsql catalog build --no-dynamic-sql` turns the whole thing off.
+
+### System objects
+
+`sp_executesql`, `sys.objects`, `master.dbo.xp_cmdshell`, Oracle's `DBMS_*`
+and `ALL_*` - nothing extracts these, because they are the engine's rather
+than anybody's. They used to be reported as orphaned references, and whether
+they were came down to an accident: an unqualified `sp_executesql` resolved
+nowhere and was flagged, while `master.dbo.xp_cmdshell` escaped only because
+`master` usually isn't extracted either.
+
+They are now recognized for what they are: no edge (an edge to "the database
+itself" says nothing), no orphan, and a `systemReferences` entry in
+`catalog.json` so the information isn't simply discarded - an object's page
+lists which built-ins it leans on.
+
+The rules are deliberately conservative - engine-reserved schemas, databases
+and name prefixes only - and are consulted **after** the normal lookup has
+failed, never before it. A hand-written `dbo.sp_NightlyRollup` that really is
+in the catalog resolves to itself exactly as it always did; the prefix rules
+only ever get to speak for a name nothing answers to. A prefixed name under
+somebody's own schema (`app.sp_Nightly`) is treated as the user object it is,
+so a missing one is still worth knowing about.
+
+### Local names: temp tables and CTEs
+
+A temp table (`#Staging`, `##Shared`) and a common table expression are
+referenced exactly like tables, so both used to surface as orphaned references
+- nothing in the catalog answers to them, and nothing ever will, because they
+are created by the very script that reads them. Neither is flagged now. Temp
+tables are dropped in the parser, where the name alone gives them away; CTE
+names need the full set a `WITH` clause declares, so they are filtered once the
+walk is over. Table variables (`@Result`) were already ignored, since the
+parser models them as a distinct node type.
+
 ### Orphaned reference detection
 
 Cheap to compute once lineage inference has run: every reference that
@@ -698,11 +795,11 @@ resolves nowhere the lookup above can reach is collected as an **orphaned
 reference** rather than just silently producing no edge. In practice this is
 almost always a real bug worth flagging - the referenced
 table/view/procedure was renamed or dropped and the object still calling it
-was never updated - though it can occasionally be a false positive: dynamic
-SQL, a system object, or a name built at runtime.
+was never updated.
 
-Two situations are deliberately **not** flagged this way, because neither
-means "the target is missing":
+The value of this list is entirely in what it *doesn't* say, so several
+situations are deliberately **not** flagged - none of them means "the target
+is missing":
 
 - A reference that's merely *ambiguous* - more than one same-named object in
   scope. The target clearly exists, it just can't be resolved uniquely from
@@ -714,6 +811,14 @@ means "the target is missing":
   involved, it's recorded against that link instead (see
   [Linked servers as lineage hops](#linked-servers-as-lineage-hops)), so it
   stays visible without being counted as a bug.
+- A **system object** - see [System objects](#system-objects). Built into the
+  engine, so it was never going to be extracted.
+- A **temp table or CTE** - see
+  [Local names](#local-names-temp-tables-and-ctes). Created by the script that
+  reads it.
+- A reference recovered from **dynamically-built SQL** that resolves nowhere -
+  see [Dynamic SQL and OPENQUERY](#dynamic-sql-and-openquery). The text may be
+  assembled from values this analysis cannot know, so a miss proves nothing.
 
 `syncsql catalog build` writes these to `catalog.json`'s
 `orphanedReferences` array (`from`/`server`/`database`/`schema`/`name`) and
@@ -896,6 +1001,30 @@ CRLF-terminated per RFC 4180. Cell values that a spreadsheet would otherwise
 evaluate as a formula are prefixed with an apostrophe, since this content
 comes straight out of somebody's database.
 
+### XLSX export
+
+A CSV can only ever be one section, which is why the object page grew a button
+per section. **Export XLSX**, in that page's quick-facts bar, answers the
+question that actually gets asked - "give me everything about this object" - as
+one workbook with **a worksheet per section of the page**: Details, Columns,
+Access, Depends on, Used by, orphaned / system / linked-server references,
+Metrics, History, Definition (one row per line, so it is readable in a cell),
+and any appended Sections. Sections the object has nothing in are skipped, so
+the file has no blank tabs.
+
+Each worksheet gets a frozen bold header row, an autofilter and widths sized to
+its content. The sheets are built from the same column definitions the CSV
+exports use, so a section exported both ways cannot drift.
+
+One deliberate difference from CSV: the leading-apostrophe formula guard is
+**not** applied. It exists because a CSV cell beginning `=` is parsed as a
+formula on open; a workbook stores typed inline strings that Excel never
+evaluates, so applying the guard there would corrupt the data it was meant to
+protect.
+
+The writer ([ExcelJS](https://github.com/exceljs/exceljs)) is imported lazily,
+so its bundle is fetched on the first click rather than on every page load.
+
 ## Running the extraction locally
 
 Nothing here needs CI, and nothing needs to be exported: credentials and
@@ -983,9 +1112,11 @@ stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
   readable from the catalog) — the generated script has a placeholder
   that must be filled in manually if ever used to recreate the link.
 - Lineage inference (both engines - see "Lineage inference uses a real
-  parser" above) will still miss dynamic SQL and anything built at
-  runtime, including four-part cross-linked-server names constructed at
-  runtime rather than written literally.
+  parser" above) will still miss anything assembled from values only known
+  at runtime. T-SQL's dynamic SQL is read where the statement text is
+  literal enough to recover (see "Dynamic SQL and OPENQUERY"), but a table
+  or linked-server name that only exists once a variable has a value cannot
+  be. PL/SQL's `EXECUTE IMMEDIATE` has no equivalent scanner yet.
 - Grant extraction (MSSQL `sys.database_permissions`, Oracle
   `ALL_TAB_PRIVS`/`ALL_COL_PRIVS`) only covers object/column-level grants
   on the extracted objects themselves — server/database-level permissions,
