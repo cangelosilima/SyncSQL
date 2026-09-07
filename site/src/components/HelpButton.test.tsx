@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import HelpButton from './HelpButton'
 import { helpGuides, toGuide, type HelpTopic } from '../help'
 
-const TOPICS: HelpTopic[] = ['overview', 'explorer', 'ai', 'lineage', 'history', 'object']
+const TOPICS: HelpTopic[] = ['overview', 'explorer', 'ai', 'lineage', 'history', 'object', 'alerts']
 
 describe('HelpButton', () => {
   it('opens the page guide in a dialog and closes it again', async () => {

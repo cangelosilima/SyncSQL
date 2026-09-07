@@ -1,0 +1,13 @@
+{
+  "status": "gate5-in-progress",
+  "fileKey": "yAIbDoFO7bJd7Vm22nCc6p",
+  "overview": {"page":"107:2","root":"108:7","main":"108:20"},
+  "ai": {"page":"107:3","unavailable":"108:428","simulatedPlan":"111:300"},
+  "history": {"page":"107:4","expanded":"108:335","collapsed":"112:22"},
+  "access": {"page":"75:9","root":"115:21","main":"115:34","plot":"116:32"},
+  "responsive1280": {"page":"96:143","explorer":"117:65","lineage":"117:175"},
+  "handoff": {"page":"107:5","root":"120:2"},
+  "aiStates": ["114:14","114:18","114:24","114:30","114:36","114:42","114:48","114:54","114:60"],
+  "boundaryStates": ["115:363","115:367","115:371","115:375","115:379","115:383","115:387","115:391","115:395"],
+  "typeColorVariables": ["VariableID:119:84","VariableID:119:85","VariableID:119:86","VariableID:119:87","VariableID:119:88","VariableID:119:89"]
+}

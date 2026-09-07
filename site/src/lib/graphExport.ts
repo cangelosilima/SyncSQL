@@ -51,7 +51,7 @@ function collectExportNodes(nodes: Node[]): ExportNode[] {
       x: n.position.x,
       y: n.position.y,
       width: measured?.width ?? (style.width as number | undefined) ?? DEFAULT_NODE_WIDTH,
-      height: measured?.height ?? DEFAULT_NODE_HEIGHT,
+      height: measured?.height ?? (style.height as number | undefined) ?? DEFAULT_NODE_HEIGHT,
       label: nodeLabel(n),
       background: resolveColor(String(style.background ?? 'var(--surface)')),
       border: borderColorOf(style),
@@ -130,9 +130,9 @@ export function buildLineageGraphSvg(rawNodes: Node[], rawEdges: Edge[]): GraphS
       const from = byId.get(e.from)
       const to = byId.get(e.to)
       if (!from || !to) return ''
-      const x1 = from.x + from.width / 2
+      const x1 = from.x + from.width
       const y1 = from.y + from.height / 2
-      const x2 = to.x + to.width / 2
+      const x2 = to.x
       const y2 = to.y + to.height / 2
       const midX = (x1 + x2) / 2
       const midY = (y1 + y2) / 2

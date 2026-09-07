@@ -1,53 +1,4 @@
-/*
-  Light/dark are both first-class - toggled via lib/ThemeContext.tsx, which
-  stamps data-theme="light"|"dark" on <html> (persisted to localStorage,
-  default "light"). Light uses the SyncSQL brand red as its accent; dark
-  uses the "Midnight" palette (a dark, purple-tinted scheme in the style of
-  a well-known VS Code dark theme - background/foreground/comment/accent
-  all drawn from it, pink standing in for brand red as the accent). Per-type
-  colors (lib/typeColors.ts) carry the actual information coding and are
-  left alone in both themes. Code/DDL blocks (.code-block) are the one
-  deliberate exception - always rendered in the Midnight palette regardless
-  of site theme, since that's where the syntax highlighting theme
-  (components/midnight-hljs.css) lives. The top "chrome" bar (.topbar) is a
-  second such exception - a fixed light shell that houses the brand mark,
-  nav and connection status, independent of the light/dark toggle below it.
-*/
-:root {
-  --bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface-alt: #ececef;
-  --text: #16161a;
-  --text-muted: #64646f;
-  --border: #dcdce1;
-  --accent: #e2001a;
-  --accent-contrast: #ffffff;
-  --ok: #10b981;
-  --warn: #f59e0b;
-
-  --chrome-bg: #ffffff;
-  --chrome-surface: #f2f2f4;
-  --chrome-border: #e2e2e6;
-  --chrome-text: #16161a;
-  --chrome-text-muted: #6b6b76;
-  --chrome-accent: #e2001a;
-
-  color-scheme: light;
-}
-
-:root[data-theme='dark'] {
-  --bg: #282a36;
-  --surface: #21222c;
-  --surface-alt: #343746;
-  --text: #f8f8f2;
-  --text-muted: #6272a4;
-  --border: #44475a;
-  --accent: #ff79c6;
-  --accent-contrast: #282a36;
-  --ok: #50fa7b;
-  --warn: #ffb86c;
-  color-scheme: dark;
-}
+@import "./tokens.css";
 
 * {
   box-sizing: border-box;
@@ -63,7 +14,7 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
 }
 
@@ -107,7 +58,7 @@ a {
   width: 1.6rem;
   height: 1.6rem;
   background: var(--chrome-accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border-radius: 2px;
   font-size: 0.62rem;
   font-weight: 800;
@@ -400,7 +351,7 @@ a {
 
 .alert-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 0.6rem;
   margin: 0.5rem 0 1.5rem;
 }
@@ -605,22 +556,21 @@ a {
 }
 
 .orphaned-ref-list li {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.82rem;
 }
 
 .code-block {
-  /* Always the "Midnight" palette, independent of the site theme toggle -
-     fixed colors, not theme variables, to match components/midnight-hljs.css. */
-  background: #282a36;
-  color: #f8f8f2;
+  /* Syntax tokens keep the code surface dark in either application theme. */
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 1rem;
   border-radius: 2px;
-  border: 1px solid #44475a;
+  border: 1px solid var(--code-border);
   overflow-x: auto;
   font-size: 0.82rem;
   line-height: 1.5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .code-block--empty {
@@ -979,7 +929,7 @@ a {
   background: var(--surface-alt);
   color: var(--text-muted);
   font-size: 0.68rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 
@@ -995,8 +945,8 @@ a {
 }
 
 .column-tag--deny {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--error);
+  color: var(--error);
 }
 
 /* A reference recovered from SQL built as a string rather than read off the
@@ -1011,7 +961,7 @@ a {
 /* Grants */
 
 .mono-cell {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 
@@ -1025,15 +975,15 @@ a {
 }
 
 .grant-state--grant {
-  color: #10b981;
-  border: 1px solid #10b981;
-  background: color-mix(in srgb, #10b981 12%, transparent);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
 }
 
 .grant-state--deny {
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--error);
+  border: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
 }
 
 /* Access page */
@@ -1064,10 +1014,34 @@ a {
 }
 
 .metrics-panel {
+  min-width: 0;
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 2px;
   padding: 0.85rem 1rem;
+}
+
+.metrics-panel--statistics {
+  grid-column: 1 / -1;
+}
+
+.metrics-panel--statistics .trend-chart {
+  max-width: 640px;
+}
+
+.metrics-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.metrics-table-scroll th,
+.metrics-table-scroll td {
+  white-space: nowrap;
+}
+
+.metrics-index-tab {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .metrics-panel h3 {
@@ -1188,7 +1162,7 @@ a {
 }
 
 .error-text {
-  color: var(--accent);
+  color: var(--error);
   font-weight: 600;
 }
 
@@ -1475,7 +1449,7 @@ a {
 }
 
 .history-sha {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   color: var(--text-muted);
 }
 
@@ -1530,7 +1504,7 @@ a {
   display: flex;
   gap: 0.6rem;
   padding: 0 0.6rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   white-space: pre;
   overflow-x: auto;
 }
@@ -1540,11 +1514,11 @@ a {
 }
 
 .diff-cell--del {
-  background: color-mix(in srgb, #ef4444 16%, transparent);
+  background: color-mix(in srgb, var(--removed) 16%, transparent);
 }
 
 .diff-cell--ins {
-  background: color-mix(in srgb, #10b981 16%, transparent);
+  background: color-mix(in srgb, var(--added) 16%, transparent);
 }
 
 .diff-cell--blank {
@@ -1620,7 +1594,7 @@ a {
 }
 
 .commit-sha {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .commit-objects {
@@ -2259,7 +2233,6 @@ a {
 
 .column-lineage-panel {
   border: 1px solid var(--border);
-  border-top: none;
   padding: 0.5rem 0.75rem 0.75rem;
   background: var(--surface-alt);
 }

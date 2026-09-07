@@ -5,6 +5,7 @@ import { useAi } from '../ai/AiContext'
 import type { FilterPlanV1 } from '../ai/types'
 import { useCatalog } from '../lib/CatalogContext'
 import { filterByContent } from '../lib/contentSearch'
+import { getColumnConsumers } from '../lib/columnLineage'
 import { applyFilters, describeToken, encodeTokensForUrl, type FilterToken } from '../lib/filters'
 
 const EXAMPLES = [
@@ -27,8 +28,11 @@ export default function AiPage() {
   const previewTokens = useMemo<FilterToken[]>(() => plan?.tokens.map((token, position) => ({ ...token, id: `ai-preview-${position}` })) ?? [], [plan])
   const matchCount = useMemo(() => {
     if (!plan) return null
+    if (plan.columnReference) return index ? getColumnConsumers(index, plan.columnReference.objectId, plan.columnReference.column).length : 0
     return filterByContent(applyFilters(nodes, previewTokens), plan.contentQuery).length
-  }, [nodes, plan, previewTokens])
+  }, [index, nodes, plan, previewTokens])
+  const columnTarget = plan?.columnReference
+  const columnObject = columnTarget ? index?.byId.get(columnTarget.objectId) : undefined
   const explorerUrl = useMemo(() => {
     if (!plan) return '/explorer'
     const params = new URLSearchParams()
@@ -53,6 +57,7 @@ export default function AiPage() {
           <h2>AI filter generation is unavailable</h2>
           <p>{availabilityMessage(ai.reason)}</p>
           <p className="muted">Explorer and every other catalog feature remain available.</p>
+          <Link className="ai-primary-link" to="/explorer">Open Explorer</Link>
           {ai.reason === 'runtime-error' && ai.error && <p className="error-text">Details: {ai.error}</p>}
           {ai.reason === 'runtime-error' && (
             <button type="button" className="ai-primary-button" onClick={ai.retry}>Retry local model</button>
@@ -64,7 +69,7 @@ export default function AiPage() {
 
   const busy = ai.runtimeStatus === 'loading' || ai.runtimeStatus === 'running'
   const canOpen = plan
-    ? (plan.tokens.length > 0 || Boolean(plan.contentQuery)) && plan.unsupportedFragments.length === 0
+    ? (Boolean(columnObject) || plan.tokens.length > 0 || Boolean(plan.contentQuery)) && plan.unsupportedFragments.length === 0
     : false
 
   async function submit(event: FormEvent) {
@@ -102,7 +107,9 @@ export default function AiPage() {
         <span className="ai-local-badge">Local · English</span>
       </div>
 
-      <form className="ai-prompt" onSubmit={submit}>
+      <div className="ai-investigation">
+      <div>
+      <form className="ai-prompt" onSubmit={submit} aria-busy={busy}>
         <label htmlFor="ai-filter-query">Filter request</label>
         <textarea
           id="ai-filter-query"
@@ -131,28 +138,31 @@ export default function AiPage() {
           <>
             <span>Loading local model{ai.progress?.file ? `: ${ai.progress.file}` : '...'}</span>
             {ai.progress?.percent !== null && ai.progress?.percent !== undefined && (
-              <progress max="100" value={ai.progress.percent}>{Math.round(ai.progress.percent)}%</progress>
+              <progress aria-label="Local model loading" max="100" value={ai.progress.percent}>{Math.round(ai.progress.percent)}%</progress>
             )}
+            {(ai.progress?.percent === null || ai.progress?.percent === undefined) && <progress aria-label="Local model loading" />}
           </>
         )}
         {ai.runtimeStatus === 'running' && <span>Interpreting request...</span>}
         {(localError || ai.error) && <span className="error-text">{localError ?? ai.error}</span>}
       </div>
+      </div>
 
-      {plan && (
+      {plan ? (
         <section className="ai-preview" aria-labelledby="ai-preview-title">
           <div className="ai-preview-header">
             <div>
-              <h2 id="ai-preview-title">Filter preview</h2>
-              <p className="muted">{matchCount} of {nodes.length} object(s) match</p>
+              <h2 id="ai-preview-title">{columnTarget ? 'Column references' : 'Filter preview'}</h2>
+              <p className="muted">{columnTarget ? `${matchCount} object(s) with recorded references` : `${matchCount} of ${nodes.length} object(s) match`}</p>
             </div>
             <span className={`ai-confidence ai-confidence--${plan.confidence}`}>{plan.confidence} confidence</span>
           </div>
 
           <div className="ai-filter-chips">
+            {columnTarget && columnObject && <span className="filter-chip">{columnObject.server} / {columnObject.database} / {columnObject.qualifiedName} → {columnTarget.column}</span>}
             {previewTokens.map((token) => <span key={token.id} className="filter-chip">{describeToken(token)}</span>)}
             {plan.contentQuery && <span className="filter-chip">DDL contains {plan.contentQuery}</span>}
-            {previewTokens.length === 0 && !plan.contentQuery && <span className="muted">No safe filters were generated.</span>}
+            {previewTokens.length === 0 && !plan.contentQuery && !columnTarget && <span className="muted">No safe filters were generated.</span>}
           </div>
 
           {plan.warnings.length > 0 && (
@@ -165,10 +175,11 @@ export default function AiPage() {
           )}
 
           {canOpen
-            ? <Link className="ai-primary-link" to={explorerUrl}>Open in Explorer</Link>
+            ? <Link className="ai-primary-link" to={columnTarget ? `/object/${columnTarget.objectId}?${new URLSearchParams({ column: columnTarget.column })}` : explorerUrl}>{columnTarget ? 'Open column lineage' : 'Open in Explorer'}</Link>
             : <button type="button" className="ai-primary-button" disabled>Open in Explorer</button>}
         </section>
-      )}
+      ) : <section className="ai-preview"><h2>Filter preview</h2><p className="muted">Generated structured filters, DDL search and matching-object counts appear here after a request.</p><p className="muted">Review confidence, warnings and unsupported fragments before opening Explorer.</p></section>}
+      </div>
     </div>
   )
 }

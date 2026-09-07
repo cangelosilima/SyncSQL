@@ -39,6 +39,7 @@ export interface FilterPlanV1 {
   version: 1
   tokens: FilterTokenInput[]
   contentQuery: string
+  columnReference?: { objectId: string; column: string }
   confidence: 'high' | 'medium' | 'low'
   warnings: string[]
   unsupportedFragments: string[]

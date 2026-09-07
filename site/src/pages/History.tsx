@@ -21,7 +21,7 @@ export default function History() {
   }
 
   return (
-    <div className="page">
+    <div className="page page--wide history-page">
       <h1 className="page-title">
         History
         <HelpButton topic="history" />
@@ -39,23 +39,25 @@ export default function History() {
             const isOpen = expanded.has(commit.sha)
             return (
               <li key={commit.sha} className="commit-entry">
-                <button type="button" className="commit-summary" onClick={() => toggle(commit.sha)}>
+                <button type="button" className="commit-summary" aria-expanded={isOpen} aria-controls={`commit-${commit.sha}`} onClick={() => toggle(commit.sha)}>
                   <span className="commit-toggle">{isOpen ? '▾' : '▸'}</span>
                   <span className="commit-date">{new Date(commit.date).toLocaleString()}</span>
                   <span className="commit-message">{commit.message}</span>
                   <span className="commit-count">
                     {commit.objectIds.length} object{commit.objectIds.length === 1 ? '' : 's'}
                   </span>
-                  <span className="commit-sha">{commit.sha.slice(0, 7)}</span>
+                  <span className="commit-sha" title={commit.sha}>{commit.sha.slice(0, 7)}</span>
                 </button>
                 {isOpen && (
-                  <ul className="commit-objects">
+                  <ul className="commit-objects" id={`commit-${commit.sha}`}>
+                    <li className="mono-cell">{commit.sha}</li>
                     {commit.objectIds.map((id) => {
                       const node = index.byId.get(id)
                       if (!node) return null
                       return (
                         <li key={id}>
                           <Link to={`/object/${id}`}>{node.qualifiedName}</Link> <TypeBadge type={node.type} />
+                          <span className="commit-object-context">{node.server} / {node.database}{node.schema ? ` / ${node.schema}` : ''}</span>
                         </li>
                       )
                     })}

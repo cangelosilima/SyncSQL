@@ -1,0 +1,75 @@
+/* Approved SQLSync foundations. Keep these names stable during page migration. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-alt: #e7edf5;
+  --text: #182536;
+  --text-muted: #4a5f78;
+  --border: #8190a3;
+  --accent: #235d9c;
+  --accent-contrast: #ffffff;
+  --selected: #ddebfa;
+  --hover: #edf3fa;
+  --focus: #174d89;
+  --disabled: #687587;
+  --ok: #17653e;
+  --warn: #865000;
+  --error: #a12535;
+  --info: var(--accent);
+  --added: var(--ok);
+  --removed: var(--error);
+
+  /* Legacy shell aliases allow the shell to migrate independently. */
+  --chrome-bg: var(--surface);
+  --chrome-surface: var(--surface-alt);
+  --chrome-border: var(--border);
+  --chrome-text: var(--text);
+  --chrome-text-muted: var(--text-muted);
+  --chrome-accent: var(--accent);
+
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --radius-4: 4px;
+  --radius-8: 8px;
+  --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-size-body: 14px;
+  --line-height-body: 20px;
+  --control-height: 36px;
+
+  /* Code remains a dark surface in both application themes. */
+  --code-bg: #282a36;
+  --code-text: #f8f8f2;
+  --code-border: #71849d;
+  --code-comment: #a1acc8;
+  --code-keyword: #ff79c6;
+  --code-literal: #8be9fd;
+  --code-string: #f1fa8c;
+  --code-number: #bd93f9;
+  --code-name: #ff5555;
+  --code-symbol: #50fa7b;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #111923;
+  --surface: #182332;
+  --surface-alt: #223247;
+  --text: #edf2f8;
+  --text-muted: #b3c0d1;
+  --border: #71849d;
+  --accent: #8abbf2;
+  --accent-contrast: #111923;
+  --selected: #263f5c;
+  --hover: #273a51;
+  --focus: #a6ceff;
+  --disabled: #a1adbc;
+  --ok: #81d3a8;
+  --warn: #ffd18a;
+  --error: #ffabb4;
+  color-scheme: dark;
+}

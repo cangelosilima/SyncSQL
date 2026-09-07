@@ -4,6 +4,7 @@ import ai from './ai.md?raw'
 import lineage from './lineage.md?raw'
 import history from './history.md?raw'
 import object from './object.md?raw'
+import alerts from './alerts.md?raw'
 
 /**
  * Per-page guidance, authored as Markdown next to this file and inlined into
@@ -11,7 +12,7 @@ import object from './object.md?raw'
  * working on a Pages deployment served from an unknown subpath, and offline
  * once the site has loaded.
  */
-export type HelpTopic = 'overview' | 'explorer' | 'ai' | 'lineage' | 'history' | 'object'
+export type HelpTopic = 'overview' | 'explorer' | 'ai' | 'lineage' | 'history' | 'object' | 'alerts'
 
 export interface HelpGuide {
   /** The document's own top-level heading, rendered as the panel title. */
@@ -38,4 +39,5 @@ export const helpGuides: Record<HelpTopic, HelpGuide> = {
   lineage: toGuide(lineage, 'Lineage explorer'),
   history: toGuide(history, 'History'),
   object: toGuide(object, 'Object detail'),
+  alerts: toGuide(alerts, 'Alerts'),
 }

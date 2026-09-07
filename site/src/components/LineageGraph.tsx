@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ReactFlow, Background, Controls, MiniMap, Panel, useReactFlow, type Node, type Edge } from '@xyflow/react'
+import { useEffect, useMemo, useState } from 'react'
+import { ReactFlow, Background, Controls, Panel, useReactFlow, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
@@ -9,7 +9,7 @@ import { colorForType } from '../lib/typeColors'
 import { buildLineageGraphSvg, downloadPng, downloadSvg } from '../lib/graphExport'
 import { bundleNeighborhood, isBundleId, type NeighborBundle } from '../lib/neighborhood'
 
-interface EdgeColumnData extends Record<string, unknown> {
+export interface EdgeColumnData extends Record<string, unknown> {
   from: string
   to: string
   columns: string[]
@@ -27,6 +27,7 @@ interface LineageGraphProps {
    * Double-click always opens the object's detail page regardless.
    */
   onNodeActivate?: (id: string) => void
+  onEdgeInspect?: (edge: EdgeColumnData | null) => void
   /**
    * Above this many nodes a focused graph collapses same-type neighbors into
    * counted bundle nodes rather than drawing every one of them. Ignored when
@@ -43,7 +44,7 @@ const DEFAULT_MAX_NODES = 60
 /** A single type group larger than this collapses once the graph is over its node budget. */
 const MAX_PER_GROUP = 8
 
-export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate, maxNodes = DEFAULT_MAX_NODES }: LineageGraphProps) {
+export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate, onEdgeInspect, maxNodes = DEFAULT_MAX_NODES }: LineageGraphProps) {
   const { index } = useCatalog()
   const { theme } = useTheme()
   const navigate = useNavigate()
@@ -68,11 +69,12 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         const color = colorForType(node.type)
         return {
           id: node.id,
+          ariaLabel: `${node.qualifiedName}, ${node.type}${isFocus ? ', current focus' : ''}`,
           data: { label: node.qualifiedName },
           position: { x: 0, y: 0 },
           style: {
-            background: isFocus ? color : 'var(--surface)',
-            color: isFocus ? '#fff' : 'var(--text)',
+            background: isFocus ? 'var(--selected)' : 'var(--surface)',
+            color: 'var(--text)',
             border: `2px solid ${color}`,
             borderRadius: 2,
             padding: 8,
@@ -103,6 +105,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
           id: `${from}->${to}`,
           source: from,
           target: to,
+          markerEnd: { type: 'arrowclosed', width: 20, height: 20, color: hasColumns ? 'var(--accent)' : 'var(--border)' },
           animated: false,
           label,
           labelStyle: { fill: 'var(--text-muted)', fontSize: 10 },
@@ -142,6 +145,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         id: `bundle:${bundle.id}`,
         source: bundle.direction === 'outgoing' ? focusId! : bundle.id,
         target: bundle.direction === 'outgoing' ? bundle.id : focusId!,
+        markerEnd: { type: 'arrowclosed', width: 20, height: 20, color: 'var(--border)' },
         animated: false,
         style: { stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 3' },
         data: { from: focusId!, to: bundle.id, columns: [] },
@@ -153,6 +157,8 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
 
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId)
   const selectedData = selectedEdge?.data
+  useEffect(() => { onEdgeInspect?.(selectedData ?? null) }, [selectedData, onEdgeInspect])
+  useEffect(() => { setSelectedEdgeId(null); setOpenBundleId(null) }, [focusId])
   const openBundle = bundling.bundles.find((bundle) => bundle.id === openBundleId)
 
   if (!index) return null
@@ -202,7 +208,6 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         >
           <Background />
           <Controls showInteractive={false} />
-          <MiniMap pannable zoomable maskColor={theme === 'dark' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.75)'} />
           <ExportControls />
         </ReactFlow>
 

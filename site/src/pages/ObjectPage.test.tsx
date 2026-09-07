@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import ObjectPage from './ObjectPage'
@@ -65,6 +65,7 @@ function renderObject(id: string) {
       </Routes>
     </MemoryRouter>,
   )
+  fireEvent.click(screen.getByRole('tab', { name: 'Graph' }))
 }
 
 describe('ObjectPage linked-server sections', () => {
