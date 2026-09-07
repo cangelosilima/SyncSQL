@@ -30,14 +30,14 @@ export default function Home() {
   const nodeTypeById = new Map(catalog.nodes.map((n) => [n.id, n.type]))
 
   return (
-    <div className="page">
+    <div className="page page--wide overview-page">
       <h1 className="page-title">
         Overview
         <HelpButton topic="overview" />
       </h1>
       <div className="sync-line">
         <span className="sync-line-badge">
-          <span className="status-dot" /> Synced
+          Catalog snapshot
         </span>
         <span>
           Last sync: {new Date(catalog.generatedAt).toLocaleString()} &middot; {totalServers} server(s) &middot;{' '}
@@ -68,6 +68,8 @@ export default function Home() {
         </div>
       </div>
 
+      <div className="overview-attention">
+      <section className="attention-section">
       <h2 className="section-label">
         Metric anomalies{metricAnomalies.length > 0 ? ` - ${metricAnomalies.length} detected` : ''}
       </h2>
@@ -90,6 +92,8 @@ export default function Home() {
         </div>
       )}
 
+      </section>
+      <section className="attention-section">
       <h2 className="section-label">
         Orphaned references{orphanedReferences.length > 0 ? ` - ${orphanedReferences.length} detected` : ''}
       </h2>
@@ -123,6 +127,8 @@ export default function Home() {
         </div>
       )}
 
+      </section>
+      </div>
       <div className="overview-grid">
         <section className="overview-panel">
           <h2 className="panel-title-divided">Change activity &mdash; last {CHANGE_ACTIVITY_WEEKS} weeks</h2>
@@ -152,7 +158,7 @@ export default function Home() {
 
         <section className="overview-panel">
           <h2>Most referenced tables</h2>
-          <p className="muted overview-panel-hint">Direct = objects pointing straight at it. Indirect includes transitive dependents (one hop across a linked server).</p>
+          <p className="muted overview-panel-hint">Direct = objects pointing straight at it. Indirect includes direct and transitive dependents; traversal stops after crossing a server and at six hops.</p>
           {topReferenced.length === 0 ? (
             <p className="muted">No inferred references yet.</p>
           ) : (
@@ -192,7 +198,7 @@ export default function Home() {
 
         <section className="overview-panel">
           <h2>Commonly changed together</h2>
-          <p className="muted overview-panel-hint">Objects that keep showing up in the same commit.</p>
+          <p className="muted overview-panel-hint">Objects that keep showing up in the same commit. Co-occurrence is not a dependency or a causal relationship.</p>
           {coChanges.length === 0 ? (
             <p className="muted">No co-change pairs found yet.</p>
           ) : (

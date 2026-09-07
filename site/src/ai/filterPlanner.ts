@@ -42,6 +42,9 @@ export class EmbeddingFilterPlanner implements FilterPlanner {
   async generate(query: string, nodes: CatalogNode[], adapter: EmbeddingAdapter, signal?: AbortSignal): Promise<FilterPlanV1> {
     const trimmed = query.trim()
     if (!trimmed) return emptyPlan('Enter a filter request.')
+    if (signal?.aborted) throw abortError()
+    const columnPlan = planColumnReference(trimmed, nodes)
+    if (columnPlan) return columnPlan
 
     const facets = buildFacets(nodes)
     const tokens: FilterTokenInput[] = []
@@ -126,6 +129,34 @@ export class EmbeddingFilterPlanner implements FilterPlanner {
         : 'high'
 
     return { version: 1, tokens: cleanTokens, contentQuery, confidence, warnings, unsupportedFragments }
+  }
+}
+
+function planColumnReference(query: string, nodes: CatalogNode[]): FilterPlanV1 | null {
+  // Explicit quoted content searches retain their literal meaning.
+  if (/\b(?:ddl|definition|code)\s+(?:contains?|mentions?)\s+["'`]/i.test(query)) return null
+  if (!/\b(?:references?|referencing|uses?|using|consumers?|reads?)\b.*\bcolumn\b/i.test(query)) return null
+  const identifier = '(?:\\[[^\\]]+\\]|"[^"]+"|`[^`]+`|[\\w$#]+)'
+  const qualified = `${identifier}(?:\\s*\\.\\s*${identifier}){0,3}`
+  const match = new RegExp(`^(?:(?:show|find|list)\\s+)?(?:all\\s+)?(?:references?\\s+to|consumers?\\s+of|(?:objects?\\s+(?:that\\s+)?)?(?:reference|use|read)s?)\\s+(?:the\\s+)?column\\s+(${identifier})\\s+(?:from|of|in|on)\\s+(${qualified})[.?!]?$`, 'i').exec(query)
+  const reject = (message: string): FilterPlanV1 => ({ ...emptyPlan(message), unsupportedFragments: [query] })
+  if (!match) return reject('Use “Show all references to column Id from dbo.Orders”. Additional constraints cannot be applied to column references here.')
+  const unquote = (value: string) => value.replace(/^\[|\]$|^["`]|["`]$/g, '')
+  const columnName = unquote(match[1])
+  const parts = match[2].match(new RegExp(identifier, 'g'))!.map(unquote)
+  const candidates = nodes.filter((node) => {
+    const identity = [node.server, node.database, node.schema ?? '', node.name].slice(-parts.length)
+    return identity.every((value, position) => value.toLowerCase() === parts[position].toLowerCase())
+  })
+  if (candidates.length !== 1) return reject(candidates.length
+    ? 'More than one object matches. Qualify the object as server.database.schema.object.'
+    : 'The object was not found. Use its catalog name, optionally qualified as server.database.schema.object.')
+  const columns = candidates[0].columns.filter((column) => column.name.toLowerCase() === columnName.toLowerCase())
+  if (columns.length !== 1) return reject('The column could not be uniquely resolved in the catalog for this object. Check its Columns workspace.')
+  return {
+    version: 1, tokens: [], contentQuery: '', confidence: 'high', unsupportedFragments: [],
+    columnReference: { objectId: candidates[0].id, column: columns[0].name },
+    warnings: ['Column references use recorded dependency evidence, not a DDL phrase search. Detection is best-effort and can miss SELECT *, computed expressions and dynamic SQL; this is not a complete list of all references.'],
   }
 }
 

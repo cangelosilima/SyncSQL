@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -35,14 +35,16 @@ vi.mock('../components/LineageGraph', () => ({
   default: ({ nodeIds }: { nodeIds: string[] }) => <div data-testid="graph">{nodeIds.join(',')}</div>,
 }))
 
-function renderObject(id: string) {
-  return render(
+function renderObject(id: string, workspace = 'Columns') {
+  const result = render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={[`/object/${id}`]}>
       <Routes>
         <Route path="/object/*" element={<ObjectPage />} />
       </Routes>
     </MemoryRouter>,
   )
+  fireEvent.click(screen.getByRole('tab', { name: workspace }))
+  return result
 }
 
 function columnRow(name: string): HTMLElement {
@@ -97,7 +99,7 @@ describe('ObjectPage column lineage', () => {
 
 describe('ObjectPage system references', () => {
   it('lists engine-provided objects separately from orphaned references', () => {
-    const { container } = renderObject('orders')
+    const { container } = renderObject('orders', 'Graph')
 
     expect(screen.getByRole('heading', { name: 'System objects referenced' })).toBeInTheDocument()
     // Named twice on the page - once in the section's explanation, once as the

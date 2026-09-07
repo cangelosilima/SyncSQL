@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { downloadXlsx, type SheetSpec } from '../lib/xlsx'
+import Button from './Button'
 
 interface XlsxExportButtonProps {
   /** Built lazily: the workbook is only assembled when somebody actually asks for it. */
@@ -45,15 +46,16 @@ export default function XlsxExportButton({
 
   return (
     <>
-      <button
+      <Button
         type="button"
         className={className}
         disabled={busy}
+        aria-busy={busy}
         title={title ?? `Download every section of this object as ${filename}`}
         onClick={run}
       >
         {busy ? 'Exporting...' : label}
-      </button>
+      </Button>
       {error && (
         <span className="muted" role="alert">
           {error}

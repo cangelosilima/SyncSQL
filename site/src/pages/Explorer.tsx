@@ -72,7 +72,7 @@ export default function Explorer() {
   }
 
   return (
-    <div className="page page--wide">
+    <div className="page page--wide explorer-page">
       <div className="lineage-header-row">
         <h1 className="page-title">
           Explorer
@@ -85,7 +85,7 @@ export default function Explorer() {
           title={`Download all ${sorted.length} matching object(s) as CSV - the whole filter, not just the rows on screen`}
         />
       </div>
-      <p className="muted">
+      <p className="muted" role="status" aria-live="polite">
         {filtered.length} of {nodes.length} object(s) match
         {tokens.length > 0 || debouncedContentQuery.trim() ? ' the current filter' : ''}.
       </p>
@@ -171,7 +171,7 @@ function SortableHeader({
 }) {
   const isActive = active === sortKey
   return (
-    <th>
+    <th aria-sort={isActive ? (dir === 1 ? 'ascending' : 'descending') : 'none'}>
       <button type="button" className="explorer-sort-btn" onClick={() => onClick(sortKey)}>
         {label}
         {isActive && <span className="explorer-sort-arrow">{dir === 1 ? ' ▲' : ' ▼'}</span>}

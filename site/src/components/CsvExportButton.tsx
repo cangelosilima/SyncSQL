@@ -1,4 +1,5 @@
 import { downloadCsv, toCsv, type CsvColumn } from '../lib/csv'
+import Button from './Button'
 
 interface CsvExportButtonProps<T> {
   rows: readonly T[]
@@ -27,7 +28,7 @@ export default function CsvExportButton<T>({
 }: CsvExportButtonProps<T>) {
   const disabled = rows.length === 0
   return (
-    <button
+    <Button
       type="button"
       className={className}
       disabled={disabled}
@@ -35,6 +36,6 @@ export default function CsvExportButton<T>({
       onClick={() => downloadCsv(toCsv(rows, columns), filename)}
     >
       {label}
-    </button>
+    </Button>
   )
 }

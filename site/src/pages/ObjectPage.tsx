@@ -10,6 +10,7 @@ import RelatedObjects from '../components/RelatedObjects'
 import CsvExportButton from '../components/CsvExportButton'
 import XlsxExportButton from '../components/XlsxExportButton'
 import HelpButton from '../components/HelpButton'
+import WorkspaceTabs, { WorkspacePanel } from '../components/WorkspaceTabs'
 import { isLinkNode, qualifiedRefName } from '../lib/catalog'
 import { epochOf } from '../lib/analytics'
 import { csvFileName } from '../lib/csv'
@@ -28,6 +29,8 @@ const CURRENT_SHA = '__current__'
  * the same-type ones collapse into counted bundle nodes.
  */
 const NEIGHBORHOOD_GRAPH_CAP = 30
+const WORKSPACES = ['Columns', 'Graph', 'Access', 'Relationships', 'Metrics', 'History', 'Diff'] as const
+type Workspace = typeof WORKSPACES[number]
 
 export default function ObjectPage() {
   const params = useParams()
@@ -59,6 +62,9 @@ export default function ObjectPage() {
   // "here is who reads Orders.CustomerId" is a thing worth sending someone.
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedColumn = searchParams.get('column')
+  const [workspace, setWorkspace] = useState<Workspace>('Columns')
+  useEffect(() => { setWorkspace('Columns') }, [id])
+  useEffect(() => { if (selectedColumn) setWorkspace('Columns') }, [selectedColumn])
   function selectColumn(column: string | null) {
     const next = new URLSearchParams(searchParams)
     if (column) next.set('column', column)
@@ -99,13 +105,83 @@ export default function ObjectPage() {
     )
   }
 
+  const revisionControls = <>
+      {node.history.length === 0 && <p className="empty-state">No history was mined for this object.</p>}
+      {workspace === 'Diff' && !compareMode && <p className="muted">Enable comparison and select two available revisions below.</p>}
+      {node.history.length > 0 && (
+        <>
+          <div className="lineage-graph-header">
+            <h2>Change history</h2>
+            <button
+              type="button"
+              className="lineage-share-btn"
+              onClick={() => {
+                setCompareMode((v) => !v)
+                setDiffPicks([])
+                setViewingVersion(null)
+                setWorkspace(compareMode ? 'History' : 'Diff')
+              }}
+            >
+              {compareMode ? 'Cancel comparison' : 'Compare two revisions'}
+            </button>
+          </div>
+          <p className="muted overview-panel-hint">
+            {compareMode
+              ? 'Pick two revisions (including "Current") to see a side-by-side diff.'
+              : `${node.changeCount} change${node.changeCount === 1 ? '' : 's'} in the mined commit window. Click a revision to view its definition as of that commit.`}
+          </p>
+          <ul className="history-list">
+            {[{ sha: CURRENT_SHA, date: new Date().toISOString(), message: 'Current definition', ddl: node.ddl }, ...node.history].map(
+              (version) => {
+                const available = Boolean(version.ddl)
+                const picked = diffPicks.includes(version.sha)
+                return (
+                  <li key={version.sha}>
+                    <button
+                      type="button"
+                      className={
+                        (compareMode ? picked : viewingVersion?.sha === version.sha) ? 'history-entry active' : 'history-entry'
+                      }
+                      onClick={() => {
+                        if (compareMode) {
+                          if (!available) return
+                          setDiffPicks((prev) => {
+                            if (prev.includes(version.sha)) return prev.filter((s) => s !== version.sha)
+                            if (prev.length >= 2) return [prev[1], version.sha]
+                            return [...prev, version.sha]
+                          })
+                        } else {
+                          setViewingVersion(version.sha === CURRENT_SHA ? null : version)
+                          setWorkspace('History')
+                        }
+                      }}
+                      disabled={!available}
+                      title={available ? (compareMode ? 'Select for comparison' : 'View this revision') : 'Content not available for this revision'}
+                    >
+                      {compareMode && <span className="history-entry-check">{picked ? '✓' : ''}</span>}
+                      <span className="history-date">
+                        {version.sha === CURRENT_SHA ? '' : new Date(version.date).toLocaleDateString()}
+                      </span>
+                      <span className="history-message">{version.message}</span>
+                      <span className="history-sha">{version.sha === CURRENT_SHA ? '' : version.sha.slice(0, 7)}</span>
+                    </button>
+                  </li>
+                )
+              },
+            )}
+          </ul>
+
+        </>
+      )}
+  </>
+
   return (
-    <div className="page">
+    <div className="page page--wide object-workbench">
       <p className="breadcrumb">
         <Link to="/explorer">Explorer</Link> / {node.qualifiedName}
       </p>
       <h1 className="page-title">
-        {node.qualifiedName} <TypeBadge type={node.type} />
+        Object explorer
         <HelpButton topic="object" />
       </h1>
       <p className="breadcrumb">
@@ -115,6 +191,7 @@ export default function ObjectPage() {
       {node.description && <p className="object-description">{node.description}</p>}
 
       <div className="object-quick-facts">
+        <TypeBadge type={node.type} />
         {node.lastChangedAt && (
           <div>
             <span className="quick-stat-label">Modified</span>
@@ -168,6 +245,158 @@ export default function ObjectPage() {
           </ul>
         </div>
       )}
+
+      <section className="object-definition" aria-labelledby="object-definition-title">
+      <h2 id="object-definition-title">Definition</h2>
+      {viewingVersion && (
+        <div className="version-banner">
+          Viewing revision from {new Date(viewingVersion.date).toLocaleString()} ({viewingVersion.sha.slice(0, 7)}):{' '}
+          {viewingVersion.message}
+          <button type="button" className="version-banner-back" onClick={() => setViewingVersion(null)}>
+            Back to latest
+          </button>
+        </div>
+      )}
+      <CodeBlock code={viewingVersion ? (viewingVersion.ddl ?? '-- Not available at this revision.') : node.ddl} />
+
+      {!viewingVersion &&
+        node.sections.map((section) => (
+          <details key={section.title} className="object-section">
+            <summary>{section.title}</summary>
+            <CodeBlock code={section.content} />
+          </details>
+        ))}
+
+      </section>
+      <WorkspaceTabs panelPrefix="object-workspace" label="Object workspaces" items={WORKSPACES} value={workspace} onChange={setWorkspace} />
+      {viewingVersion && <p className="version-banner" role="status">Historical definition selected. Object metadata, grants and metrics describe the current catalog snapshot.</p>}
+      <div className="investigation-layout">
+      <div className="workspace-content">
+      <WorkspacePanel name="Columns" active={workspace}>
+      {node.columns.length === 0 && <p className="empty-state">No columns are recorded for this object.</p>}
+      {node.columns.length > 0 && (
+        <>
+          <div className="lineage-graph-header">
+            <h2>Columns</h2>
+            <CsvExportButton rows={node.columns} columns={columnColumns} filename={csvFileName(node.id, 'columns')} />
+          </div>
+          <table className="columns-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Used by</th>
+              </tr>
+            </thead>
+            <tbody>
+              {node.columns.map((col) => {
+                const uses = getColumnUsageCount(columnUsage, col.name)
+                const open = selectedColumn?.toLowerCase() === col.name.toLowerCase()
+                return (
+                  <tr key={col.name} className={open ? 'columns-row--selected' : undefined}>
+                    <td>{col.name}</td>
+                    <td className="mono-cell">{col.dataType ?? <span className="muted">-</span>}</td>
+                    <td>{col.description ?? <span className="muted">-</span>}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="column-lineage-btn"
+                        aria-expanded={open}
+                        onClick={() => selectColumn(open ? null : col.name)}
+                        title={
+                          uses > 0
+                            ? `Show the ${uses} object(s) known to reference ${col.name}`
+                            : `No object in the catalog is known to reference ${col.name}`
+                        }
+                      >
+                        {uses > 0 ? `${uses} object${uses === 1 ? '' : 's'}` : 'none'}
+                        <span className="column-lineage-btn-caret" aria-hidden="true">
+                          {open ? ' ▾' : ' ▸'}
+                        </span>
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          {selectedColumn && (
+            <ColumnLineagePanel
+              node={node}
+              column={selectedColumn}
+              consumers={columnConsumers}
+              onClose={() => selectColumn(null)}
+            />
+          )}
+        </>
+      )}
+
+      </WorkspacePanel>
+      <WorkspacePanel name="Metrics" active={workspace}>
+      {node.metrics.length === 0 && <p className="empty-state">No metric snapshots were collected for this object.</p>}
+      {node.metrics.length > 0 && (
+        <>
+          <h2>Metrics</h2>
+          <p className="muted overview-panel-hint">
+            Volume, index and optimizer-statistics history mined at extraction time - kept separate from this
+            object&apos;s own version history since it changes on every run.
+          </p>
+          <MetricsPanels metrics={node.metrics} />
+        </>
+      )}
+
+      </WorkspacePanel>
+      <WorkspacePanel name="Access" active={workspace}>
+      {node.grants.length === 0 && <p className="empty-state">No grants are recorded for this object. This does not establish that nobody can access it.</p>}
+      {node.grants.length > 0 && (
+        <>
+          <div className="lineage-graph-header">
+            <h2>Access</h2>
+            <div className="section-actions">
+              <Link to="/lineage?tab=access">Search access by grantee &rarr;</Link>
+              <CsvExportButton rows={node.grants} columns={grantColumns} filename={csvFileName(node.id, 'grants')} />
+            </div>
+          </div>
+          <table className="columns-table">
+            <thead>
+              <tr>
+                <th>Grantee</th>
+                <th>Type</th>
+                <th>Permission</th>
+                <th>State</th>
+                <th>Column</th>
+              </tr>
+            </thead>
+            <tbody>
+              {node.grants.map((grant, i) => (
+                <tr key={`${grant.grantee}-${grant.permission}-${grant.column ?? ''}-${i}`}>
+                  <td>
+                    <Link to={`/lineage?tab=access&grantee=${encodeURIComponent(grant.grantee)}`}>{grant.grantee}</Link>
+                  </td>
+                  <td>{grant.granteeType ?? <span className="muted">-</span>}</td>
+                  <td>{grant.permission}</td>
+                  <td>
+                    <span className={grant.state === 'DENY' ? 'grant-state grant-state--deny' : 'grant-state grant-state--grant'}>
+                      {grant.state}
+                    </span>
+                  </td>
+                  <td>{grant.column ?? <span className="muted">(whole object)</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      </WorkspacePanel>
+      <WorkspacePanel name="History" active={workspace}>{revisionControls}</WorkspacePanel>
+      <WorkspacePanel name="Diff" active={workspace}>
+        {revisionControls}
+        {compareMode && diffPicks.length === 2 && <DiffCompare node={node} shas={diffPicks} />}
+      </WorkspacePanel>
+      <WorkspacePanel name="Graph" active={workspace}>
 
       {systemRefs.length > 0 && (
         <>
@@ -269,203 +498,6 @@ export default function ObjectPage() {
         </>
       )}
 
-      {node.columns.length > 0 && (
-        <>
-          <div className="lineage-graph-header">
-            <h2>Columns</h2>
-            <CsvExportButton rows={node.columns} columns={columnColumns} filename={csvFileName(node.id, 'columns')} />
-          </div>
-          <table className="columns-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Description</th>
-                <th>Used by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {node.columns.map((col) => {
-                const uses = getColumnUsageCount(columnUsage, col.name)
-                const open = selectedColumn?.toLowerCase() === col.name.toLowerCase()
-                return (
-                  <tr key={col.name} className={open ? 'columns-row--selected' : undefined}>
-                    <td>{col.name}</td>
-                    <td className="mono-cell">{col.dataType ?? <span className="muted">-</span>}</td>
-                    <td>{col.description ?? <span className="muted">-</span>}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="column-lineage-btn"
-                        aria-expanded={open}
-                        onClick={() => selectColumn(open ? null : col.name)}
-                        title={
-                          uses > 0
-                            ? `Show the ${uses} object(s) known to reference ${col.name}`
-                            : `No object in the catalog is known to reference ${col.name}`
-                        }
-                      >
-                        {uses > 0 ? `${uses} object${uses === 1 ? '' : 's'}` : 'none'}
-                        <span className="column-lineage-btn-caret" aria-hidden="true">
-                          {open ? ' ▾' : ' ▸'}
-                        </span>
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-
-          {selectedColumn && (
-            <ColumnLineagePanel
-              node={node}
-              column={selectedColumn}
-              consumers={columnConsumers}
-              onClose={() => selectColumn(null)}
-            />
-          )}
-        </>
-      )}
-
-      <h2>Definition</h2>
-      {viewingVersion && (
-        <div className="version-banner">
-          Viewing revision from {new Date(viewingVersion.date).toLocaleString()} ({viewingVersion.sha.slice(0, 7)}):{' '}
-          {viewingVersion.message}
-          <button type="button" className="version-banner-back" onClick={() => setViewingVersion(null)}>
-            Back to latest
-          </button>
-        </div>
-      )}
-      <CodeBlock code={viewingVersion ? (viewingVersion.ddl ?? '-- Not available at this revision.') : node.ddl} />
-
-      {!viewingVersion &&
-        node.sections.map((section) => (
-          <details key={section.title} className="object-section">
-            <summary>{section.title}</summary>
-            <CodeBlock code={section.content} />
-          </details>
-        ))}
-
-      {node.metrics.length > 0 && (
-        <>
-          <h2>Metrics</h2>
-          <p className="muted overview-panel-hint">
-            Volume, index and optimizer-statistics history mined at extraction time - kept separate from this
-            object&apos;s own version history since it changes on every run.
-          </p>
-          <MetricsPanels metrics={node.metrics} />
-        </>
-      )}
-
-      {node.grants.length > 0 && (
-        <>
-          <div className="lineage-graph-header">
-            <h2>Access</h2>
-            <div className="section-actions">
-              <Link to="/lineage?tab=access">Search access by grantee &rarr;</Link>
-              <CsvExportButton rows={node.grants} columns={grantColumns} filename={csvFileName(node.id, 'grants')} />
-            </div>
-          </div>
-          <table className="columns-table">
-            <thead>
-              <tr>
-                <th>Grantee</th>
-                <th>Type</th>
-                <th>Permission</th>
-                <th>State</th>
-                <th>Column</th>
-              </tr>
-            </thead>
-            <tbody>
-              {node.grants.map((grant, i) => (
-                <tr key={`${grant.grantee}-${grant.permission}-${grant.column ?? ''}-${i}`}>
-                  <td>
-                    <Link to={`/lineage?tab=access&grantee=${encodeURIComponent(grant.grantee)}`}>{grant.grantee}</Link>
-                  </td>
-                  <td>{grant.granteeType ?? <span className="muted">-</span>}</td>
-                  <td>{grant.permission}</td>
-                  <td>
-                    <span className={grant.state === 'DENY' ? 'grant-state grant-state--deny' : 'grant-state grant-state--grant'}>
-                      {grant.state}
-                    </span>
-                  </td>
-                  <td>{grant.column ?? <span className="muted">(whole object)</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {node.history.length > 0 && (
-        <>
-          <div className="lineage-graph-header">
-            <h2>Change history</h2>
-            <button
-              type="button"
-              className="lineage-share-btn"
-              onClick={() => {
-                setCompareMode((v) => !v)
-                setDiffPicks([])
-                setViewingVersion(null)
-              }}
-            >
-              {compareMode ? 'Cancel comparison' : 'Compare two revisions'}
-            </button>
-          </div>
-          <p className="muted overview-panel-hint">
-            {compareMode
-              ? 'Pick two revisions (including "Current") to see a side-by-side diff.'
-              : `${node.changeCount} change${node.changeCount === 1 ? '' : 's'} in the mined commit window. Click a revision to view its definition as of that commit.`}
-          </p>
-          <ul className="history-list">
-            {[{ sha: CURRENT_SHA, date: new Date().toISOString(), message: 'Current definition', ddl: node.ddl }, ...node.history].map(
-              (version) => {
-                const available = Boolean(version.ddl)
-                const picked = diffPicks.includes(version.sha)
-                return (
-                  <li key={version.sha}>
-                    <button
-                      type="button"
-                      className={
-                        (compareMode ? picked : viewingVersion?.sha === version.sha) ? 'history-entry active' : 'history-entry'
-                      }
-                      onClick={() => {
-                        if (compareMode) {
-                          if (!available) return
-                          setDiffPicks((prev) => {
-                            if (prev.includes(version.sha)) return prev.filter((s) => s !== version.sha)
-                            if (prev.length >= 2) return [prev[1], version.sha]
-                            return [...prev, version.sha]
-                          })
-                        } else {
-                          setViewingVersion(version.sha === CURRENT_SHA ? null : version)
-                        }
-                      }}
-                      disabled={!available}
-                      title={available ? (compareMode ? 'Select for comparison' : 'View this revision') : 'Content not available for this revision'}
-                    >
-                      {compareMode && <span className="history-entry-check">{picked ? '✓' : ''}</span>}
-                      <span className="history-date">
-                        {version.sha === CURRENT_SHA ? '' : new Date(version.date).toLocaleDateString()}
-                      </span>
-                      <span className="history-message">{version.message}</span>
-                      <span className="history-sha">{version.sha === CURRENT_SHA ? '' : version.sha.slice(0, 7)}</span>
-                    </button>
-                  </li>
-                )
-              },
-            )}
-          </ul>
-
-          {compareMode && diffPicks.length === 2 && (
-            <DiffCompare node={node} shas={diffPicks} />
-          )}
-        </>
-      )}
-
       <div className="lineage-graph-header">
         <h2>Lineage</h2>
         <CsvExportButton
@@ -485,7 +517,8 @@ export default function ObjectPage() {
         <RelatedObjects title="Used by" rootId={node.id} ids={incoming} direction="incoming" />
       </div>
 
-      {neighborhoodIds.length > 1 && (
+      {neighborhoodIds.length === 1 && <p className="empty-state">No inferred dependencies or consumers are recorded for this object.</p>}
+      {workspace === 'Graph' && neighborhoodIds.length > 1 && (
         <>
           <div className="lineage-graph-header">
             <h3>Neighborhood graph</h3>
@@ -494,6 +527,18 @@ export default function ObjectPage() {
           <LineageGraph nodeIds={neighborhoodIds} focusId={node.id} height={360} maxNodes={NEIGHBORHOOD_GRAPH_CAP} />
         </>
       )}
+      </WorkspacePanel>
+        <WorkspacePanel name="Relationships" active={workspace}>
+          <div className="object-relationships-heading">
+            <h2>Relationships</h2>
+            <button type="button" className="lineage-share-btn" onClick={() => setWorkspace('Graph')}>All relationship evidence</button>
+          </div>
+          <RelatedObjects title="Depends on" rootId={node.id} ids={outgoing} direction="outgoing" />
+          <RelatedObjects title="Used by" rootId={node.id} ids={incoming} direction="incoming" />
+        </WorkspacePanel>
+      </div>
+      </div>
+
     </div>
   )
 }

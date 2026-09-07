@@ -1,0 +1,188 @@
+{
+  "phase": "gate5-in-progress",
+  "components": {
+    "Button": {
+      "variants": [
+        "76:2",
+        "76:4",
+        "76:6",
+        "76:8",
+        "76:10"
+      ],
+      "page": "75:3",
+      "set": "76:12"
+    },
+    "Input": {
+      "set": "78:10",
+      "variants": [
+        "78:2",
+        "78:4",
+        "78:6",
+        "78:8"
+      ],
+      "page": "75:4"
+    },
+    "FilterChip": {
+      "set": "78:17",
+      "variants": [
+        "78:11",
+        "78:13",
+        "78:15"
+      ],
+      "page": "75:4"
+    },
+    "StatusBadge": {
+      "set": "78:30",
+      "variants": [
+        "78:18",
+        "78:20",
+        "78:22",
+        "78:24",
+        "78:26",
+        "78:28"
+      ],
+      "page": "75:5"
+    },
+    "WorkspaceNav": {
+      "set": "78:39",
+      "variants": [
+        "78:31",
+        "78:33",
+        "78:35",
+        "78:37"
+      ],
+      "page": "75:6"
+    }
+  },
+  "pages": {
+    "05 — Design System": "75:2",
+    "05.1 — Button": "75:3",
+    "05.2 — Input & FilterChip": "75:4",
+    "05.3 — StatusBadge": "75:5",
+    "05.4 — Workspace Navigation": "75:6",
+    "07 — Explorer": "75:7",
+    "08 — Object Workbench": "75:8",
+    "09 — Lineage": "75:9"
+  },
+  "screens": {
+    "E": {
+      "createdNodeIds": [
+        "78:40",
+        "78:41",
+        "78:42",
+        "78:43",
+        "78:44",
+        "78:45",
+        "78:46",
+        "78:47"
+      ],
+      "root": "78:40",
+      "side": "78:46",
+      "main": "78:47",
+      "page": "75:7"
+    },
+    "O": {
+      "createdNodeIds": [
+        "78:48",
+        "78:49",
+        "78:50",
+        "78:51",
+        "78:52",
+        "78:53",
+        "78:54",
+        "78:55"
+      ],
+      "root": "78:48",
+      "side": "78:54",
+      "main": "78:55",
+      "page": "75:8"
+    },
+    "L": {
+      "createdNodeIds": [
+        "78:56",
+        "78:57",
+        "78:58",
+        "78:59",
+        "78:60",
+        "78:61",
+        "78:62",
+        "78:63"
+      ],
+      "root": "78:56",
+      "side": "78:62",
+      "main": "78:63",
+      "page": "75:9"
+    }
+  },
+  "darkObject": "81:16",
+  "contrast": [
+    {
+      "name": "text",
+      "mode": "light",
+      "ratio": "15.48"
+    },
+    {
+      "name": "text",
+      "mode": "dark",
+      "ratio": "14.08"
+    },
+    {
+      "name": "text-muted",
+      "mode": "light",
+      "ratio": "6.56"
+    },
+    {
+      "name": "text-muted",
+      "mode": "dark",
+      "ratio": "8.58"
+    },
+    {
+      "name": "accent",
+      "mode": "light",
+      "ratio": "6.74"
+    },
+    {
+      "name": "accent",
+      "mode": "dark",
+      "ratio": "7.90"
+    },
+    {
+      "name": "ok",
+      "mode": "light",
+      "ratio": "7.08"
+    },
+    {
+      "name": "ok",
+      "mode": "dark",
+      "ratio": "8.92"
+    },
+    {
+      "name": "warn",
+      "mode": "light",
+      "ratio": "6.64"
+    },
+    {
+      "name": "warn",
+      "mode": "dark",
+      "ratio": "11.12"
+    },
+    {
+      "name": "error",
+      "mode": "light",
+      "ratio": "7.42"
+    },
+    {
+      "name": "error",
+      "mode": "dark",
+      "ratio": "8.86"
+    }
+  ],
+  "remaining": [
+    "Other component families",
+    "Full Object workspaces and states",
+    "Overview AI History",
+    "Responsive layouts",
+    "Full QA and engineering handoff",
+    "Gate 5 approval"
+  ]
+}

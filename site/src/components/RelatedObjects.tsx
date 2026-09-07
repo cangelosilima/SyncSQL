@@ -236,7 +236,8 @@ function RelatedRow({ node, rootId, direction }: { node: CatalogNode; rootId: st
   const [from, to] = direction === 'outgoing' ? [rootId, node.id] : [node.id, rootId]
   const columns = getEdgeColumns(index, from, to)
   return (
-    <li>
+    <li className="related-object-row">
+      <span className="reference-direction" role="img" aria-label={direction === 'outgoing' ? 'This object references' : 'References this object'} title={direction === 'outgoing' ? 'This object → referenced object' : 'This object ← referencing object'}>{direction === 'outgoing' ? '→' : '←'}</span>
       <Link to={`/object/${node.id}`}>{node.qualifiedName}</Link> <TypeBadge type={node.type} />
       {isDynamicEdge(index, from, to) && (
         <span

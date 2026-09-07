@@ -1,0 +1,75 @@
+/* Shared affordances, layered after existing page styles during migration. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  min-height: var(--control-height);
+  padding: 7px var(--space-12);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-4);
+  background: var(--surface);
+  color: var(--accent);
+  font: 600 var(--font-size-body) / var(--line-height-body) var(--font-body);
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+  appearance: none;
+  box-shadow: none;
+}
+
+.ui-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ui-button:disabled {
+  background: var(--surface-alt);
+  color: var(--disabled);
+  border-color: var(--border);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+:is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.filter-bar-input-row .filter-bar-input:focus-visible,
+.content-search .content-search-input:focus-visible {
+  outline: none;
+}
+
+.filter-bar-input-row:focus-within,
+.content-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.filter-bar-input-row,
+.content-search {
+  border-radius: var(--radius-4);
+}
+
+.filter-chip {
+  background: var(--selected);
+  border-radius: var(--radius-4);
+}
+
+.filter-chip-draft {
+  background: var(--bg);
+}
+
+.filter-chip-remove,
+.content-search-clear {
+  min-width: var(--space-24);
+  min-height: var(--space-24);
+}

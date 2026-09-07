@@ -1475,15 +1475,15 @@
       ]
     },
     {
-      "id": "SQLPROD01/_ServerLevel/LinkedServers/SIG",
+      "id": "SQLPROD01/_ServerLevel/LinkedServers/REMOTE2",
       "server": "SQLPROD01",
       "database": "_ServerLevel",
       "schema": null,
       "type": "LinkedServers",
-      "name": "SIG",
-      "qualifiedName": "SIG",
-      "path": "SQLPROD01/_ServerLevel/LinkedServers/SIG.sql",
-      "ddl": "EXEC sp_addlinkedserver\n    @server = N'SIG',\n    @srvproduct = N'SQL Server',\n    @provider = N'SQLNCLI',\n    @datasrc = N'sig-host.example.net',\n    @catalog = N'SigDb';",
+      "name": "REMOTE2",
+      "qualifiedName": "REMOTE2",
+      "path": "SQLPROD01/_ServerLevel/LinkedServers/REMOTE2.sql",
+      "ddl": "EXEC sp_addlinkedserver\n    @server = N'REMOTE2',\n    @srvproduct = N'SQL Server',\n    @provider = N'SQLNCLI',\n    @datasrc = N'sig-host.example.net',\n    @catalog = N'SigDb';",
       "description": "Billing system the transaction-code lookup reaches through.",
       "columns": [],
       "sections": [],
@@ -1503,7 +1503,7 @@
       "name": "fns_Opn_Sig_GetTransactionCode",
       "qualifiedName": "dbo.fns_Opn_Sig_GetTransactionCode",
       "path": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode.sql",
-      "ddl": "CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode(@Id_Boleta CHAR(13))\nRETURNS VARCHAR(50)\nAS\nBEGIN\n    DECLARE @Result TABLE (TransactionCode VARCHAR(50));\n    DECLARE @SQL NVARCHAR(MAX) =\n        'SELECT TransactionCode FROM OPENQUERY(SIG, ''SELECT dbo.fns_Sig_Open_GetTransactionCode('''\n        + @Id_Boleta + ''') AS TransactionCode'')';\n\n    INSERT INTO @Result (TransactionCode)\n    EXEC sp_executesql @SQL;\n\n    RETURN (SELECT TOP 1 TransactionCode FROM @Result);\nEND",
+      "ddl": "CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode(@Id_Boleta CHAR(13))\nRETURNS VARCHAR(50)\nAS\nBEGIN\n    DECLARE @Result TABLE (TransactionCode VARCHAR(50));\n    DECLARE @SQL NVARCHAR(MAX) =\n        'SELECT TransactionCode FROM OPENQUERY(REMOTE2, ''SELECT dbo.fns_Sig_Open_GetTransactionCode('''\n        + @Id_Boleta + ''') AS TransactionCode'')';\n\n    INSERT INTO @Result (TransactionCode)\n    EXEC sp_executesql @SQL;\n\n    RETURN (SELECT TOP 1 TransactionCode FROM @Result);\nEND",
       "description": "Looks a boleta's transaction code up in the SIG billing system.",
       "columns": [],
       "sections": [],
@@ -1571,7 +1571,7 @@
     },
     {
       "from": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode",
-      "to": "SQLPROD01/_ServerLevel/LinkedServers/SIG",
+      "to": "SQLPROD01/_ServerLevel/LinkedServers/REMOTE2",
       "columns": [],
       "dynamic": true
     }
@@ -1708,7 +1708,7 @@
   ],
   "linkedServerReferences": [
     {
-      "linkedServer": "SQLPROD01/_ServerLevel/LinkedServers/SIG",
+      "linkedServer": "SQLPROD01/_ServerLevel/LinkedServers/REMOTE2",
       "from": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode",
       "to": null,
       "database": "SigDb",

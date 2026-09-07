@@ -1,0 +1,313 @@
+{
+  "workspaces": {
+    "Columns": {
+      "root": "90:30",
+      "content": "90:61",
+      "tabs": [
+        {
+          "id": "90:53",
+          "label": "Definition"
+        },
+        {
+          "id": "90:54",
+          "label": "Columns"
+        },
+        {
+          "id": "90:55",
+          "label": "Graph"
+        },
+        {
+          "id": "90:56",
+          "label": "Access"
+        },
+        {
+          "id": "90:57",
+          "label": "Metrics"
+        },
+        {
+          "id": "90:58",
+          "label": "History"
+        },
+        {
+          "id": "90:59",
+          "label": "Diff"
+        }
+      ]
+    },
+    "Access": {
+      "root": "90:93",
+      "content": "90:124",
+      "tabs": [
+        {
+          "id": "90:116",
+          "label": "Definition"
+        },
+        {
+          "id": "90:117",
+          "label": "Columns"
+        },
+        {
+          "id": "90:118",
+          "label": "Graph"
+        },
+        {
+          "id": "90:119",
+          "label": "Access"
+        },
+        {
+          "id": "90:120",
+          "label": "Metrics"
+        },
+        {
+          "id": "90:121",
+          "label": "History"
+        },
+        {
+          "id": "90:122",
+          "label": "Diff"
+        }
+      ]
+    },
+    "Metrics": {
+      "root": "90:156",
+      "content": "90:187",
+      "tabs": [
+        {
+          "id": "90:179",
+          "label": "Definition"
+        },
+        {
+          "id": "90:180",
+          "label": "Columns"
+        },
+        {
+          "id": "90:181",
+          "label": "Graph"
+        },
+        {
+          "id": "90:182",
+          "label": "Access"
+        },
+        {
+          "id": "90:183",
+          "label": "Metrics"
+        },
+        {
+          "id": "90:184",
+          "label": "History"
+        },
+        {
+          "id": "90:185",
+          "label": "Diff"
+        }
+      ]
+    },
+    "History": {
+      "root": "90:219",
+      "content": "90:250",
+      "tabs": [
+        {
+          "id": "90:242",
+          "label": "Definition"
+        },
+        {
+          "id": "90:243",
+          "label": "Columns"
+        },
+        {
+          "id": "90:244",
+          "label": "Graph"
+        },
+        {
+          "id": "90:245",
+          "label": "Access"
+        },
+        {
+          "id": "90:246",
+          "label": "Metrics"
+        },
+        {
+          "id": "90:247",
+          "label": "History"
+        },
+        {
+          "id": "90:248",
+          "label": "Diff"
+        }
+      ]
+    },
+    "Diff": {
+      "root": "90:282",
+      "content": "90:313",
+      "tabs": [
+        {
+          "id": "90:305",
+          "label": "Definition"
+        },
+        {
+          "id": "90:306",
+          "label": "Columns"
+        },
+        {
+          "id": "90:307",
+          "label": "Graph"
+        },
+        {
+          "id": "90:308",
+          "label": "Access"
+        },
+        {
+          "id": "90:309",
+          "label": "Metrics"
+        },
+        {
+          "id": "90:310",
+          "label": "History"
+        },
+        {
+          "id": "90:311",
+          "label": "Diff"
+        }
+      ]
+    },
+    "Graph": {
+      "root": "90:345",
+      "content": "90:376",
+      "tabs": [
+        {
+          "id": "90:368",
+          "label": "Definition"
+        },
+        {
+          "id": "90:369",
+          "label": "Columns"
+        },
+        {
+          "id": "90:370",
+          "label": "Graph"
+        },
+        {
+          "id": "90:371",
+          "label": "Access"
+        },
+        {
+          "id": "90:372",
+          "label": "Metrics"
+        },
+        {
+          "id": "90:373",
+          "label": "History"
+        },
+        {
+          "id": "90:374",
+          "label": "Diff"
+        }
+      ]
+    }
+  },
+  "historical": "99:149",
+  "columnsClosed": "100:135",
+  "responsive": {
+    "1024": {
+      "root": "97:63",
+      "main": "97:76"
+    },
+    "1280": {
+      "root": "97:2",
+      "main": "97:15"
+    }
+  },
+  "mobile": {
+    "root": "97:263",
+    "inspector": "98:37",
+    "workspaces": "98:48",
+    "navigation": "98:64",
+    "exports": "98:76"
+  },
+  "statePage": "101:2",
+  "states": [
+    {
+      "name": "Catalog loading",
+      "root": "102:2"
+    },
+    {
+      "name": "Catalog error",
+      "root": "102:8"
+    },
+    {
+      "name": "Object not found",
+      "root": "102:14"
+    },
+    {
+      "name": "No columns",
+      "root": "102:20"
+    },
+    {
+      "name": "No history",
+      "root": "102:26"
+    },
+    {
+      "name": "No grants",
+      "root": "102:32"
+    },
+    {
+      "name": "No metrics",
+      "root": "102:38"
+    },
+    {
+      "name": "Missing historical DDL",
+      "root": "102:44"
+    },
+    {
+      "name": "Orphaned reference",
+      "root": "102:50"
+    },
+    {
+      "name": "System reference",
+      "root": "102:56"
+    },
+    {
+      "name": "Remote target not extracted",
+      "root": "102:62"
+    },
+    {
+      "name": "Oversized diff",
+      "root": "102:68"
+    }
+  ],
+  "extraCharts": [
+    {
+      "createdNodeIds": [
+        "104:241",
+        "104:242",
+        "104:243",
+        "104:244",
+        "104:245"
+      ],
+      "panel": "104:241",
+      "plot": "104:243"
+    },
+    {
+      "createdNodeIds": [
+        "104:247",
+        "104:248",
+        "104:249",
+        "104:250",
+        "104:251"
+      ],
+      "panel": "104:247",
+      "plot": "104:249"
+    },
+    {
+      "createdNodeIds": [
+        "104:256",
+        "104:257",
+        "104:258",
+        "104:259",
+        "104:260"
+      ],
+      "panel": "104:256",
+      "plot": "104:258"
+    }
+  ]
+}

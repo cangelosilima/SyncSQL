@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
-import LineageGraph from '../components/LineageGraph'
+import LineageGraph, { type EdgeColumnData } from '../components/LineageGraph'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
 import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import CsvExportButton from '../components/CsvExportButton'
 import HelpButton from '../components/HelpButton'
+import InspectorPanel from '../components/InspectorPanel'
+import RelatedObjects from '../components/RelatedObjects'
+import { colorForType } from '../lib/typeColors'
 import { getNeighborhoodIds } from '../lib/neighborhood'
 import { findObjectsForGrantee, getSuggestedGrantees } from '../lib/grants'
 import { filterByContent } from '../lib/contentSearch'
@@ -30,6 +33,7 @@ export default function LineagePage() {
   const initialHops = Number(searchParams.get('hops') ?? '1')
   const [mode, setMode] = useState<Mode>(searchParams.get('tab') === 'access' || initialGrantee ? 'access' : 'browse')
   const [copied, setCopied] = useState(false)
+  const [edgeEvidence, setEdgeEvidence] = useState<EdgeColumnData | null>(null)
 
   // Browse-mode state. A ?filter=<encoded tokens> param (from a copied
   // shareable link - see the URL-sync effect below) is the only thing that
@@ -56,12 +60,15 @@ export default function LineagePage() {
   const [granteeQuery, setGranteeQuery] = useState(initialGrantee)
   const [exact, setExact] = useState(false)
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [activeSuggestion, setActiveSuggestion] = useState(0)
+  const suggestionsId = useId()
   const debouncedGrantee = useDebouncedValue(granteeQuery, 120)
 
   const allNodes = index?.catalog.nodes ?? []
   const attrFiltered = useFilteredNodes(allNodes, tokens)
   const filtered = useMemo(() => filterByContent(attrFiltered, debouncedContentQuery), [attrFiltered, debouncedContentQuery])
   const currentFocus = focusStack[focusStack.length - 1]
+  useEffect(() => { setEdgeEvidence(null) }, [currentFocus, mode])
 
   const neighborhoodIds = useMemo(() => {
     if (!index || !currentFocus) return []
@@ -164,7 +171,7 @@ export default function LineagePage() {
   }
 
   return (
-    <div className="page page--wide">
+    <div className="page page--wide lineage-page">
       <div className="lineage-header-row">
         <h1 className="page-title">
           Lineage explorer
@@ -176,10 +183,10 @@ export default function LineagePage() {
       </div>
 
       <div className="lineage-mode-tabs">
-        <button type="button" className={mode === 'browse' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('browse')}>
+        <button type="button" aria-pressed={mode === 'browse'} className={mode === 'browse' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('browse')}>
           Browse
         </button>
-        <button type="button" className={mode === 'access' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('access')}>
+        <button type="button" aria-pressed={mode === 'access'} className={mode === 'access' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('access')}>
           Access
         </button>
       </div>
@@ -215,24 +222,42 @@ export default function LineagePage() {
                   type="text"
                   className="filter-bar-input"
                   placeholder="Search grantee (user, role, group)..."
+                  aria-label="Search grantee (user, role, group)"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={suggestionsOpen && grantSuggestions.length > 0}
+                  aria-controls={suggestionsId}
+                  aria-activedescendant={suggestionsOpen && grantSuggestions[activeSuggestion] ? `${suggestionsId}-${activeSuggestion}` : undefined}
                   value={granteeQuery}
                   onChange={(e) => {
                     setGranteeQuery(e.target.value)
                     setSuggestionsOpen(true)
+                    setActiveSuggestion(0)
                     setFocusStack([])
                     setSearchParams(e.target.value ? { tab: 'access', grantee: e.target.value } : { tab: 'access' }, { replace: true })
                   }}
                   onFocus={() => setSuggestionsOpen(true)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') { setSuggestionsOpen(false); return }
+                    if (!grantSuggestions.length) return
+                    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                      event.preventDefault(); setSuggestionsOpen(true)
+                      setActiveSuggestion(i => (i + (event.key === 'ArrowDown' ? 1 : -1) + grantSuggestions.length) % grantSuggestions.length)
+                    } else if (event.key === 'Enter' && suggestionsOpen && grantSuggestions[activeSuggestion]) {
+                      event.preventDefault(); pickGrantee(grantSuggestions[activeSuggestion])
+                    }
+                  }}
                   onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
                 />
               </div>
               {suggestionsOpen && grantSuggestions.length > 0 && (
-                <ul className="filter-suggestions" role="listbox">
-                  {grantSuggestions.map((s) => (
+                <ul className="filter-suggestions" role="listbox" id={suggestionsId} aria-label="Grantees">
+                  {grantSuggestions.map((s, i) => (
                     <li
                       key={s}
                       role="option"
-                      aria-selected={false}
+                      id={`${suggestionsId}-${i}`}
+                      aria-selected={i === activeSuggestion}
                       className="filter-suggestion"
                       onMouseDown={(e) => {
                         e.preventDefault()
@@ -375,6 +400,8 @@ export default function LineagePage() {
         </p>
       )}
 
+      <div className="investigation-layout">
+      <div className="workspace-content graph-workspace">
       {nodeIds.length > GRAPH_CAP ? (
         <SelectionBreakdown
           nodes={nodeIds.map((id) => index.byId.get(id)).filter((n): n is CatalogNode => Boolean(n))}
@@ -389,8 +416,53 @@ export default function LineagePage() {
           }
         />
       ) : (
-        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} />
+        <>
+        <details className="lineage-legend" open>
+          <summary>Graph legend</summary>
+          <ul>
+            <li><span className="legend-arrow" aria-hidden="true">→</span>Referencing object → referenced object</li>
+            <li><span className="legend-line" aria-hidden="true" />Reference</li>
+            <li><span className="legend-line legend-line--columns" aria-hidden="true" />Labeled edge: recorded column references</li>
+            <li><span className="legend-line legend-line--dynamic" aria-hidden="true" />Dashed edge: dynamic SQL reference (weaker evidence)</li>
+            <li><span className="legend-node legend-node--focus" aria-hidden="true" />Current focus</li>
+            <li><span className="legend-node legend-node--group" aria-hidden="true" />Dashed node: grouped objects</li>
+          </ul>
+          <p className="muted">Node border color indicates object type. Column references are best-effort evidence detected from SQL, not complete column lineage.</p>
+          <ul aria-label="Object types in this graph">
+            {[...new Set(nodeIds.map(id => index.byId.get(id)?.type).filter((type): type is string => Boolean(type)))].sort().map(type => (
+              <li key={type}><span className="legend-node" style={{ borderColor: colorForType(type) }} aria-hidden="true" />{type}</li>
+            ))}
+          </ul>
+        </details>
+        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} onEdgeInspect={setEdgeEvidence} />
+        </>
       )}
+      </div>
+      <InspectorPanel>
+        {edgeEvidence && nodeIds.length <= GRAPH_CAP && <section aria-label="Edge evidence">
+          <h3>Edge evidence</h3>
+          <p>{index.byId.get(edgeEvidence.from)?.qualifiedName ?? edgeEvidence.from} → {index.byId.get(edgeEvidence.to)?.qualifiedName ?? edgeEvidence.to}</p>
+          <p className="muted">Known column references detected in DDL; best-effort evidence, not certified column-level lineage.</p>
+          <div className="column-tags">{edgeEvidence.columns.map(column => <span key={column} className="column-tag">{column}</span>)}</div>
+          {edgeEvidence.dynamic && <p className="muted">Recovered from dynamically built SQL.</p>}
+        </section>}
+        {currentFocus && index.byId.has(currentFocus) ? <>
+          <h3 className="inspector-identity">{index.byId.get(currentFocus)!.qualifiedName}</h3>
+          <TypeBadge type={index.byId.get(currentFocus)!.type} />
+          <p className="muted">{index.byId.get(currentFocus)!.server} → {index.byId.get(currentFocus)!.database}</p>
+          <Link to={`/object/${currentFocus}`}>Open object workbench →</Link>
+          <RelatedObjects title="Depends on" rootId={currentFocus} ids={index.outgoing.get(currentFocus) ?? []} direction="outgoing" />
+          <RelatedObjects title="Used by" rootId={currentFocus} ids={index.incoming.get(currentFocus) ?? []} direction="incoming" />
+          {mode === 'access' && <><h3>Recorded permissions</h3>
+            <p className="muted">Current object grants, not an effective-access calculation.</p>
+            {index.byId.get(currentFocus)!.grants.length === 0 && <p>No grants recorded.</p>}
+            <ul className="permission-list">{index.byId.get(currentFocus)!.grants.map((grant, i) => <li key={i}>
+              <button type="button" className="breadcrumb-link" onClick={() => { setFocusStack([]); pickGrantee(grant.grantee) }}>{grant.grantee}</button>
+              <span className={`grant-state grant-state--${grant.state === 'DENY' ? 'deny' : 'grant'}`}>{grant.state}</span> {grant.permission} · {grant.column ?? 'whole object'}
+            </li>)}</ul></>}
+        </> : <p className="empty-state">Drill into a graph node to inspect its identity and relationships. Edge details appear beside the selected relationship in the graph.</p>}
+      </InspectorPanel>
+      </div>
     </div>
   )
 }

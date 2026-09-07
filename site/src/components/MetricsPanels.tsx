@@ -125,7 +125,7 @@ export default function MetricsPanels({ metrics }: { metrics: CatalogMetricSnaps
       )}
 
       {latest && latest.statistics.length > 0 && (
-        <div className="metrics-panel">
+        <div className="metrics-panel metrics-panel--statistics">
           <h3>Optimizer statistics</h3>
           <p className="muted overview-panel-hint" style={{ marginTop: 0 }}>
             What the query optimizer uses for cardinality estimation - modification counter tracks rows changed since
@@ -136,6 +136,7 @@ export default function MetricsPanels({ metrics }: { metrics: CatalogMetricSnaps
             series={[{ name: 'Pending modifications (all stats)', color: '#ef4444', values: totalPendingMods }]}
             formatValue={formatCount}
           />
+          <div className="metrics-table-scroll" role="region" aria-label="Optimizer statistics table" tabIndex={0}>
           <table className="columns-table">
             <thead>
               <tr>
@@ -160,6 +161,7 @@ export default function MetricsPanels({ metrics }: { metrics: CatalogMetricSnaps
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

@@ -210,6 +210,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
           type="text"
           className="filter-bar-input"
           placeholder={stageHint}
+          aria-label={stageHint}
           value={inputText}
           onChange={(e) => {
             setInputText(e.target.value)

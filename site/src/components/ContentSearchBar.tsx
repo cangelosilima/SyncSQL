@@ -16,6 +16,7 @@ export default function ContentSearchBar({ value, onChange, placeholder, matchCo
     <div className="content-search">
       <input
         type="text"
+        aria-label="Search DDL content"
         className="content-search-input"
         placeholder={placeholder ?? 'Search DDL content... (e.g. a column or table name referenced in the body)'}
         value={value}
