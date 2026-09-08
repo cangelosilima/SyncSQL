@@ -10,6 +10,27 @@ namespace SyncSql.Core.Tests.Serialization;
 /// </summary>
 public class ExtractedObjectFilePathTests
 {
+    [Fact]
+    public void RelativePath_SchemaDefinitionAndUserTypes_ShareSchemaDirectory()
+    {
+        Assert.Equal("ROOT/AppDb/sales/sales.sql", ExtractedObjectFile.RelativePath("ROOT", "AppDb", null, "Schemas", "sales"));
+        Assert.Equal("ROOT/AppDb/sales/Types/Code.sql", ExtractedObjectFile.RelativePath("ROOT", "AppDb", "sales", "Types", "Code"));
+        Assert.Equal("ROOT/AppDb/Schemas/sales", ExtractedObjectFile.ObjectId("ROOT", "AppDb", null, "Schemas", "sales"));
+    }
+
+    [Fact]
+    public void RelativePath_FollowedServer_NestsUnderOriginalLinkAndPreservesDatabaseAndSchema()
+    {
+        Assert.Equal("ROOT/LinkedServers/REMOTE/SalesDb/sales/Tables/Orders.sql",
+            ExtractedObjectFile.RelativePath("REMOTE_2", "SalesDb", "sales", "Tables", "Orders", serverPath: ["ROOT", "LinkedServers", "REMOTE"]));
+    }
+
+    [Fact]
+    public void RelativePath_FollowedLinkNamedDotDot_CannotEscapeItsFolder()
+    {
+        Assert.Equal("ROOT/LinkedServers/__/SalesDb/sales/Tables/Orders.sql",
+            ExtractedObjectFile.RelativePath("REMOTE", "SalesDb", "sales", "Tables", "Orders", serverPath: ["ROOT", "LinkedServers", ".."]));
+    }
     // Each of these is legal in a Unix file name and rejected by Windows. Sanitizing them only
     // where the OS demands it would give the same object two different ids depending on where the
     // extraction ran.
@@ -86,5 +107,24 @@ public class ExtractedObjectFilePathTests
         string path = ExtractedObjectFile.RelativePath("SQLPROD01", "AppDb", schema: null, "LinkedServers", "ORAPROD01", "json");
 
         Assert.Equal("SQLPROD01/AppDb/LinkedServers/ORAPROD01.json", path);
+    }
+
+    [Theory]
+    [InlineData("_ServerLevel", null, "sql")]
+    [InlineData("_serverLevel", "", "json")]
+    public void RelativePath_ServerLevel_OmitsPseudoDatabase(string database, string? schema, string extension)
+    {
+        string path = ExtractedObjectFile.RelativePath("SQLPROD01", database, schema, "LinkedServers", "REMOTE", extension);
+
+        Assert.Equal($"SQLPROD01/LinkedServers/REMOTE.{extension}", path);
+        Assert.Equal("SQLPROD01/_ServerLevel/LinkedServers/REMOTE",
+            ExtractedObjectFile.ObjectId("SQLPROD01", "_ServerLevel", schema, "LinkedServers", "REMOTE"));
+    }
+
+    [Fact]
+    public void RelativePath_SchemaScopedObject_KeepsDatabaseNamedServerLevel()
+    {
+        Assert.Equal("SQLPROD01/_ServerLevel/dbo/Tables/Orders.sql",
+            ExtractedObjectFile.RelativePath("SQLPROD01", "_ServerLevel", "dbo", "Tables", "Orders"));
     }
 }

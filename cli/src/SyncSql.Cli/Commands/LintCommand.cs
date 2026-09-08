@@ -14,10 +14,10 @@ internal static class LintCommand
 {
     public static Command Build(IServiceProvider services)
     {
-        Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
+        Option<string?> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string[]> pathOption = new("--path")
         {
-            Description = "A .sql file, or a directory searched recursively for *.sql files. Repeatable. Default: <output-root>, i.e. what `syncsql sync` just wrote.",
+            Description = "A .sql file, or a directory searched recursively for *.sql files. Repeatable. Default: ./MSSQL, or --output-root when supplied. Oracle SQL is not T-SQL.",
         };
         Option<string> failOnOption = new("--fail-on")
         {
@@ -36,7 +36,7 @@ internal static class LintCommand
         {
             ILogger logger = services.GetLogger(nameof(LintCommand));
 
-            string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
+            string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot(Core.Domain.DatabaseEngine.MsSql);
             string[] paths = parseResult.GetValue(pathOption) is { Length: > 0 } explicitPaths
                 ? [.. explicitPaths.Select(Path.GetFullPath)]
                 : [SyncSqlPaths.Resolve(null, outputRoot, SyncSqlPaths.ObjectsRelativePath)];

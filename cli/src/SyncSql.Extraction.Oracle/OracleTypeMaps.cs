@@ -6,6 +6,8 @@ internal static class OracleTypeMaps
     public static readonly IReadOnlyList<(string ConfigType, string OracleObjectType)> ObjectTypeMap =
     [
         ("Tables", "TABLE"),
+        ("Types", "TYPE"),
+        ("TypeBodies", "TYPE BODY"),
         ("Views", "VIEW"),
         ("Procedures", "PROCEDURE"),
         ("Functions", "FUNCTION"),
@@ -16,5 +18,5 @@ internal static class OracleTypeMaps
     ];
 
     /// <summary>ALL_OBJECTS.OBJECT_TYPE value -> the type name DBMS_METADATA.GET_DDL expects (differs only for PACKAGE BODY).</summary>
-    public static string ToDdlType(string oracleObjectType) => oracleObjectType == "PACKAGE BODY" ? "PACKAGE_BODY" : oracleObjectType;
+    public static string ToDdlType(string oracleObjectType) => oracleObjectType.Replace(' ', '_');
 }

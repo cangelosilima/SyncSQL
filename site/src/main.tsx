@@ -10,7 +10,7 @@ import './workbench.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <HashRouter>
         <App />
       </HashRouter>
     </ThemeProvider>

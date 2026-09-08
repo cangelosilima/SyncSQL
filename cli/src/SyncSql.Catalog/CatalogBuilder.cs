@@ -136,25 +136,33 @@ public sealed class CatalogBuilder(
     {
         string relative = Path.GetRelativePath(objectsRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
         string[] segments = relative.Split('/');
-        if (segments.Length is < 4 or > 5)
+        string[] lines = await File.ReadAllLinesAsync(filePath, cancellationToken);
+        ParsedObjectFile parsed = ExtractedObjectFile.Parse(lines);
+        if (segments.Length < 3 || (parsed.Identity is null && segments.Length > 5))
         {
             logger.LogWarning("Skipping unexpected path shape: {Relative}", relative);
             return null;
         }
 
         string server = segments[0];
-        string database = segments[1];
-        string type = segments[2];
+        string database = segments.Length == 3 ? "_ServerLevel" : segments[1];
+        string type = segments.Length == 3 ? segments[1] : segments[2];
         string name = Path.GetFileNameWithoutExtension(segments[^1]);
         string? schema = segments.Length == 5 ? segments[3] : null;
 
-        string[] lines = await File.ReadAllLinesAsync(filePath, cancellationToken);
         if (segments.Length == 5 && lines.TakeWhile(line => line.StartsWith("-- ", StringComparison.Ordinal)).Contains("-- Path layout: schema/type"))
         {
             schema = segments[2];
             type = segments[3];
         }
-        ParsedObjectFile parsed = ExtractedObjectFile.Parse(lines);
+        if (parsed.Identity is { } identity)
+        {
+            server = ExtractedObjectFile.SafeFileName(identity.Server);
+            database = ExtractedObjectFile.SafeFileName(identity.Database);
+            schema = identity.Schema is null ? null : ExtractedObjectFile.SafeFileName(identity.Schema);
+            type = ExtractedObjectFile.SafeFileName(identity.Type);
+            name = ExtractedObjectFile.SafeFileName(identity.Name);
+        }
         string id = ExtractedObjectFile.ObjectId(server, database, schema, type, name);
         string qualifiedName = string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
 

@@ -162,8 +162,9 @@ Every input is a parameter, and every one of them has a local default:
 credentials come from `--db-user`/`--db-password`/`--credentials-file`
 (falling back to the `<prefix>_DB_USER`/`<prefix>_DB_PASSWORD` environment
 variables, so existing setups keep working), and every output path defaults
-to a folder under `--output-root` (`./syncsql-output`), so the four commands
-chain together with no arguments at all outside CI.
+to an engine folder named after uppercase `servers.type` (`./MSSQL` or
+`./ORACLE`). `--output-root` overrides this location. Catalog and metrics
+commands visit both existing engine folders by default; T-SQL lint defaults to `./MSSQL`.
 
 `sync` extracts (purely local - no git of any kind); `catalog build` and
 `metrics update` are the other two pure, composable steps (rebuild the
@@ -219,9 +220,9 @@ for the full schema; in short:
   did under `objects`.
 - `defaults` / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
-  (`Schemas`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
+  (`Schemas`, `Types`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
   `Triggers`, `Synonyms`, `LinkedServers`, `Replication` for MSSQL;
-  `Schemas`, `Tables`, `Views`, `Procedures`, `Functions`, `Packages`,
+  `Schemas`, `Types`, `TypeBodies`, `Tables`, `Views`, `Procedures`, `Functions`, `Packages`,
   `PackageBodies`, `Triggers`, `Synonyms`, `DatabaseLinks` for Oracle).
   A server that specifies a key fully replaces the default for that key.
 - `serverSelection`: regex filter over which of the listed servers
@@ -526,23 +527,43 @@ branch is added. Expanding the tree does not change Explorer filters.
 
 ### Export hierarchy and compatibility
 
-New SQL exports follow the same hierarchy:
+New SQL exports follow the same hierarchy, with server-scoped objects directly under the server:
 
 ```text
 SQLPROD01/
 ├── AppDb/
 │   ├── dbo/
+│   │   ├── dbo.sql
+│   │   ├── Types/
+│   │   │   └── OrderCode.sql
 │   │   └── Tables/
 │   │       └── Orders.sql
 │   └── Replication/
 │       └── Orders_Pub.sql
-└── _ServerLevel/
-    └── LinkedServers/
-        └── REMOTE2.sql
+└── LinkedServers/
+    ├── REMOTE2.sql
+    └── REMOTE2/
+        └── SalesDb/
+            └── sales/
+                ├── sales.sql
+                ├── Types/
+                │   └── OrderCode.sql
+                └── Tables/
+                    └── Orders.sql
 ```
 
-New files carry `-- Path layout: schema/type`. The catalog builder also reads
-legacy `server/database/type/[schema/]object.sql` files. Existing object IDs,
+Schema definitions use `<database>/<schema>/<schema>.sql`; SQL user-defined
+types use `<database>/<schema>/Types/<type>.sql`. Select `Types` in `objectTypes`
+to export MSSQL alias, table and CLR types or Oracle types; Oracle type bodies
+use `TypeBodies`. Add these selections to existing configurations as needed.
+
+See the [SQL definition audit](docs/sql-definition-audit.md) for preserved
+ownership, permissions, properties and object settings, validation, and remaining limitations.
+
+New files carry `-- Path layout: schema/type` and a JSON `-- Identity:` header
+that keeps logical identity independent of the export path. The catalog builder also reads
+legacy `server/database/type/[schema/]object.sql` files, including the previous
+`server/_ServerLevel/type/object.sql` layout. Existing object IDs,
 deep links and metrics history keys remain stable; `catalog.json`'s `path`
 records the actual file location. Git history resolves each revision using
 its historical path, including revisions before the layout change.
@@ -892,7 +913,10 @@ lists. With `discovery.linkedServers.enabled`, it also follows the linked
 servers it finds on those servers and extracts what's on the other side,
 reusing **the same credentials** - the follow-up server inherits its
 parent's `credentialsVariablePrefix`, along with its port, TLS settings, and
-schema/objectName/objectType filters:
+schema/objectName/objectType filters, except that `LinkedServers` is excluded
+from discovered-server exports (including when inherited from defaults).
+Configured servers retain their selected linked-server definitions. Discovery
+metadata remains separate and follows the configured `maxDepth`:
 
 ```json
 "discovery": {
@@ -922,8 +946,10 @@ schema/objectName/objectType filters:
 Links that aren't SQL Server (`product`/`provider`), that declare no data
 source, or that lead somewhere a configured server already covers are
 skipped, each with a logged reason. Discovered servers are named after the
-link (suffixed if that collides with a configured name), which is also what
-their output path segment becomes. Oracle database links aren't followed:
+link (suffixed if that collides with a configured name). Their objects are written
+under the original server's `LinkedServers/<link-name>/<database>/<schema>/...`
+subtree; the link definition stays at `LinkedServers/<link-name>.sql`. Logical
+server names and object IDs remain stable. Oracle database links aren't followed:
 an Oracle connection needs a service name that a link's connect string
 doesn't reliably provide.
 
@@ -1087,21 +1113,22 @@ three work.)
 
 `sync` is purely local: with no path parameters it reads
 `./config/servers.json` and leaves extracted objects under
-`./syncsql-output` — starting at the server name, e.g.
-`./syncsql-output/SQLPROD01/AppDb/dbo/Tables/Orders.sql` — and metrics
-snapshots under `./syncsql-output/metrics-snapshot` (`--staging-root` /
+`./MSSQL` or `./ORACLE`, according to uppercase `servers.type`, e.g.
+`./MSSQL/SQLPROD01/AppDb/dbo/Tables/Orders.sql` — and metrics
+snapshots under `./MSSQL/metrics-snapshot` (`--staging-root` /
 `--metrics-snapshot-root` / `--output-root` override that). The other
 commands default to the same layout, so the chain needs no arguments:
 
 ```bash
-syncsql metrics update                                        # → ./syncsql-output/metrics
-syncsql catalog build --metrics-root ./syncsql-output/metrics # → ./syncsql-output/catalog.json
+syncsql metrics update                                        # → ./MSSQL/metrics
+syncsql catalog build                                         # → each engine's catalog.json
+syncsql catalog build --output-root ./MSSQL --metrics-root ./MSSQL/metrics # include MSSQL metrics
 ```
 
 To preview the site against a run, write the catalog where the site reads it:
 
 ```bash
-syncsql catalog build --output ./site/public/data/catalog.json
+syncsql catalog build --output-root ./MSSQL --output ./site/public/data/catalog.json
 ```
 
 (add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
@@ -1118,8 +1145,8 @@ including the dry run that stops before committing:
 
 ```powershell
 pwsh ./scripts/Publish-SyncSqlObjects.ps1 `
-  -ExtractedObjectsDir ./syncsql-output `
-  -MetricsSnapshotDir ./syncsql-output/metrics-snapshot `
+  -ExtractedObjectsDir ./MSSQL `
+  -MetricsSnapshotDir ./MSSQL/metrics-snapshot `
   -ConfigPath ./config/servers.json `
   -SkipPush
 ```

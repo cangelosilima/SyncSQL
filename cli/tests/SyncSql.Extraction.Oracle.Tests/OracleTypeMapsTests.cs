@@ -10,7 +10,7 @@ public class OracleTypeMapsTests
         string[] configTypes = [.. OracleTypeMaps.ObjectTypeMap.Select(m => m.ConfigType)];
 
         Assert.Equal(
-            ["Tables", "Views", "Procedures", "Functions", "Packages", "PackageBodies", "Triggers", "Synonyms"],
+            ["Tables", "Types", "TypeBodies", "Views", "Procedures", "Functions", "Packages", "PackageBodies", "Triggers", "Synonyms"],
             configTypes);
     }
 
@@ -19,6 +19,7 @@ public class OracleTypeMapsTests
     [InlineData("VIEW", "VIEW")]
     [InlineData("PACKAGE", "PACKAGE")]
     [InlineData("PACKAGE BODY", "PACKAGE_BODY")]
+    [InlineData("TYPE BODY", "TYPE_BODY")]
     public void ToDdlType_OnlyPackageBodyDiffersFromTheObjectTypeName(string oracleObjectType, string expectedDdlType)
     {
         Assert.Equal(expectedDdlType, OracleTypeMaps.ToDdlType(oracleObjectType));

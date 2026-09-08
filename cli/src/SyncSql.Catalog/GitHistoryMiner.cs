@@ -63,6 +63,20 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
                     string relativePath = file[prefixWithSlash.Length..];
                     bool currentPath = request.ObjectPaths.TryGetValue(relativePath, out string? mappedId);
                     string id = mappedId ?? relativePath[..^".sql".Length];
+                    if (!currentPath && !request.KnownObjectIds.Contains(id))
+                    {
+                        // Before linked-server nesting, a remote object's schema-first path
+                        // began with its logical server name. Keep those revisions too.
+                        string[] parts = id.Split('/');
+                        if (parts.Length == 5)
+                        {
+                            string legacyId = string.Join('/', parts[0], parts[1], parts[3], parts[2], parts[4]);
+                            if (request.KnownObjectIds.Contains(legacyId))
+                            {
+                                id = legacyId;
+                            }
+                        }
+                    }
                     if (request.KnownObjectIds.Contains(id) && (currentPath || !pathsById.ContainsKey(id)))
                     {
                         pathsById[id] = file;

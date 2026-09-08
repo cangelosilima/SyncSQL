@@ -13,7 +13,7 @@ internal static class CatalogCommand
 {
     public static Command Build(IServiceProvider services)
     {
-        Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
+        Option<string?> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string?> objectsRootOption = new("--objects-root")
         {
             Description = "Root of the extracted tree (server/database/[schema/]type/object.sql). Default: <output-root>, i.e. what `syncsql sync` just wrote.",
@@ -80,36 +80,44 @@ internal static class CatalogCommand
             ILogger logger = services.GetLogger(nameof(CatalogCommand));
             ICatalogBuilder catalogBuilder = services.GetRequiredService<ICatalogBuilder>();
 
-            string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
-            string objectsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(objectsRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
-            string outputPath = SyncSqlPaths.Resolve(parseResult.GetValue(outputOption), outputRoot, SyncSqlPaths.CatalogFileName);
-
-            CatalogBuildRequest request = new()
-            {
-                ObjectsRoot = objectsRoot,
-                RepoRoot = ToFullPathOrNull(parseResult.GetValue(repoRootOption)),
-                PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.DefaultPathPrefix,
-                HistoryLimit = parseResult.GetValue(historyLimitOption),
-                MaxVersionsPerObject = parseResult.GetValue(maxVersionsOption),
-                MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
-                MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
-                MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
-                DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
-            };
-
             try
             {
-                Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(request, cancellationToken);
-
-                if (Path.GetDirectoryName(outputPath) is { Length: > 0 } outputDirectory)
+                string[] outputRoots = SyncSqlPaths.ReadOutputRoots(parseResult.GetValue(outputRootOption), parseResult.GetValue(objectsRootOption));
+                if (outputRoots.Length > 1 && !string.IsNullOrWhiteSpace(parseResult.GetValue(outputOption)))
                 {
-                    Directory.CreateDirectory(outputDirectory);
+                    logger.LogError("Multiple engine roots found. Select --output-root or --objects-root when supplying a single --output file.");
+                    return 1;
                 }
-                await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(catalog, SyncSqlJsonOptions.Default), cancellationToken);
+                foreach (string outputRoot in outputRoots)
+                {
+                    string objectsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(objectsRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
+                    string outputPath = SyncSqlPaths.Resolve(parseResult.GetValue(outputOption), outputRoot, SyncSqlPaths.CatalogFileName);
 
-                logger.LogInformation(
-                    "Wrote catalog.json ({NodeCount} node(s), {EdgeCount} edge(s)) -> {Path}",
-                    catalog.Nodes.Count, catalog.Edges.Count, outputPath);
+                    CatalogBuildRequest request = new()
+                    {
+                        ObjectsRoot = objectsRoot,
+                        RepoRoot = ToFullPathOrNull(parseResult.GetValue(repoRootOption)),
+                        PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.DefaultPathPrefix,
+                        HistoryLimit = parseResult.GetValue(historyLimitOption),
+                        MaxVersionsPerObject = parseResult.GetValue(maxVersionsOption),
+                        MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
+                        MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
+                        MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
+                        DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
+                    };
+
+                    Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(request, cancellationToken);
+
+                    if (Path.GetDirectoryName(outputPath) is { Length: > 0 } outputDirectory)
+                    {
+                        Directory.CreateDirectory(outputDirectory);
+                    }
+                    await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(catalog, SyncSqlJsonOptions.Default), cancellationToken);
+
+                    logger.LogInformation(
+                        "Wrote catalog.json ({NodeCount} node(s), {EdgeCount} edge(s)) -> {Path}",
+                        catalog.Nodes.Count, catalog.Edges.Count, outputPath);
+                }
                 return 0;
             }
             catch (DirectoryNotFoundException ex)

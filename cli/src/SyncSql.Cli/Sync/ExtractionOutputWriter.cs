@@ -14,11 +14,11 @@ namespace SyncSql.Cli.Sync;
 /// </summary>
 internal static class ExtractionOutputWriter
 {
-    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken)
+    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null)
     {
         foreach (ExtractedObject obj in outcome.Objects)
         {
-            string relativePath = ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name);
+            string relativePath = ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, serverPath: serverPath);
             string path = Path.Combine(stagingRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj), cancellationToken);

@@ -57,7 +57,7 @@ vi.mock('../lib/CatalogContext', () => ({
 
 function renderList(ids: string[]) {
   return render(
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <MemoryRouter>
       <RelatedObjects title="Depends on" rootId={hub.id} ids={ids} direction="outgoing" />
     </MemoryRouter>,
   )

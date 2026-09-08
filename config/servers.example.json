@@ -22,6 +22,7 @@
     },
     "objectTypes": [
       "Schemas",
+      "Types",
       "Tables",
       "Views",
       "StoredProcedures",
@@ -88,6 +89,8 @@
       },
       "objectTypes": [
         "Tables",
+        "Types",
+        "TypeBodies",
         "Views",
         "Procedures",
         "Functions",
