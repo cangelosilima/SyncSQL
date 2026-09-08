@@ -31,10 +31,10 @@ internal static class SyncCommand
             Description = "Path to config/servers.json, relative to the current directory unless absolute.",
             DefaultValueFactory = _ => SyncSqlPaths.DefaultConfigPath,
         };
-        Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
+        Option<string?> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string?> stagingRootOption = new("--staging-root")
         {
-            Description = "Directory each extracted object is written to, as <server>/<database>/<type>/[<schema>/]<object>.sql. Default: <output-root> itself.",
+            Description = "Directory each extracted object is written to, as <server>/<database>/<schema>/<type>/<object>.sql. Default: uppercase servers.type (MSSQL/ORACLE), or --output-root when supplied.",
         };
         Option<string?> metricsSnapshotRootOption = new("--metrics-snapshot-root")
         {
@@ -84,15 +84,6 @@ internal static class SyncCommand
                 logger.LogError("{Message}", ex.Message);
                 return 1;
             }
-
-            string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot;
-            string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
-            Directory.CreateDirectory(stagingRoot);
-            logger.LogInformation("Staging extracted objects under {StagingRoot}", stagingRoot);
-
-            string metricsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(metricsSnapshotRootOption), outputRoot, SyncSqlPaths.MetricsSnapshotDirectoryName);
-            Directory.CreateDirectory(metricsRoot);
-            logger.LogInformation("Staging metrics snapshots under {MetricsRoot}", metricsRoot);
 
             ICredentialProvider credentialProvider;
             try
@@ -173,11 +164,17 @@ internal static class SyncCommand
 
                 try
                 {
+                    string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot(server.Type);
+                    string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
+                    string metricsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(metricsSnapshotRootOption), outputRoot, SyncSqlPaths.MetricsSnapshotDirectoryName);
+                    Directory.CreateDirectory(stagingRoot);
+                    Directory.CreateDirectory(metricsRoot);
+                    logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; snapshots to {MetricsRoot}", server.Name, stagingRoot, metricsRoot);
                     IDatabaseObjectExtractor extractor = extractorResolver.Resolve(server.Type);
                     ExtractionOutcome outcome = await extractor.ExtractAsync(
                         server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere }, cancellationToken);
 
-                    await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, cancellationToken);
+                    await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, cancellationToken, server.ExportPath);
 
                     totalFiles += outcome.Objects.Count;
                     logger.LogInformation("- {Server} ({Engine}): {Count} object file(s)", server.Name, server.Type.ToConfigString(), outcome.Objects.Count);
@@ -185,7 +182,7 @@ internal static class SyncCommand
                     if (discoverHere)
                     {
                         discoveredServers += QueueLinkedServers(
-                            logger, server, credentials.Username, outcome.DiscoveredLinkedServers, discovery, depth, knownServers, pending);
+                            logger, server, credentials.Username, outcome.DiscoveredLinkedServers, discovery, depth, knownServers, pending, config.Defaults);
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -239,9 +236,10 @@ internal static class SyncCommand
         LinkedServerDiscoveryConfig discovery,
         int depth,
         List<ServerConfig> knownServers,
-        Queue<(ServerConfig Server, int Depth)> pending)
+        Queue<(ServerConfig Server, int Depth)> pending,
+        ObjectFilterSet? defaults)
     {
-        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, parentUsername, discovered, discovery, knownServers);
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, parentUsername, discovered, discovery, knownServers, defaults);
 
         foreach (SkippedLinkedServer skipped in plan.Skipped)
         {

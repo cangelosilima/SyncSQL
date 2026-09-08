@@ -1,5 +1,7 @@
 # Default local output root for `syncsql sync` / `metrics update` / `catalog build`
 # (--output-root), plus the older hand-picked staging directories.
+/MSSQL/
+/ORACLE/
 syncsql-output/
 staging/
 *.staging/

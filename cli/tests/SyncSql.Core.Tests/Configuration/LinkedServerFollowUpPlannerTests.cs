@@ -5,6 +5,15 @@ namespace SyncSql.Core.Tests.Configuration;
 
 public class LinkedServerFollowUpPlannerTests
 {
+    [Fact]
+    public void Plan_ExportPath_PreservesRootAndLinkAncestry()
+    {
+        ServerConfig remote = Assert.Single(LinkedServerFollowUpPlanner.Plan(Parent, "svc_syncsql", [Link("REMOTE")], Enabled, [Parent]).FollowUps).Server;
+        Assert.Equal(["SQLPROD01", "LinkedServers", "REMOTE"], remote.ExportPath);
+        ServerConfig nested = Assert.Single(LinkedServerFollowUpPlanner.Plan(remote, "svc_syncsql", [Link("NEXT", dataSource: "next.example.com")], Enabled, [Parent, remote]).FollowUps).Server;
+        Assert.Equal(["SQLPROD01", "LinkedServers", "REMOTE", "LinkedServers", "NEXT"], nested.ExportPath);
+        Assert.Null(Parent.ExportPath);
+    }
     private static readonly ServerConfig Parent = new()
     {
         Name = "SQLPROD01",
@@ -76,6 +85,36 @@ public class LinkedServerFollowUpPlannerTests
         Assert.NotNull(followUp.Server.Databases);
         Assert.True(followUp.Server.Databases!.IsAllowed("Sales.Db"));
         Assert.False(followUp.Server.Databases!.IsAllowed("SalesXDb"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Plan_ExcludesLinkedServersFromExplicitAndInheritedTypes(bool inheritDefaults)
+    {
+        string[] types = ["Tables", "linkedservers", "Views"];
+        ObjectFilterSet defaults = new() { ObjectTypes = types };
+        ServerConfig parent = Parent with { ObjectTypes = inheritDefaults ? null : types };
+
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(
+            parent, "svc_syncsql", [Link("SQLPROD02")], Enabled, [parent], defaults);
+
+        ServerConfig remote = Assert.Single(plan.FollowUps).Server;
+        Assert.Equal(["Tables", "Views"], EffectiveFilters.Resolve(defaults, remote).ObjectTypes);
+        Assert.Equal(types, EffectiveFilters.Resolve(defaults, parent).ObjectTypes);
+    }
+
+    [Fact]
+    public void Plan_OnlyLinkedServers_DoesNotFallBackToDefaults()
+    {
+        ServerConfig parent = Parent with { ObjectTypes = ["LinkedServers"] };
+        ObjectFilterSet defaults = new() { ObjectTypes = ["Tables", "LinkedServers"] };
+
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(
+            parent, "svc_syncsql", [Link("SQLPROD02")], Enabled, [parent], defaults);
+
+        Assert.Empty(EffectiveFilters.Resolve(defaults, Assert.Single(plan.FollowUps).Server).ObjectTypes);
+        Assert.Equal(["LinkedServers"], parent.ObjectTypes);
     }
 
     [Fact]

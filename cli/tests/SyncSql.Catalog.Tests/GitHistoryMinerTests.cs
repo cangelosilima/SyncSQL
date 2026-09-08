@@ -7,6 +7,27 @@ namespace SyncSql.Catalog.Tests;
 
 public sealed class GitHistoryMinerTests : IDisposable
 {
+    [Fact]
+    public async Task MineAsync_NestedRemotePath_KeepsEarlierSchemaFirstHistory()
+    {
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        const string id = "REMOTE/AppDb/Tables/dbo/Orders";
+        const string priorPath = "REMOTE/AppDb/dbo/Tables/Orders.sql";
+        const string currentPath = "ROOT/LinkedServers/REMOTE/AppDb/dbo/Tables/Orders.sql";
+        string log = $"@@COMMIT@@old@@COMMIT@@2026-01-01T00:00:00+00:00@@COMMIT@@Original export\nobjects/{priorPath}\n";
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(args => args.Contains("log")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, log, string.Empty));
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(args => args.Contains($"old:objects/{priorPath}")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "CREATE TABLE dbo.Orders (Id int);", string.Empty));
+        GitHistoryMiningResult result = await _miner.MineAsync(new GitHistoryMiningRequest
+        {
+            RepoRoot = _repoRoot,
+            PathPrefix = "objects",
+            KnownObjectIds = new HashSet<string> { id },
+            ObjectPaths = new Dictionary<string, string> { [currentPath] = id },
+        }, CancellationToken.None);
+        Assert.Equal("CREATE TABLE dbo.Orders (Id int);", Assert.Single(result.ObjectHistory[id].Versions).Ddl);
+    }
     private readonly string _repoRoot = Directory.CreateTempSubdirectory("syncsql-git-").FullName;
     private readonly IProcessRunner _processRunner = Substitute.For<IProcessRunner>();
     private readonly GitHistoryMiner _miner;

@@ -119,8 +119,8 @@ syncsql sync --config ./config/servers.json
 | Option                     | Default                            | Description |
 |----------------------------|-------------------------------------|-------------|
 | `--config`                 | `./config/servers.json`             | Path to `config/servers.json`. |
-| `--output-root`            | `./syncsql-output`                  | Directory the two paths below default to a folder inside. |
-| `--staging-root`           | `<output-root>`                     | Local directory each extracted object is written to, as `<server>/<database>/<type>/[<schema>/]<object>.sql` - the tree starts at the server name, with no wrapping folder. |
+| `--output-root`            | `./MSSQL` or `./ORACLE` | Uppercase `servers.type`; explicit override applies to every server. |
+| `--staging-root`           | `<output-root>`                     | Local directory each extracted object is written to, as `<server>/<database>/<schema>/<type>/<object>.sql` - the tree starts at the server name, with no wrapping folder. |
 | `--metrics-snapshot-root`  | `<output-root>/metrics-snapshot`    | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - one JSON file per table, meant to be folded into history later via `syncsql metrics update`). |
 | `--db-user`                | `--credentials-file`, then the environment | Database username for one server, as `PREFIX=value` (`PREFIX` = that server's `credentialsVariablePrefix`). Repeatable. |
 | `--db-password`            | `--credentials-file`, then the environment | Database password for one server, as `PREFIX=value`. Repeatable. Only the first `=` separates, so a password containing `=` needs no escaping. |
@@ -157,8 +157,8 @@ syncsql catalog build --objects-root ./staging --output ./catalog.json
 
 | Option                          | Default   | Description |
 |----------------------------------|-----------|-------------|
-| `--output-root`                  | `./syncsql-output` | Directory the two paths below default to a folder inside. |
-| `--objects-root`                 | `<output-root>` | Root of the extracted tree (`server/database/type/[schema/]object.sql`) - i.e. what `syncsql sync` just wrote. |
+| `--output-root`                  | Existing `./MSSQL` and `./ORACLE` | Process each engine root separately; override to select one root. |
+| `--objects-root`                 | `<output-root>` | Root of the extracted tree (`server/database/[schema/]type/object.sql`) - i.e. what `syncsql sync` just wrote. |
 | `--output`                       | `<output-root>/catalog.json` | File path the catalog JSON is written to. |
 | `--repo-root`                    | *(none)*  | Git checkout containing `--path-prefix`, mined **read-only** (`git log`/`git show`) for history/heatmap/point-in-time data - never written to. Omit to skip all of that (empty history, zero change counts) rather than failing. |
 | `--path-prefix`                  | *(empty)* | Folder inside `--repo-root` holding the extracted tree. Empty (the default) means the tree starts at the repository root, so the first path segment is the server name. |
@@ -199,7 +199,7 @@ syncsql metrics update --snapshot-root ./metrics-snapshot --history-root ./metri
 
 | Option              | Default | Description |
 |----------------------|---------|-------------|
-| `--output-root`      | `./syncsql-output` | Directory the two paths below default to a folder inside. |
+| `--output-root`      | Existing `./MSSQL` and `./ORACLE` | Process each engine root separately; override to select one root. |
 | `--snapshot-root`    | `<output-root>/metrics-snapshot` | Root of this run's freshly captured snapshot tree (one JSON file per object, same relative path/id as the object's own `.sql` file - `sync`'s `--metrics-snapshot-root`). |
 | `--history-root`     | `<output-root>/metrics` | Root of the accumulating history tree; in a pipeline, `<target-repo-checkout>/metrics`. Kept outside the object tree so a wipe-and-replace of it never touches the history. |
 | `--history-limit`    | `90`    | Maximum snapshots retained per object; oldest are trimmed first. |
@@ -228,7 +228,7 @@ syncsql lint --path ./staging
 
 | Option          | Default   | Description |
 |-----------------|-----------|-------------|
-| `--output-root` | `./syncsql-output` | Directory `--path` defaults to a folder inside. |
+| `--output-root` | `./MSSQL` | Default T-SQL input directory; Oracle exports are excluded. |
 | `--path`        | `<output-root>` | A `.sql` file, or a directory searched recursively for `*.sql` files. Repeatable. |
 | `--fail-on`  | `error`   | Minimum finding severity that makes the command exit non-zero: `warning` or `error`. |
 
@@ -304,15 +304,16 @@ always wins over an include match; an empty/missing include list means
 
 ## Output layout
 
-Every path `syncsql` writes defaults to a folder under `--output-root`
-(itself defaulting to `./syncsql-output` in the current directory), so a
-local run needs no path parameter at all and the four commands chain
-together out of the box:
+`sync` defaults to the uppercase `servers.type` in the current directory:
+`./MSSQL` or `./ORACLE`. Mixed-engine runs use both roots. `catalog build`
+and `metrics update` visit each existing engine root by default; T-SQL
+`lint` uses `./MSSQL`. Pass `--output-root` to select a single custom root.
+Each engine folder has this layout:
 
 ```
-./syncsql-output/
+./MSSQL/              # or ./ORACLE/
 ├── <server>/          # sync --staging-root         → catalog build --objects-root, lint --path
-│   └── <database>/<type>/[<schema>/]<object>.sql        one directory per extracted server
+│   └── <database>/<schema>/<type>/<object>.sql
 ├── metrics-snapshot/  # sync --metrics-snapshot-root → metrics update --snapshot-root
 ├── metrics/           # metrics update --history-root → catalog build --metrics-root
 └── catalog.json       # catalog build --output
@@ -322,6 +323,8 @@ The extracted objects are the output root's own contents rather than a folder
 inside it, so the first path segment is always the server they came from. The
 two sibling folders hold JSON only, so the `*.sql` scans that `catalog build`
 and `lint` do over the root never pick them up.
+
+When both engine roots exist, select one with `--output-root` before supplying a single catalog `--output` or metrics `--history-root`. An explicit `--objects-root` locates the default catalog beside that input; an explicit `--snapshot-root` locates default history beside the snapshot directory.
 
 Any single path can still be pinned explicitly, and the CI pipeline pins
 all of them (see [`.gitlab/README.md`](../../.gitlab/README.md)). Relative
@@ -388,9 +391,10 @@ cat > ~/.syncsql-credentials.json <<'JSON'
 JSON
 chmod 600 ~/.syncsql-credentials.json
 
-syncsql sync --credentials-file ~/.syncsql-credentials.json   # → ./syncsql-output/{objects,metrics-snapshot}
-syncsql metrics update                                        # → ./syncsql-output/metrics
-syncsql catalog build --metrics-root ./syncsql-output/metrics # → ./syncsql-output/catalog.json
+syncsql sync --credentials-file ~/.syncsql-credentials.json   # → ./MSSQL/ and/or ./ORACLE/
+syncsql metrics update                                        # → each engine's metrics/
+syncsql catalog build                                         # → each engine's catalog.json
+syncsql catalog build --output-root ./MSSQL --metrics-root ./MSSQL/metrics # include MSSQL metrics
 ```
 
 `--config` defaults to `./config/servers.json`, so a checkout with a real
@@ -403,7 +407,7 @@ To preview the site against that catalog, point `catalog build --output` at
 it and run `npm run dev` inside `site/`:
 
 ```bash
-syncsql catalog build --output ./site/public/data/catalog.json
+syncsql catalog build --output-root ./MSSQL --output ./site/public/data/catalog.json
 ```
 
 Add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
@@ -419,8 +423,8 @@ one script away, and `-SkipPush` makes it a dry run:
 
 ```bash
 pwsh ./scripts/Publish-SyncSqlObjects.ps1 \
-  -ExtractedObjectsDir ./syncsql-output \
-  -MetricsSnapshotDir ./syncsql-output/metrics-snapshot \
+  -ExtractedObjectsDir ./MSSQL \
+  -MetricsSnapshotDir ./MSSQL/metrics-snapshot \
   -ConfigPath ./config/servers.json \
   -SkipPush
 ```

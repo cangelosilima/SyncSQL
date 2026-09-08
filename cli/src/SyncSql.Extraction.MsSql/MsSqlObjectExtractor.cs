@@ -113,9 +113,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
             }
 
             LinkedServerRow first = group.First();
-            string ddl = LinkedServerDdlBuilder.Build(
-                group.Key, first.Product, first.Provider, first.DataSource, first.ProviderString, first.Catalog,
-                [.. group.Select(g => (g.RemoteLoginName, g.UsesSelfCredential))]);
+            string ddl = LinkedServerDdlBuilder.Build(first, [.. group]);
 
             objects.Add(new ExtractedObject
             {
@@ -138,15 +136,17 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         List<ExtractedObject> objects,
         Dictionary<string, MetricsSnapshot> metrics)
     {
-        IEnumerable<SchemaRow> schemaRows = await MsSqlCatalogReader.GetSchemasAsync(connection);
+        List<SchemaRow> schemaRows = [.. await MsSqlCatalogReader.GetSchemasAsync(connection)];
+        int firstObject = objects.Count;
         Dictionary<string, bool> allowedSchemas = schemaRows.ToDictionary(
             r => r.SchemaName, r => filters.Schemas.IsAllowed(r.SchemaName), StringComparer.OrdinalIgnoreCase);
 
         if (filters.ObjectTypes.Contains("Schemas"))
         {
-            foreach ((string schemaName, bool allowed) in allowedSchemas)
+            foreach (SchemaRow schema in schemaRows)
             {
-                if (!allowed)
+                string schemaName = schema.SchemaName;
+                if (!allowedSchemas[schemaName])
                 {
                     continue;
                 }
@@ -157,7 +157,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                     Database = database,
                     Type = "Schemas",
                     Name = schemaName,
-                    Ddl = $"CREATE SCHEMA [{schemaName}];",
+                    Ddl = SchemaDdlBuilder.Build(schemaName, schema.OwnerName),
                     Engine = DatabaseEngine.MsSql,
                 });
             }
@@ -170,6 +170,30 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         Dictionary<string, List<ExtractedColumn>> columnList = await TryLoadAsync(
             () => LoadColumnListAsync(connection), server.Name, database, "Column list");
 
+        ILookup<int, ColumnDefinitionRow> columnDefinitions = (filters.ObjectTypes.Contains("Tables") || filters.ObjectTypes.Contains("Types")
+            ? await MsSqlCatalogReader.GetColumnDefinitionsAsync(connection) : []).ToLookup(column => column.ObjectId);
+        if (filters.ObjectTypes.Contains("Types"))
+        {
+            foreach (TypeRow type in await MsSqlCatalogReader.GetTypesAsync(connection))
+            {
+                if (!filters.Schemas.IsAllowed(type.SchemaName) || !filters.ObjectNames.IsAllowed(type.TypeName))
+                {
+                    continue;
+                }
+
+                objects.Add(new ExtractedObject
+                {
+                    Server = server.Name,
+                    Database = database,
+                    Schema = type.SchemaName,
+                    Type = "Types",
+                    Name = type.TypeName,
+                    Ddl = TypeDdlBuilder.Build(type, columnDefinitions[type.TableObjectId ?? 0]),
+                    Engine = DatabaseEngine.MsSql,
+                });
+            }
+        }
+
         if (ModuleObjectTypes.Any(filters.ObjectTypes.Contains))
         {
             await ExtractModuleObjectsAsync(connection, server, database, filters, allowedSchemas, extendedProperties, grants, columnList, objects);
@@ -177,7 +201,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
 
         if (filters.ObjectTypes.Contains("Tables"))
         {
-            await ExtractTablesAsync(connection, server, database, filters, options, allowedSchemas, extendedProperties, grants, columnList, objects, metrics);
+            await ExtractTablesAsync(connection, server, database, filters, options, allowedSchemas, extendedProperties, grants, columnList, columnDefinitions, objects, metrics);
         }
 
         if (filters.ObjectTypes.Contains("Synonyms"))
@@ -189,6 +213,8 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         {
             await ExtractReplicationAsync(connection, server, database, filters, objects);
         }
+
+        await AppendConfigurationAsync(connection, server.Name, database, objects, firstObject);
     }
 
     private static async Task ExtractModuleObjectsAsync(
@@ -222,7 +248,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                 Schema = row.SchemaName,
                 Type = objectType,
                 Name = row.ObjectName,
-                Ddl = row.Definition,
+                Ddl = ModuleDdlBuilder.Build(row),
                 Engine = DatabaseEngine.MsSql,
                 Description = extendedProperties.GetValueOrDefault(key)?.ObjectDescription,
                 Columns = objectType == "Views" ? MergeColumns(columnList, extendedProperties, key) : [],
@@ -237,11 +263,14 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         IReadOnlyDictionary<string, ExtendedPropertiesEntry> extendedProperties,
         IReadOnlyDictionary<string, List<GrantEntry>> grants,
         IReadOnlyDictionary<string, List<ExtractedColumn>> columnList,
+        ILookup<int, ColumnDefinitionRow> columnDefinitions,
         List<ExtractedObject> objects,
         Dictionary<string, MetricsSnapshot> metrics)
     {
         Dictionary<string, List<string>> foreignKeys = await TryLoadAsync(
             () => LoadTableSectionAsync(MsSqlCatalogReader.GetForeignKeysAsync, connection), server.Name, database, "Foreign key");
+        Dictionary<string, List<string>> uniqueConstraints = await TryLoadAsync(
+            () => LoadTableSectionAsync(MsSqlCatalogReader.GetUniqueConstraintsAsync, connection), server.Name, database, "Unique constraint");
         Dictionary<string, List<string>> checkConstraints = await TryLoadAsync(
             () => LoadTableSectionAsync(MsSqlCatalogReader.GetCheckConstraintsAsync, connection), server.Name, database, "Check constraint");
         Dictionary<string, List<string>> indexes = await TryLoadAsync(
@@ -263,10 +292,12 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
             }
 
             string key = $"{table.SchemaName}.{table.TableName}";
-            string ddl = TableDdlBuilder.Build(table.SchemaName, table.TableName, table.ColumnsDdl, table.PrimaryKeyDdl);
+            string columnsDdl = string.Join(",\n", columnDefinitions[table.ObjectId].Select(column => "    " + ColumnDdlBuilder.Build(column)));
+            string ddl = TableDdlBuilder.Build(table.SchemaName, table.TableName, columnsDdl, table.PrimaryKeyDdl);
 
             List<ExtractedSection> sections = [];
             AddSection(sections, "Foreign Keys", foreignKeys, key);
+            AddSection(sections, "Unique Constraints", uniqueConstraints, key);
             AddSection(sections, "Check Constraints", checkConstraints, key);
             AddSection(sections, "Indexes", indexes, key);
 
@@ -317,7 +348,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                 Schema = row.SchemaName,
                 Type = "Synonyms",
                 Name = row.SynonymName,
-                Ddl = $"CREATE SYNONYM [{row.SchemaName}].[{row.SynonymName}] FOR {row.BaseObjectName};",
+                Ddl = $"CREATE SYNONYM {SqlText.Identifier(row.SchemaName)}.{SqlText.Identifier(row.SynonymName)} FOR {row.BaseObjectName};",
                 Engine = DatabaseEngine.MsSql,
                 Grants = grants.GetValueOrDefault(key) ?? [],
             });
@@ -353,6 +384,33 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
     }
 
     // --- Optional/best-effort indexes: each degrades independently to empty on failure. ---
+
+    private async Task AppendConfigurationAsync(SqlConnection connection, string server, string database, List<ExtractedObject> objects, int firstObject)
+    {
+        (string Title, Func<SqlConnection, Task<IEnumerable<ConfigurationRow>>> Read)[] readers =
+        [
+            ("Ownership", MsSqlCatalogReader.GetOwnershipAsync),
+            ("Permissions", MsSqlCatalogReader.GetPermissionsAsync),
+            ("Property Definitions", MsSqlCatalogReader.GetPropertyDefinitionsAsync),
+        ];
+        foreach ((string title, var read) in readers)
+        {
+            List<ConfigurationRow> rows = await TryLoadAsync(
+                async () => new List<ConfigurationRow>(await read(connection)), server, database, title);
+            var index = rows.ToLookup(row => (row.Scope, row.SchemaName, row.ObjectName));
+            for (int i = firstObject; i < objects.Count; i++)
+            {
+                ExtractedObject obj = objects[i];
+                string scope = obj.Type == "Schemas" ? "SCHEMA" : obj.Type == "Types" ? "TYPE" : "OBJECT";
+                string definition = string.Join('\n', index[(scope, obj.Schema ?? obj.Name, obj.Name)].Select(row => row.Definition));
+                if (definition.Length > 0)
+                {
+                    // Module CREATE statements must finish their batch before ALTER/GRANT/EXEC.
+                    objects[i] = obj with { Sections = [.. obj.Sections, new ExtractedSection(title, "GO\n" + definition)] };
+                }
+            }
+        }
+    }
 
     private static async Task<Dictionary<string, ExtendedPropertiesEntry>> LoadExtendedPropertiesAsync(SqlConnection connection)
     {
@@ -463,7 +521,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                 index[key] = list;
             }
 
-            list.Add(IndexDdlBuilder.Build(row.SchemaName, row.TableName, row.IndexName, row.IsUnique, row.TypeDesc, row.KeyColumns, row.IncludedColumns));
+            list.Add(IndexDdlBuilder.Build(row));
         }
 
         return index;

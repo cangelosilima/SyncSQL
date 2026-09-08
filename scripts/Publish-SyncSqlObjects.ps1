@@ -51,8 +51,8 @@
     Do everything except the push - useful for a local dry run against a real clone.
 
 .EXAMPLE
-    ./scripts/Publish-SyncSqlObjects.ps1 -ExtractedObjectsDir ./syncsql-output `
-        -MetricsSnapshotDir ./syncsql-output/metrics-snapshot -ConfigPath ./config/servers.json -SkipPush
+    ./scripts/Publish-SyncSqlObjects.ps1 -ExtractedObjectsDir ./MSSQL `
+        -MetricsSnapshotDir ./MSSQL/metrics-snapshot -ConfigPath ./config/servers.json -SkipPush
 
 .LINK
     ../.gitlab/README.md

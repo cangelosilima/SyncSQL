@@ -6,6 +6,21 @@ namespace SyncSql.Extraction.MsSql.Sql;
 /// <summary>Thin Dapper wrappers, one per MsSqlQueries entry - all the actual SQL text lives in MsSqlQueries; this just runs it and maps rows.</summary>
 internal static class MsSqlCatalogReader
 {
+    public static Task<IEnumerable<ColumnDefinitionRow>> GetColumnDefinitionsAsync(SqlConnection connection) =>
+        connection.QueryAsync<ColumnDefinitionRow>(MsSqlQueries.ColumnDefinitions);
+
+    public static Task<IEnumerable<TypeRow>> GetTypesAsync(SqlConnection connection) =>
+        connection.QueryAsync<TypeRow>(MsSqlQueries.Types);
+
+    public static Task<IEnumerable<ConfigurationRow>> GetPermissionsAsync(SqlConnection connection) =>
+        connection.QueryAsync<ConfigurationRow>(MsSqlQueries.Permissions);
+
+    public static Task<IEnumerable<ConfigurationRow>> GetOwnershipAsync(SqlConnection connection) =>
+        connection.QueryAsync<ConfigurationRow>(MsSqlQueries.Ownership);
+
+    public static Task<IEnumerable<ConfigurationRow>> GetPropertyDefinitionsAsync(SqlConnection connection) =>
+        connection.QueryAsync<ConfigurationRow>(MsSqlQueries.PropertyDefinitions);
+
     public static Task<IEnumerable<string>> GetDatabasesAsync(SqlConnection connection) =>
         connection.QueryAsync<string>(MsSqlQueries.Databases);
 
@@ -41,6 +56,9 @@ internal static class MsSqlCatalogReader
 
     public static Task<IEnumerable<TableSectionRow>> GetForeignKeysAsync(SqlConnection connection) =>
         connection.QueryAsync<TableSectionRow>(MsSqlQueries.ForeignKeys);
+
+    public static Task<IEnumerable<TableSectionRow>> GetUniqueConstraintsAsync(SqlConnection connection) =>
+        connection.QueryAsync<TableSectionRow>(MsSqlQueries.UniqueConstraints);
 
     public static Task<IEnumerable<TableSectionRow>> GetCheckConstraintsAsync(SqlConnection connection) =>
         connection.QueryAsync<TableSectionRow>(MsSqlQueries.CheckConstraints);

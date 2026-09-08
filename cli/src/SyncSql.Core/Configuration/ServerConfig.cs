@@ -22,6 +22,10 @@ public sealed record ObjectFilterSet
 /// <summary>One entry in config.servers[]. A key present here fully replaces (not merges with) the corresponding config.defaults key - see <see cref="EffectiveFilters.Resolve"/>.</summary>
 public sealed record ServerConfig
 {
+    /// <summary>Physical export ancestry for a discovered server; connection and catalog identity remain Name.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string>? ExportPath { get; init; }
+
     [JsonPropertyName("name")]
     public required string Name { get; init; }
 

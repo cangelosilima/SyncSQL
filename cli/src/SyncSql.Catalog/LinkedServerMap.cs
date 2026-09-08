@@ -55,9 +55,10 @@ internal sealed partial class LinkedServerMap
 
     public static LinkedServerMap FromNodes(IEnumerable<CatalogNode> nodes)
     {
+        List<CatalogNode> allNodes = [.. nodes];
         List<CatalogNode> linkNodes = [];
         HashSet<string> catalogServers = new(StringComparer.OrdinalIgnoreCase);
-        foreach (CatalogNode node in nodes)
+        foreach (CatalogNode node in allNodes)
         {
             catalogServers.Add(node.Server);
             if (node.Type is "LinkedServers" or "DatabaseLinks")
@@ -73,7 +74,15 @@ internal sealed partial class LinkedServerMap
         {
             string? dataSource = FirstCapture(node.Ddl, MsSqlDataSource()) ?? FirstCapture(node.Ddl, OracleUsing());
             string? catalog = FirstCapture(node.Ddl, MsSqlCatalog());
-            string? targetServer = MatchCatalogServer(catalogServers, node.Name, dataSource);
+            // The exported subtree identifies the exact followed server even when its catalog
+            // name was suffixed to distinguish equal link aliases on different root servers.
+            string linkPrefix = node.Path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
+                ? node.Path[..^4] + "/" : string.Empty;
+            string[] nestedServers = linkPrefix.Length == 0 ? [] : [.. allNodes
+                .Where(candidate => candidate.Path.StartsWith(linkPrefix, StringComparison.OrdinalIgnoreCase)
+                    && !candidate.Path[linkPrefix.Length..].Contains("/LinkedServers/", StringComparison.OrdinalIgnoreCase))
+                .Select(candidate => candidate.Server).Distinct(StringComparer.OrdinalIgnoreCase)];
+            string? targetServer = nestedServers.Length == 1 ? nestedServers[0] : MatchCatalogServer(catalogServers, node.Name, dataSource);
 
             // A link name is unique per server, so the first entry wins; Oracle qualifies links by owner,
             // but the name is still what the DDL writes after the "@".

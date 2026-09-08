@@ -9,6 +9,51 @@ namespace SyncSql.Catalog.Tests;
 
 public sealed class CatalogBuilderTests : IDisposable
 {
+    [Fact]
+    public async Task BuildAsync_NestedLinkedServer_PreservesRemoteIdentityAndResolvesReference()
+    {
+        WriteObjectFile("ROOT", "_ServerLevel", "LinkedServers", null, "REMOTE", LinkedServerDdl("REMOTE", "host.example.com", "SalesDb"));
+        WriteObjectFile("ROOT", "AppDb", "Views", "dbo", "Orders", "SELECT * FROM REMOTE.SalesDb.sales.Orders;");
+        ExtractedObject remote = new()
+        {
+            Server = "REMOTE_2",
+            Database = "SalesDb",
+            Schema = "sales",
+            Type = "Tables",
+            Name = "Orders",
+            Ddl = "CREATE TABLE sales.Orders (Id int);",
+            Engine = DatabaseEngine.MsSql,
+        };
+        string relative = ExtractedObjectFile.RelativePath(remote.Server, remote.Database, remote.Schema, remote.Type, remote.Name,
+            serverPath: ["ROOT", "LinkedServers", "REMOTE"]);
+        string path = Path.Combine(_objectsRoot, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, ExtractedObjectFile.Write(remote));
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(sql => sql.Contains("SELECT", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("sales", "Orders") { Database = "SalesDb", Server = "REMOTE" }],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        Core.Domain.Catalog catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        CatalogNode target = Assert.Single(catalog.Nodes, node => node.Server == "REMOTE_2");
+        Assert.Equal(relative, target.Path);
+        Assert.Equal("REMOTE_2/SalesDb/Tables/sales/Orders", target.Id);
+        Assert.Contains(catalog.Edges, edge => edge.To == target.Id);
+        Assert.Equal(target.Id, Assert.Single(catalog.LinkedServerReferences).To);
+    }
+
+    [Fact]
+    public async Task BuildAsync_SchemaDefinitionInsideSchemaFolder_RetainsLegacyIdentity()
+    {
+        WriteObjectFile("ROOT", "AppDb", "Schemas", null, "sales", "CREATE SCHEMA sales AUTHORIZATION SalesOwner;");
+        Core.Domain.Catalog catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        CatalogNode schema = Assert.Single(catalog.Nodes);
+        Assert.Equal("ROOT/AppDb/sales/sales.sql", schema.Path);
+        Assert.Equal("ROOT/AppDb/Schemas/sales", schema.Id);
+        Assert.Equal("Schemas", schema.Type);
+        Assert.Null(schema.Schema);
+    }
     private readonly string _objectsRoot = Directory.CreateTempSubdirectory("syncsql-objects-").FullName;
     private readonly ILineageAnalyzerResolver _lineageAnalyzerResolver = Substitute.For<ILineageAnalyzerResolver>();
     private readonly ILineageAnalyzer _mssqlAnalyzer = Substitute.For<ILineageAnalyzer>();
@@ -88,6 +133,39 @@ public sealed class CatalogBuilderTests : IDisposable
         await Assert.ThrowsAsync<DirectoryNotFoundException>(() => builder.BuildAsync(
             new CatalogBuildRequest { ObjectsRoot = Path.Combine(_objectsRoot, "does-not-exist") },
             CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("SQLPROD01/LinkedServers/REMOTE.sql")]
+    [InlineData("SQLPROD01/_ServerLevel/LinkedServers/REMOTE.sql")]
+    public async Task BuildAsync_ServerLevelLayouts_PreserveIdentityAndHistoryMapping(string relative)
+    {
+        string path = Path.Combine(_objectsRoot, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, ExtractedObjectFile.Write(new ExtractedObject
+        {
+            Server = "SQLPROD01",
+            Database = "_ServerLevel",
+            Type = "LinkedServers",
+            Name = "REMOTE",
+            Ddl = LinkedServerDdl("REMOTE", "remote.example.com", "AppDb"),
+            Engine = DatabaseEngine.MsSql,
+        }));
+        _gitHistoryMiner.MineAsync(Arg.Any<GitHistoryMiningRequest>(), Arg.Any<CancellationToken>())
+            .Returns(GitHistoryMiningResult.Empty);
+
+        Core.Domain.Catalog catalog = await CreateBuilder().BuildAsync(
+            new CatalogBuildRequest { ObjectsRoot = _objectsRoot, RepoRoot = _objectsRoot }, CancellationToken.None);
+
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("SQLPROD01/_ServerLevel/LinkedServers/REMOTE", node.Id);
+        Assert.Equal("_ServerLevel", node.Database);
+        Assert.Equal("LinkedServers", node.Type);
+        Assert.Null(node.Schema);
+        Assert.Equal(relative, node.Path);
+        await _gitHistoryMiner.Received(1).MineAsync(
+            Arg.Is<GitHistoryMiningRequest>(request => request.ObjectPaths[relative] == node.Id),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

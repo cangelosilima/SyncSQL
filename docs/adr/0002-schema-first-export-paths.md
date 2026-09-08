@@ -8,11 +8,13 @@ The catalog navigation and extracted SQL tree should follow Server → Database 
 
 ## Decision
 
-New SQL files use `server/database/[schema/]type/object.sql`. Objects without a schema keep Type under the database, including `_ServerLevel` for server-scoped objects. The catalog sidebar follows the same hierarchy.
+New SQL files use `server/database/[schema/]type/object.sql`. Database objects without a schema keep Type under the database. Server-scoped objects use `server/type/object.sql`, without an `_ServerLevel` directory. The catalog retains `_ServerLevel` as the logical database for stable IDs and sidebar grouping, and reads both the old and new server-scoped paths.
 
 New exports carry `-- Path layout: schema/type` in their header. The catalog builder uses this marker rather than guessing whether a directory name denotes a schema or type, and continues to read unmarked legacy files. Object IDs retain their previous format; metrics snapshot/history keys and routes remain unchanged. The catalog's `path` field records the actual SQL file path.
 
 Git mining maps current file paths to stable IDs, accepts legacy paths, counts a layout move once per object per commit, and fetches historical SQL using the path recorded for that revision.
+
+Schema definitions now use `server/database/schema/schema.sql`, while user-defined types live in `server/database/schema/Types/`. Objects followed through a linked server use `original-server/LinkedServers/link-name/database/schema/type/object.sql`; the link definition remains a sibling `link-name.sql`. A JSON `-- Identity:` header supplies the logical server/database/schema/type/name for these layouts, preserving IDs and remote lineage independently of nesting. Historical standalone remote schema-first paths remain recognized.
 
 ## Consequences
 

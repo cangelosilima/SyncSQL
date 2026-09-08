@@ -55,7 +55,8 @@ public static class LinkedServerFollowUpPlanner
         string parentUsername,
         IReadOnlyList<DiscoveredLinkedServer> discovered,
         LinkedServerDiscoveryConfig config,
-        IReadOnlyCollection<ServerConfig> alreadyKnown)
+        IReadOnlyCollection<ServerConfig> alreadyKnown,
+        ObjectFilterSet? defaults = null)
     {
         ArgumentNullException.ThrowIfNull(parent);
         ArgumentNullException.ThrowIfNull(discovered);
@@ -114,6 +115,7 @@ public static class LinkedServerFollowUpPlanner
             ServerConfig server = new()
             {
                 Name = name,
+                ExportPath = [.. parent.ExportPath ?? [parent.Name], "LinkedServers", link.Name],
                 Type = DatabaseEngine.MsSql,
                 Host = host,
                 Port = port ?? (parent.Type == DatabaseEngine.MsSql ? parent.Port : null),
@@ -125,7 +127,10 @@ public static class LinkedServerFollowUpPlanner
                 Databases = catalog is not null ? OnlyDatabase(catalog) : parent.Databases,
                 Schemas = parent.Schemas,
                 ObjectNames = parent.ObjectNames,
-                ObjectTypes = parent.ObjectTypes,
+                // Remote link definitions are not part of the followed database's export.
+                // Resolve defaults first so a null override cannot reintroduce LinkedServers.
+                ObjectTypes = [.. EffectiveFilters.Resolve(defaults, parent).ObjectTypes
+                    .Where(type => !string.Equals(type, "LinkedServers", StringComparison.OrdinalIgnoreCase))],
             };
 
             string targetKey = TargetKey(server);

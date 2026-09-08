@@ -10,7 +10,7 @@ internal static class TableDdlBuilder
 {
     public static string Build(string schema, string table, string? columnsDdl, string? primaryKeyDdl)
     {
-        List<string> lines = [$"CREATE TABLE [{schema}].[{table}] ("];
+        List<string> lines = [$"CREATE TABLE {SqlText.Identifier(schema)}.{SqlText.Identifier(table)} ("];
 
         if (!string.IsNullOrEmpty(columnsDdl))
         {

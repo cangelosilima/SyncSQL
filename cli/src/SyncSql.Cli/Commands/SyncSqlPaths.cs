@@ -1,10 +1,11 @@
 ﻿using System.CommandLine;
+using SyncSql.Core.Domain;
 
 namespace SyncSql.Cli.Commands;
 
 /// <summary>
 /// The default layout every command reads and writes, so running <c>syncsql</c> away from a CI job needs
-/// no path parameter at all: everything lands under <c>./syncsql-output</c> in the current directory
+/// no path parameter at all: each engine uses its uppercase config name (MSSQL/ORACLE)
 /// (overridable wholesale with <c>--output-root</c>, or one path at a time with the specific option).
 /// A pipeline still pins every path explicitly - see .gitlab/README.md - it just no longer has to.
 ///
@@ -15,12 +16,12 @@ namespace SyncSql.Cli.Commands;
 /// </summary>
 internal static class SyncSqlPaths
 {
-    public const string DefaultOutputRoot = "syncsql-output";
+    public static string DefaultOutputRoot(DatabaseEngine engine) => engine.ToConfigString().ToUpperInvariant();
     public const string DefaultConfigPath = "config/servers.json";
 
     /// <summary>
     /// The extracted tree starts at the server name, directly under the output root - there is no wrapping
-    /// folder, so an object lands at <c>&lt;output-root&gt;/SQLPROD01/AppDb/Tables/dbo/Orders.sql</c>. The
+    /// folder, so an object lands at <c>&lt;output-root&gt;/SQLPROD01/AppDb/dbo/Tables/Orders.sql</c>. The
     /// git side matches: <see cref="DefaultPathPrefix"/> puts the same tree at the repository root.
     /// </summary>
     public const string ObjectsRelativePath = "";
@@ -32,11 +33,31 @@ internal static class SyncSqlPaths
     public const string MetricsHistoryDirectoryName = "metrics";
     public const string CatalogFileName = "catalog.json";
 
-    public static Option<string> OutputRootOption() => new("--output-root")
+    public static Option<string?> OutputRootOption() => new("--output-root")
     {
-        Description = "Directory the other output paths default to a folder inside, relative to the current directory unless absolute.",
-        DefaultValueFactory = _ => DefaultOutputRoot,
+        Description = "Override the output root. Default: uppercase servers.type per engine (./MSSQL or ./ORACLE).",
     };
+
+    /// <summary>Commands that consume exports visit each existing engine root, or one explicitly selected root.</summary>
+    public static string[] ReadOutputRoots(string? explicitRoot, string? inputRoot = null)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitRoot))
+        {
+            return [Path.GetFullPath(explicitRoot)];
+        }
+
+        if (!string.IsNullOrWhiteSpace(inputRoot))
+        {
+            return [Path.GetFullPath(inputRoot)];
+        }
+
+        string[] roots = [.. Enum.GetValues<DatabaseEngine>().Select(DefaultOutputRoot).Select(Path.GetFullPath).Where(Directory.Exists)];
+        if (roots.Length == 0)
+        {
+            throw new DirectoryNotFoundException("No MSSQL or ORACLE output directory found. Run sync first or pass --output-root.");
+        }
+        return roots;
+    }
 
     /// <summary>An explicitly passed path wins; otherwise the documented spot under <paramref name="outputRoot"/>. Always returned absolute, so logs say exactly where output went.</summary>
     public static string Resolve(string? explicitPath, string outputRoot, string defaultRelativePath) =>

@@ -10,6 +10,7 @@
     <Project Path="src/SyncSql.Lineage.Oracle/SyncSql.Lineage.Oracle.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/SyncSql.Cli.Tests/SyncSql.Cli.Tests.csproj" />
     <Project Path="tests/SyncSql.Catalog.Tests/SyncSql.Catalog.Tests.csproj" />
     <Project Path="tests/SyncSql.Core.Tests/SyncSql.Core.Tests.csproj" />
     <Project Path="tests/SyncSql.Extraction.MsSql.Tests/SyncSql.Extraction.MsSql.Tests.csproj" />

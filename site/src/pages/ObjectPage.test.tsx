@@ -59,7 +59,7 @@ vi.mock('../lib/CatalogContext', () => ({
 
 function renderObject(id: string) {
   render(
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={[`/object/${id}`]}>
+    <MemoryRouter initialEntries={[`/object/${id}`]}>
       <Routes>
         <Route path="/object/*" element={<ObjectPage />} />
       </Routes>
