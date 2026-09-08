@@ -251,4 +251,65 @@ public class LinkedServerFollowUpPlannerTests
         Assert.Equal("SQLPROD02", Assert.Single(plan.FollowUps).Server.Name);
         Assert.Contains("linkNames", Assert.Single(plan.Skipped).Reason, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("SQLPROD02", "example.com", "SQLPROD02.example.com", 1433)]
+    [InlineData(" SQLPROD02,1444 ", " .example.com ", "SQLPROD02.example.com", 1444)]
+    [InlineData(@"SQLPROD02\FINANCE", ".example.com", @"SQLPROD02.example.com\FINANCE", 1433)]
+    [InlineData(@"tcp:SQLPROD02\FINANCE,1444", "example.com", @"tcp:SQLPROD02.example.com\FINANCE", 1444)]
+    [InlineData("TCP:SQLPROD02,1444", "example.com", "TCP:SQLPROD02.example.com", 1444)]
+    [InlineData(@"np:SQLPROD02\FINANCE", "example.com", @"np:SQLPROD02.example.com\FINANCE", 1433)]
+    [InlineData("sqlprod02.other.com", "example.com", "sqlprod02.other.com", 1433)]
+    [InlineData(@"sqlprod02.example.com\FINANCE", "example.com", @"sqlprod02.example.com\FINANCE", 1433)]
+    [InlineData("SQLPROD02.", "example.com", "SQLPROD02.", 1433)]
+    [InlineData("10.0.0.2", "example.com", "10.0.0.2", 1433)]
+    [InlineData("tcp:[2001:db8::2],1444", "example.com", "tcp:[2001:db8::2]", 1444)]
+    [InlineData("::1", "example.com", "::1", 1433)]
+    [InlineData("127001", "example.com", "127001", 1433)]
+    [InlineData("localhost", "example.com", "localhost", 1433)]
+    [InlineData(@".\FINANCE", "example.com", @".\FINANCE", 1433)]
+    [InlineData("(local)", "example.com", "(local)", 1433)]
+    [InlineData(@"np:\\SQLPROD02\pipe\sql\query", "example.com", @"np:\\SQLPROD02\pipe\sql\query", 1433)]
+    [InlineData("SQLPROD02", null, "SQLPROD02", 1433)]
+    [InlineData("SQLPROD02", "", "SQLPROD02", 1433)]
+    [InlineData("SQLPROD02", "  ", "SQLPROD02", 1433)]
+    public void Plan_HostNameSuffix_QualifiesOnlyShortHosts(string dataSource, string? suffix, string expectedHost, int expectedPort)
+    {
+        ServerConfig parent = Parent with { HostNameSuffix = suffix };
+        ServerConfig remote = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            parent, "svc_syncsql", [Link("REMOTE", dataSource)], Enabled, [parent]).FollowUps).Server;
+
+        Assert.Equal(expectedHost, remote.Host);
+        Assert.Equal(expectedPort, remote.Port);
+        Assert.Equal(suffix, remote.HostNameSuffix);
+        Assert.Equal(Parent.Host, parent.Host);
+    }
+
+    [Fact]
+    public void Plan_HostNameSuffix_IsInheritedByNestedDiscovery()
+    {
+        ServerConfig parent = Parent with { HostNameSuffix = "example.com", Port = null };
+        ServerConfig remote = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            parent, "svc_syncsql", [Link("REMOTE", @"SQLPROD02\FINANCE")], Enabled, [parent]).FollowUps).Server;
+        ServerConfig nested = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            remote, "svc_syncsql", [Link("NEXT", "SQLPROD03")], Enabled, [parent, remote]).FollowUps).Server;
+
+        Assert.Equal(@"SQLPROD02.example.com\FINANCE", remote.Host);
+        Assert.Null(remote.Port);
+        Assert.Equal("SQLPROD03.example.com", nested.Host);
+    }
+
+    [Fact]
+    public void Plan_HostNameSuffix_DeduplicatesQualifiedTargetsAndCycles()
+    {
+        ServerConfig parent = Parent with { HostNameSuffix = "example.com" };
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(
+            parent, "svc_syncsql",
+            [Link("REMOTE", "SQLPROD02"), Link("DUPLICATE", "sqlprod02.example.com"), Link("SELF", "SQLPROD01")],
+            Enabled, [parent]);
+
+        Assert.Equal("SQLPROD02.example.com", Assert.Single(plan.FollowUps).Server.Host);
+        Assert.Equal(2, plan.Skipped.Count);
+        Assert.All(plan.Skipped, skipped => Assert.Contains("already covered", skipped.Reason, StringComparison.Ordinal));
+    }
 }

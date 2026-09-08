@@ -35,6 +35,10 @@ public sealed record ServerConfig
     [JsonPropertyName("host")]
     public required string Host { get; init; }
 
+    /// <summary>Optional DNS suffix for short SQL Server hosts discovered through linked servers. Inherited by follow-ups; does not change this entry's Host.</summary>
+    [JsonPropertyName("hostNameSuffix")]
+    public string? HostNameSuffix { get; init; }
+
     [JsonPropertyName("port")]
     public int? Port { get; init; }
 

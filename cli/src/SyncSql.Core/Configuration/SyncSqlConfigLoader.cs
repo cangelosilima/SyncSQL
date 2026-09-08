@@ -68,6 +68,7 @@ public static class SyncSqlConfigLoader
             }
 
             ValidateFilterPatterns(server.Databases, path, $"server '{server.Name}' databases");
+            ValidateHostNameSuffix(server.HostNameSuffix, path, server.Name);
             ValidateFilterPatterns(server.Schemas, path, $"server '{server.Name}' schemas");
             ValidateFilterPatterns(server.ObjectNames, path, $"server '{server.Name}' objectNames");
         }
@@ -81,6 +82,29 @@ public static class SyncSqlConfigLoader
         if (config.Discovery.LinkedServers.MaxDepth < 0)
         {
             throw new ConfigValidationException($"Config file '{path}' has a negative discovery.linkedServers.maxDepth ({config.Discovery.LinkedServers.MaxDepth}) - use 0 to disable following linked servers.");
+        }
+    }
+
+    private static void ValidateHostNameSuffix(string? suffix, string path, string serverName)
+    {
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return;
+        }
+
+        string domain = suffix.Trim();
+        if (domain.StartsWith('.'))
+        {
+            domain = domain[1..];
+        }
+
+        if (domain.Length > 253 || domain.Split('.').Any(label =>
+            label.Length is < 1 or > 63
+            || !char.IsAsciiLetterOrDigit(label[0])
+            || !char.IsAsciiLetterOrDigit(label[^1])
+            || !label.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')))
+        {
+            throw new ConfigValidationException($"Config file '{path}' has server '{serverName}' with an invalid hostNameSuffix - use a DNS suffix such as 'example.com' or '.example.com'.");
         }
     }
 

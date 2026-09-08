@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Globalization;
+using System.Net;
 using System.Text.RegularExpressions;
 using SyncSql.Core.Domain;
 
@@ -109,6 +110,7 @@ public static class LinkedServerFollowUpPlanner
                 continue;
             }
 
+            host = ApplyHostNameSuffix(host, parent.HostNameSuffix);
             string name = UniqueName(link.Name, takenNames);
             string? catalog = config.RestrictToLinkedCatalog && !string.IsNullOrWhiteSpace(link.Catalog) ? link.Catalog : null;
 
@@ -118,6 +120,7 @@ public static class LinkedServerFollowUpPlanner
                 ExportPath = [.. parent.ExportPath ?? [parent.Name], "LinkedServers", link.Name],
                 Type = DatabaseEngine.MsSql,
                 Host = host,
+                HostNameSuffix = parent.HostNameSuffix,
                 Port = port ?? (parent.Type == DatabaseEngine.MsSql ? parent.Port : null),
                 Encrypt = parent.Encrypt,
                 TrustServerCertificate = parent.TrustServerCertificate,
@@ -172,6 +175,32 @@ public static class LinkedServerFollowUpPlanner
                 ? parsed
                 : null;
         return (host, port);
+    }
+
+    /// <summary>Qualify only a short host, preserving a transport prefix and named instance.</summary>
+    private static string ApplyHostNameSuffix(string dataSource, string? suffix)
+    {
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return dataSource;
+        }
+
+        int hostStart = dataSource.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase)
+            || dataSource.StartsWith("lpc:", StringComparison.OrdinalIgnoreCase) ? 4
+            : dataSource.StartsWith("np:", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
+        int instanceStart = dataSource.IndexOf('\\', hostStart);
+        string host = instanceStart < 0 ? dataSource[hostStart..] : dataSource[hostStart..instanceStart];
+
+        // Qualified names, IP literals, local aliases and pipe paths aren't short DNS hosts.
+        if (host.Length == 0 || host.Contains('.', StringComparison.Ordinal)
+            || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || IPAddress.TryParse(host, out _)
+            || !host.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))
+        {
+            return dataSource;
+        }
+
+        return $"{dataSource[..hostStart]}{host}.{suffix.Trim().TrimStart('.')}{(instanceStart < 0 ? "" : dataSource[instanceStart..])}";
     }
 
     /// <summary>What makes two entries the same target: host (case-insensitively) plus the databases they'd extract, so a link pinned to one catalog doesn't collide with a full-instance entry.</summary>
