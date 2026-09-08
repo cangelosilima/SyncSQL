@@ -88,6 +88,45 @@ public class SyncSqlConfigLoaderTests
         Assert.Equal(1, config.Discovery.LinkedServers.MaxDepth);
         Assert.True(config.Discovery.LinkedServers.RequireMatchingLogin);
         Assert.True(config.Discovery.LinkedServers.RestrictToLinkedCatalog);
+        Assert.Null(Assert.Single(config.Servers).HostNameSuffix);
+    }
+
+    [Theory]
+    [InlineData("example.com")]
+    [InlineData(".example.com")]
+    [InlineData(" .corp-example.com ")]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task LoadAsync_HostNameSuffix_IsParsed(string suffix)
+    {
+        string path = await WriteTempConfigAsync($$"""
+            {"servers":[{"name":"S","type":"mssql","host":"h","hostNameSuffix":"{{suffix}}","credentialsVariablePrefix":"S"}]}
+            """);
+
+        SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(path);
+
+        Assert.Equal(suffix, Assert.Single(config.Servers).HostNameSuffix);
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..example.com")]
+    [InlineData("example..com")]
+    [InlineData("example.com,1433")]
+    [InlineData("https://example.com")]
+    [InlineData("bad domain.com")]
+    [InlineData("-example.com")]
+    [InlineData("example-.com")]
+    public async Task LoadAsync_InvalidHostNameSuffix_Throws(string suffix)
+    {
+        string path = await WriteTempConfigAsync($$"""
+            {"servers":[{"name":"S","type":"mssql","host":"h","hostNameSuffix":"{{suffix}}","credentialsVariablePrefix":"S"}]}
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(() => SyncSqlConfigLoader.LoadAsync(path));
+
+        Assert.Contains("hostNameSuffix", ex.Message);
+        Assert.Contains("server 'S'", ex.Message);
     }
 
     [Fact]

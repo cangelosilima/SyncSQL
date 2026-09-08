@@ -943,6 +943,36 @@ metadata remains separate and follows the configured `maxDepth`:
   instance.
 - `linkNames` - the usual regex include/exclude, over link names.
 
+If linked-server discovery fails because `sys.servers.data_source` contains a
+short host name, add `hostNameSuffix` to the **parent server entry** in
+`config/servers.json`:
+
+```json
+{
+  "name": "SQLPROD01",
+  "type": "mssql",
+  "host": "sqlprod01.example.com",
+  "hostNameSuffix": "example.com",
+  "credentialsVariablePrefix": "SQLPROD01"
+}
+```
+
+With discovery enabled, `SQLPROD02` becomes `SQLPROD02.example.com`, and
+`SQLPROD02\FINANCE,1444` becomes `SQLPROD02.example.com\FINANCE,1444`.
+The suffix accepts an optional leading dot and is inherited by nested
+discoveries. It applies before checking for duplicate targets. Qualified
+names, IP addresses, local aliases, and named-pipe paths remain unchanged;
+transport prefixes, instance names, and ports are preserved. The configured
+server's own `host` is used as written. Omit the suffix or leave it blank to
+keep the existing behavior.
+
+SyncSQL already reads the linked target from
+[`sys.servers.data_source`](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-servers-transact-sql).
+SQL Server's [`CONNECTIONPROPERTY`](https://learn.microsoft.com/en-us/sql/t-sql/functions/connectionproperty-transact-sql)
+exposes the current connection's IP address and port, but no DNS suffix.
+The parent's address does not establish which DNS domain a linked target
+belongs to, so SyncSQL uses the explicit suffix instead of inferring one.
+
 Links that aren't SQL Server (`product`/`provider`), that declare no data
 source, or that lead somewhere a configured server already covers are
 skipped, each with a logged reason. Discovered servers are named after the
