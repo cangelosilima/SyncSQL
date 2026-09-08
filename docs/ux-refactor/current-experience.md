@@ -1,8 +1,12 @@
-# SQLSync — current implemented UX
+# SQLineage — current implemented UX
+
+Brand update (2026-09-07): the app is now SQLineage. A teal database-and-branching-arrows SVG is shared by the header and favicon. Page title and workbook creator metadata use the new name. Repository/CLI/package identifiers and deployment routes remain unchanged. Historical SQLSync/SyncSQL design records retain their original names.
 
 Updated: 2026-09-07. This document is the current UX contract for the local implementation. Later owner instructions supersede the earlier approved Figma compositions where explicitly recorded here. The Figma file has not been updated in this documentation pass. Nothing here claims a deployment or a commit.
 
 ## Navigation and shell
+
+Latest visual refinement (owner request, 2026-09-07): ivory light surfaces, warm charcoal text, muted teal accents and sage selection, with warm charcoal dark surfaces and mint accents. Shared panel/control radius is 6px. Technical density, type/status colors and behavior remain unchanged. SQL keeps its dark background, now warm charcoal. This refinement is local and follows the initial PR creation.
 
 Primary order: **Overview → Explorer → Lineage → Alerts → AI → History**. AI retains its existing availability/disabled states. Default theme is light; dark remains available. Snapshot status remains; the redundant server badges were removed.
 
@@ -18,7 +22,7 @@ All routes remain inside HashRouter:
 | `/ai` | Local interpretation and preview | Ordinary filters transfer to Explorer; resolved column requests link to Object `column` |
 | `/history` | Mined commit chronology | No new state |
 
-Catalog sidebar appears **only on Explorer and Object** and is always rendered there, with no Catalog toggle or Close button. Branches still expand/collapse, retain per-branch limits and Show more, and navigate without applying filters. Server-level LinkedServers are direct leaves under `_ServerLevel`, with no artificial schema branch. At widths up to 1280px the catalog stacks above content with a bounded scroll area.
+Catalog sidebar appears **only on Explorer and Object** and is always rendered there, with no Catalog toggle or Close button. Branches still expand/collapse, retain per-branch limits and Show more, and navigate without applying filters. The hierarchy is Server → Database → Schema → Type → Object. Objects without a schema retain Type directly under the database (`_ServerLevel` for server-scoped objects), without an artificial schema branch. At widths up to 1280px the catalog stacks above content with a bounded scroll area.
 
 ## Object explorer
 
@@ -63,7 +67,9 @@ Category and case-insensitive text search filter by object identity/context and 
 
 Metric anomalies are labeled **Heuristic**; orphaned references are **Catalog finding**. Detection explanation and Alerts Help document the existing thresholds, scope and data limitations. Missing orphan analysis is distinguished from an empty finding set. Filters survive through shareable URLs. There is no Alerts export or background notification feature.
 
-Overview retains its anomaly/orphan previews and their existing limits. The temporary “Investigate all alerts” link was removed by request. Alerts is reached through primary navigation. Summary metrics are separate cards with 16px gaps, matching other panels, and wrap to two columns on small screens.
+Overview has five cards: Total objects, Commits mined, Lineage edges, Alerts, Last change. Alerts shows the complete anomaly + orphan total and category breakdown, linking to Alerts. The two detailed preview panels have been removed; evidence and explanations remain in Alerts. Cards use 16px gaps and wrap on small screens.
+
+SQL exports now use `server/database/[schema/]type/object.sql`. New files identify the layout in their header; the catalog also accepts legacy files. IDs, routes and metrics keys stay stable. Git history reads SQL from the path at each revision. See [ADR 0002](../adr/0002-schema-first-export-paths.md).
 
 ## AI correction
 

@@ -1,4 +1,6 @@
-# SyncSQL
+# SQLineage
+
+SQLineage is the database catalog and investigation app, formerly branded SyncSQL. The repository, CLI/project identifiers and deployment paths retain their existing names for compatibility.
 
 [![CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml)
 
@@ -17,22 +19,23 @@ noisy.
 
 ## Screenshots
 
-**Overview** — a dense data-terminal shell (fixed chrome topbar carrying the
-brand mark, nav and per-server connection status) around
-a quick-stats row (objects, commits mined, lineage edges, last change), a
-per-type change-activity heatmap (one row per object type, one cell per
-week, each row tinted with that type's own color), recently changed
-objects, most-referenced tables, and objects that tend to change together.
+These screenshots document an earlier interface and do not yet show the warm
+SQLineage theme or the current workspace layout. The descriptions below and
+[the current UX specification](docs/ux-refactor/current-experience.md) describe
+the implemented experience.
+
+**Overview** — five summary cards (total objects, commits mined, lineage edges,
+Alerts, last change), a per-type change-activity heatmap, latest changes,
+most-referenced tables, most-changed objects and commonly changed pairs.
+The top bar reports the catalog snapshot, not live database connectivity.
 
 ![Overview page](docs/screenshots/overview.png)
 
-**Metrics anomalies & orphaned references** — flagged as alert cards near the
-top of the Overview page: tables whose latest metrics snapshot swung sharply
-(a row-count jump or an index fragmentation spike), and references that don't
-resolve to anything in the catalog's scope, usually a renamed or dropped
-target.
-
-![Overview metrics anomalies and orphaned references panels](docs/screenshots/overview-anomalies.png)
+**Alerts** — a dedicated investigation page consolidating metric anomalies
+and orphaned references. Overview shows the complete total and category
+breakdown in its Alerts card; the former two preview panels are removed.
+Category and text filters narrow findings, with links to the affected object
+and its lineage. Metric anomalies are labeled as heuristics.
 
 **Explorer** — a sortable, filterable table of every extracted object, with a
 GitLab-style filter bar (attribute, operator, value).
@@ -61,7 +64,7 @@ volume/index/optimizer-statistics trends.
 ![Object detail page](docs/screenshots/object-detail.png)
 
 **Orphaned reference warning** — flagged directly on the referencing
-object's own page, in addition to the Overview panel above.
+object's own page, alongside the catalog-wide investigation in Alerts.
 
 ![Object detail orphaned reference warning](docs/screenshots/object-orphaned.png)
 
@@ -93,7 +96,7 @@ flowchart TD
         oracle["Oracle extraction<br/>DBMS_METADATA.GET_DDL, managed driver<br/>+ a per-table metrics snapshot (reduced scope)"]
     end
 
-    staged["extracted-objects/{server}/{database}/{type}/[{schema}/]{object}.sql<br/>metrics-snapshot/{...} - merged across every parallel job"]
+    staged["extracted-objects/{server}/{database}/[{schema}/]{type}/{object}.sql<br/>metrics-snapshot/{...} - merged across every parallel job"]
 
     subgraph sync["CI stage: sync - one job running scripts/Publish-SyncSqlObjects.ps1"]
         direction TB
@@ -209,7 +212,7 @@ for the full schema; in short:
   `pathPrefix` says where inside that repository the extracted tree lives.
   It defaults to empty: the tree starts at the repository root, so the first
   path segment of every published file is the server it came from
-  (`SQLPROD01/AppDb/Tables/dbo/Orders.sql`), with `catalog.json` and the
+  (`SQLPROD01/AppDb/dbo/Tables/Orders.sql`), with `catalog.json` and the
   `metrics/` history tree beside it. Set it to a folder name to nest the whole
   tree one level down instead - worth doing when you publish into a repository
   that holds other things too, and what an existing SyncSQL repository already
@@ -367,23 +370,26 @@ a database, a credential, or a git remote.
 ## The catalog / lineage site
 
 `site/` is a React + TypeScript + Vite app (source checked into this repo,
-built fresh by the `pages` job on every scheduled run), styled as a dense
-data-terminal with a light/dark toggle (top right; light is the default -
+built fresh by the `pages` job on every scheduled run), with dense results,
+balanced object details and a warm light/dark theme (light is the default -
 see "Theme" below). Every page carries a **?** next to its heading that
 opens that page's own Markdown guide without leaving the view (see
-"In-app help" below):
+"In-app help" below).
 
-- **Overview** — a quick-stats row (objects, commits mined, lineage edges,
-  last change), a per-type change-activity heatmap (one row per object type
-  with its own color, one cell per week over the mined history, doubling as
-  the object-count-by-type breakdown), the 10 most recently changed objects,
-  the most-referenced tables (direct incoming edges and indirect/transitive
-  reachability, capped to one hop across a linked-server boundary), objects
-  that tend to change together in the same commit, a **metrics anomalies**
-  panel flagging tables whose latest metrics snapshot swung sharply versus
-  the previous one (a row-count jump/drop or an index fragmentation spike —
-  see "Volatile metrics" below), and an **orphaned references** panel (see
-  "Orphaned reference detection" below).
+Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → History**.
+
+- **Overview** — five cards in order: **Total objects**, **Commits mined**,
+  **Lineage edges**, **Alerts**, **Last change**. Alerts combines all detected
+  metric anomalies and orphaned references, shows both counts, and links to
+  the investigation page. The remaining panels show per-type change activity,
+  latest changes, most-referenced tables, most-changed objects and commonly
+  changed pairs. Detailed anomaly/orphan panels now live in Alerts.
+- **Alerts** (`/#/alerts`) — complete findings with category and text filters
+  preserved in the URL (`category` and `q`), incremental results, object and
+  lineage links, and in-app help. Metric anomalies are **Heuristic** and
+  orphaned references are **Catalog finding**; explanations retain detection
+  scope and limitations. Missing orphan analysis is distinguished from an
+  empty finding set. These are snapshot findings, not live notifications.
 - **Explorer** — a sortable, filterable table listing every object; it's the
   primary way to browse the catalog. A separate DDL content search box
   live-filters (search-as-you-type, debounced) across every object's full
@@ -399,7 +405,11 @@ opens that page's own Markdown guide without leaving the view (see
   model is fetched from the same Pages origin on the first request. If a
   deployment omits the model, the tab remains visible but disabled and the
   rest of the site is unaffected.
-- **Object detail** — qualified name, `sys.extended_properties` descriptions
+- **Object explorer** — the SQL definition stays visible above workspace tabs:
+  **Columns**, **Graph**, **Access**, **Relationships**, **Metrics**, **History**
+  and **Diff**. Relationships contains dependency evidence; there is no separate
+  object inspector or duplicate Properties panel. The page retains qualified
+  name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), an **orphaned reference** warning when this
   object's own DDL refers to something unresolved (see "Orphaned reference
@@ -414,7 +424,9 @@ opens that page's own Markdown guide without leaving the view (see
   neighborhood graph. Hub objects are handled specially — see "Objects with
   too many dependencies" below.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
-  `@xyflow/react` + `dagre` auto-layout, with two modes (tabs):
+  `@xyflow/react` + `dagre` auto-layout, with a permanently visible inspector
+  and a collapsible legend above the graph. Arrows show reference direction
+  from caller to target; there is no minimap. Two modes (tabs) are available:
   - **Browse** — the object filter bar and a DDL content search box (same
     as Explorer's) together drive which objects are shown. Clicking a node
     drills the graph into that object's own neighborhood in place
@@ -505,10 +517,42 @@ linked-server/DB-link boundary (in the "most referenced indirectly" analytics)
 still stops one hop past that boundary rather than fanning out across a remote
 server's own dependency graph. The site says as much on its overview page.
 
-There is no separate tree sidebar (Server → Database → Schema → Type →
-Object) — Explorer's filter bar plus sortable columns cover browsing, and
-every other page (Lineage, Overview, History) links directly to object
-detail pages.
+The **Catalog** sidebar is always visible on Explorer and Object explorer,
+and is absent from the other pages. Its expandable hierarchy is
+**Server → Database → Schema → Type → Object**, with bounded branch results
+and Show more. Objects without a schema keep Type directly under the database;
+server-scoped objects use `_ServerLevel → Type → Object`. No artificial schema
+branch is added. Expanding the tree does not change Explorer filters.
+
+### Export hierarchy and compatibility
+
+New SQL exports follow the same hierarchy:
+
+```text
+SQLPROD01/
+├── AppDb/
+│   ├── dbo/
+│   │   └── Tables/
+│   │       └── Orders.sql
+│   └── Replication/
+│       └── Orders_Pub.sql
+└── _ServerLevel/
+    └── LinkedServers/
+        └── REMOTE2.sql
+```
+
+New files carry `-- Path layout: schema/type`. The catalog builder also reads
+legacy `server/database/type/[schema/]object.sql` files. Existing object IDs,
+deep links and metrics history keys remain stable; `catalog.json`'s `path`
+records the actual file location. Git history resolves each revision using
+its historical path, including revisions before the layout change.
+
+Use the updated catalog builder with new exports, and update any external
+scripts that assume Type comes before Schema. A file-layout move can appear
+in Git history even when the database definition is unchanged. See
+[ADR 0002](docs/adr/0002-schema-first-export-paths.md) for the compatibility
+strategy and [the UX documentation](docs/ux-refactor/current-experience.md)
+for the current interaction contract.
 
 ### In-app help
 
@@ -526,6 +570,7 @@ site/src/help/overview.md    Overview
 site/src/help/explorer.md    Explorer
 site/src/help/ai.md          AI filter assistant
 site/src/help/lineage.md     Lineage explorer
+site/src/help/alerts.md      Alerts investigation
 site/src/help/history.md     History
 site/src/help/object.md      Object detail
 ```
@@ -552,17 +597,14 @@ and the `helpGuides` map in `site/src/help/index.ts`, and render
 
 ### Theme
 
-A light/dark toggle lives in the top right of every page (`lib/ThemeContext.tsx`),
-persisted to `localStorage`. Light is the default, styled around the
-SyncSQL brand red. Dark uses **"Midnight"** — a dark, purple-tinted palette
-in the style of a well-known VS Code dark theme (background/foreground/
-comment/accent colors all drawn from it, pink standing in for brand red as
-the accent). DDL/code blocks are the one deliberate exception — always
-rendered in the Midnight palette (`components/midnight-hljs.css`, a
-hand-mapped `highlight.js` theme) regardless of which site theme is active,
-so SQL stays legible with one consistent look. The Lineage graph
-(`@xyflow/react`) follows the site theme too, defaulting to light along
-with everything else.
+A light/dark toggle lives in the top right of every page
+(`lib/ThemeContext.tsx`) and persists to `localStorage`. Light is the default:
+warm ivory surfaces, charcoal text, restrained teal accents and soft borders.
+Dark uses warm charcoal surfaces with pale teal accents. Dense tables and
+balanced object details retain technical depth in both themes. SQL viewers
+keep a dark syntax-highlighting surface; the Lineage graph follows the
+selected site theme. Shared colors and spacing live in `site/src/tokens.css`.
+The SQLineage database-and-relationships icon is used in the header and favicon.
 
 ### Grant mapping
 
@@ -822,9 +864,9 @@ is missing":
 
 `syncsql catalog build` writes these to `catalog.json`'s
 `orphanedReferences` array (`from`/`server`/`database`/`schema`/`name`) and
-logs a summary count as a warning. The site surfaces them in two places: an
-Overview panel listing every orphaned reference across the catalog, and a
-warning banner on the referencing object's own detail page.
+logs a summary count as a warning. The site includes their total in the
+Overview Alerts card, lists searchable findings on Alerts, and retains
+reference evidence on the referencing object's own page.
 
 ### Linked servers as lineage hops
 
@@ -1046,7 +1088,7 @@ three work.)
 `sync` is purely local: with no path parameters it reads
 `./config/servers.json` and leaves extracted objects under
 `./syncsql-output` — starting at the server name, e.g.
-`./syncsql-output/SQLPROD01/AppDb/Tables/dbo/Orders.sql` — and metrics
+`./syncsql-output/SQLPROD01/AppDb/dbo/Tables/Orders.sql` — and metrics
 snapshots under `./syncsql-output/metrics-snapshot` (`--staging-root` /
 `--metrics-snapshot-root` / `--output-root` override that). The other
 commands default to the same layout, so the chain needs no arguments:

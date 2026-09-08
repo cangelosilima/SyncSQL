@@ -61,3 +61,9 @@ These accepted decisions supersede the earlier interaction choices where they co
 The earlier Gate 6 “none approved” statement describes the original proposal review. D-022 now authorizes the specific Alerts scope; it does not approve unrelated enrichment or a quantified metric-coverage feature.
 
 For each decision record: ID/date, problem and capability IDs, alternatives shown (Figma node links), owner's response, accepted interaction/URL differences, rejected options and rationale, data proposal IDs, validation requirements, and gate approval. Never overwrite history when a later decision supersedes one.
+
+## 2026-09-07 — Overview Alerts and schema-first hierarchy
+
+Product owner requested five Overview cards, with Alerts between Lineage edges and Last change, replacing the two detailed alert panels. Complete evidence stays on Alerts. Catalog navigation and SQL export paths use Server → Database → Schema → Type → Object; schema-less objects retain Type. Stable IDs preserve links, metrics and history. See [ADR 0002](../adr/0002-schema-first-export-paths.md).
+
+Validation: 255 site tests passed; CLI suite passed (243 tests), followed by 81 catalog tests including three added migration cases. TypeScript and production build passed. Browser verified five Overview cards and schema-, database- and server-level catalog branches.

@@ -106,7 +106,7 @@ export function xlsxFileName(...parts: (string | null | undefined)[]): string {
 export async function downloadXlsx(sheets: readonly SheetSpec[], filename: string): Promise<void> {
   const { Workbook } = await import('exceljs')
   const workbook = new Workbook()
-  workbook.creator = 'SyncSQL'
+  workbook.creator = 'SQLineage'
   workbook.created = new Date()
 
   const taken = new Set<string>()

@@ -6,7 +6,7 @@ import TypeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/TypeAc
 import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
-import { qualifiedRefName } from '../lib/catalog'
+
 
 export default function Home() {
   const { index } = useCatalog()
@@ -23,7 +23,7 @@ export default function Home() {
   const coChanges = getCoChangePairs(index, 10)
   const maxChangeCount = mostChanged[0]?.value ?? 0
   const orphanedReferences = catalog.orphanedReferences ?? []
-  const metricAnomalies = detectMetricAnomalies(catalog.nodes, 10)
+  const metricAnomalies = detectMetricAnomalies(catalog.nodes, Infinity)
   const lastChangedNode = recentlyChanged[0]?.node
   const typeCounts = Object.entries(catalog.typeCounts).sort(([, a], [, b]) => b - a)
   const typeOrder = typeCounts.map(([type]) => type)
@@ -62,73 +62,17 @@ export default function Home() {
           <div className="quick-stat-sub">resolved references</div>
         </div>
         <div className="quick-stat">
+          <div className="quick-stat-label"><Link to="/alerts">Alerts</Link></div>
+          <div className="quick-stat-value">{metricAnomalies.length + orphanedReferences.length}</div>
+          <div className="quick-stat-sub">{metricAnomalies.length} anomalies · {orphanedReferences.length} orphaned references</div>
+        </div>
+        <div className="quick-stat">
           <div className="quick-stat-label">Last change</div>
           <div className="quick-stat-value">{lastChangedNode ? formatRelative(lastChangedNode.lastChangedAt!) : '-'}</div>
           <div className="quick-stat-sub">{lastChangedNode ? lastChangedNode.qualifiedName : 'no history mined'}</div>
         </div>
       </div>
 
-      <div className="overview-attention">
-      <section className="attention-section">
-      <h2 className="section-label">
-        Metric anomalies{metricAnomalies.length > 0 ? ` - ${metricAnomalies.length} detected` : ''}
-      </h2>
-      {metricAnomalies.length === 0 ? (
-        <p className="muted">No anomalies in the latest metrics snapshots.</p>
-      ) : (
-        <div className="alert-cards">
-          {metricAnomalies.map((a, i) => (
-            <div key={`${a.node.id}|${a.kind}|${i}`} className="alert-card">
-              <span className="alert-card-icon">!</span>
-              <div className="alert-card-body">
-                <div className="alert-card-title">
-                  <Link to={`/object/${a.node.id}`}>{a.node.qualifiedName}</Link>
-                  <TypeBadge type={a.node.type} />
-                </div>
-                <div className="alert-card-detail">{a.message}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      </section>
-      <section className="attention-section">
-      <h2 className="section-label">
-        Orphaned references{orphanedReferences.length > 0 ? ` - ${orphanedReferences.length} detected` : ''}
-      </h2>
-      <p className="muted overview-panel-hint">
-        References that don&apos;t resolve to anything the lookup reaches - the object&apos;s own database, the rest
-        of its server, or a server one linked server away - usually a renamed or dropped target the caller was
-        never updated for. A reference into something nobody extracts isn&apos;t counted here.
-      </p>
-      {orphanedReferences.length === 0 ? (
-        <p className="muted">No orphaned references detected.</p>
-      ) : (
-        <div className="alert-cards">
-          {orphanedReferences.slice(0, 10).map((ref, i) => {
-            const fromNode = index.byId.get(ref.from)
-            const target = qualifiedRefName(ref)
-            return (
-              <div key={`${ref.from}|${ref.server ?? ''}|${ref.database ?? ''}|${ref.schema ?? ''}|${ref.name}|${i}`} className="alert-card">
-                <span className="alert-card-icon">!</span>
-                <div className="alert-card-body">
-                  <div className="alert-card-title">
-                    {fromNode ? <Link to={`/object/${fromNode.id}`}>{fromNode.qualifiedName}</Link> : ref.from}
-                  </div>
-                  <div className="alert-card-detail">references {target}</div>
-                </div>
-              </div>
-            )
-          })}
-          {orphanedReferences.length > 10 && (
-            <p className="muted overview-panel-hint">+{orphanedReferences.length - 10} more not shown.</p>
-          )}
-        </div>
-      )}
-
-      </section>
-      </div>
       <div className="overview-grid">
         <section className="overview-panel">
           <h2 className="panel-title-divided">Change activity &mdash; last {CHANGE_ACTIVITY_WEEKS} weeks</h2>

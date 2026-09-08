@@ -15,6 +15,7 @@ any of these numbers.
   the repository's whole history.
 - **Lineage edges** - references resolved by the engine parsers (T-SQL
   ScriptDom, ANTLR4 PL/SQL), not text matches.
+- **Alerts** - all detected metric anomalies plus orphaned references, with a category breakdown. Open Alerts to investigate the evidence.
 - **Last change** - the most recently changed object in the mined window.
 
 ## Metric anomalies
@@ -22,23 +23,21 @@ any of these numbers.
 Tables whose latest metrics snapshot swung sharply against the previous one:
 a row-count jump or drop, or an index fragmentation spike. Metrics are
 collected per run and stored as history outside the object's own `.sql`
-file, so a volume change never shows up as a spurious DDL diff. An empty
-panel means nothing crossed the threshold in the latest snapshot - not that
-metrics are missing.
+file, so a volume change never shows up as a spurious DDL diff. A zero anomaly count means no available comparison crossed the threshold; it does not prove metrics were collected for every object. Detailed findings are on Alerts.
 
 ## Orphaned references
 
 References that resolve to nothing the lookup can reach: the object's own
 database, the rest of its server, or a server one linked server away.
 These are usually a renamed or dropped target whose caller was never
-updated. The panel's value is in what it leaves out, so several things are
+updated. The count is scoped to available analysis, so several things are
 deliberately not counted: a reference into a database nobody extracts, a
 system object the engine provides (`sp_executesql`, `sys.*`), a temp table or
 CTE the script creates for itself, an ambiguous name, and anything recovered
 from SQL built as a string at runtime. That keeps it quiet on
 partially-extracted estates and on ordinary, correct code.
 
-Only the first 10 are listed; the count in the heading is the real total.
+Overview shows the full count. Alerts provides searchable findings and investigation links.
 
 ## The panels
 
