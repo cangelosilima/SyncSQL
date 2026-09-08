@@ -459,9 +459,28 @@ public sealed class CatalogBuilderTests : IDisposable
 
         CatalogNode node = Assert.Single(catalog.Nodes);
         Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders", node.Id);
-        Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders.sql", node.Path);
+        Assert.Equal("SQLPROD01/AppDb/dbo/Tables/Orders.sql", node.Path);
         Assert.DoesNotContain('\\', node.Id);
         Assert.DoesNotContain('\\', node.Path);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildAsync_LegacyAndSchemaFirstLayouts_HaveTheSameIdentity(bool schemaFirst)
+    {
+        // A schema named like an object type must not require guessing from directory names.
+        string relative = schemaFirst ? "SRV/DB/Views/Tables/Orders.sql" : "SRV/DB/Tables/Views/Orders.sql";
+        string path = Path.Combine(_objectsRoot, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        string marker = schemaFirst ? "-- Path layout: schema/type\n" : string.Empty;
+        await File.WriteAllTextAsync(path, marker + "-- Engine: mssql\n\nCREATE TABLE Views.Orders (Id INT);");
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        var node = Assert.Single(catalog.Nodes);
+        Assert.Equal("SRV/DB/Tables/Views/Orders", node.Id);
+        Assert.Equal("Views", node.Schema);
+        Assert.Equal("Tables", node.Type);
+        Assert.Equal(relative, node.Path);
     }
 
     [Fact]

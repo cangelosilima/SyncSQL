@@ -48,7 +48,7 @@
       "type": "Tables",
       "name": "Orders",
       "qualifiedName": "dbo.Orders",
-      "path": "SQLPROD01/AppDb/Tables/dbo/Orders.sql",
+      "path": "SQLPROD01/AppDb/dbo/Tables/Orders.sql",
       "ddl": "CREATE TABLE [dbo].[Orders] (\n    [Id] INT NOT NULL,\n    [UserId] INT NOT NULL,\n    [Total] DECIMAL(10,2) NULL\n);",
       "description": "Customer orders",
       "columns": [
@@ -508,7 +508,7 @@
       "type": "Tables",
       "name": "Users",
       "qualifiedName": "dbo.Users",
-      "path": "SQLPROD01/AppDb/Tables/dbo/Users.sql",
+      "path": "SQLPROD01/AppDb/dbo/Tables/Users.sql",
       "ddl": "CREATE TABLE [dbo].[Users] (\n    [Id] INT NOT NULL,\n    [Email] NVARCHAR(200) NULL,\n    [CreatedAt] DATETIME2 NULL\n);",
       "description": "Application user accounts",
       "columns": [
@@ -964,7 +964,7 @@
       "type": "StoredProcedures",
       "name": "usp_GetUserOrders",
       "qualifiedName": "dbo.usp_GetUserOrders",
-      "path": "SQLPROD01/AppDb/StoredProcedures/dbo/usp_GetUserOrders.sql",
+      "path": "SQLPROD01/AppDb/dbo/StoredProcedures/usp_GetUserOrders.sql",
       "ddl": "CREATE PROCEDURE dbo.usp_GetUserOrders @UserId INT AS\nBEGIN\n    SELECT o.Id, o.Total FROM dbo.Orders o JOIN dbo.Users u ON u.Id = o.UserId WHERE u.Id = @UserId;\n    SELECT * FROM OPENQUERY(REMOTE1, SELECT 1);\nEND",
       "description": null,
       "columns": [],
@@ -1006,7 +1006,7 @@
       "type": "Views",
       "name": "vw_ActiveUsers",
       "qualifiedName": "dbo.vw_ActiveUsers",
-      "path": "SQLPROD01/AppDb/Views/dbo/vw_ActiveUsers.sql",
+      "path": "SQLPROD01/AppDb/dbo/Views/vw_ActiveUsers.sql",
       "ddl": "CREATE VIEW dbo.vw_ActiveUsers AS\nSELECT Id, Email FROM Users;",
       "description": null,
       "columns": [
@@ -1071,7 +1071,7 @@
       "type": "Tables",
       "name": "CUSTOMERS",
       "qualifiedName": "APP.CUSTOMERS",
-      "path": "ORAPROD01/ORCLPDB1/Tables/APP/CUSTOMERS.sql",
+      "path": "ORAPROD01/ORCLPDB1/APP/Tables/CUSTOMERS.sql",
       "ddl": "CREATE TABLE APP.CUSTOMERS (ID NUMBER, NAME VARCHAR2(100));",
       "description": null,
       "columns": [
@@ -1502,7 +1502,7 @@
       "type": "Functions",
       "name": "fns_Opn_Sig_GetTransactionCode",
       "qualifiedName": "dbo.fns_Opn_Sig_GetTransactionCode",
-      "path": "SQLPROD01/AppDb/Functions/dbo/fns_Opn_Sig_GetTransactionCode.sql",
+      "path": "SQLPROD01/AppDb/dbo/Functions/fns_Opn_Sig_GetTransactionCode.sql",
       "ddl": "CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode(@Id_Boleta CHAR(13))\nRETURNS VARCHAR(50)\nAS\nBEGIN\n    DECLARE @Result TABLE (TransactionCode VARCHAR(50));\n    DECLARE @SQL NVARCHAR(MAX) =\n        'SELECT TransactionCode FROM OPENQUERY(REMOTE2, ''SELECT dbo.fns_Sig_Open_GetTransactionCode('''\n        + @Id_Boleta + ''') AS TransactionCode'')';\n\n    INSERT INTO @Result (TransactionCode)\n    EXEC sp_executesql @SQL;\n\n    RETURN (SELECT TOP 1 TransactionCode FROM @Result);\nEND",
       "description": "Looks a boleta's transaction code up in the SIG billing system.",
       "columns": [],

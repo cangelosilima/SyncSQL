@@ -20,6 +20,8 @@ public sealed record GitHistoryMiningRequest
 
     /// <summary>Object ids known to the current catalog build - only commits/files matching one of these are attributed to a node.</summary>
     public required IReadOnlySet<string> KnownObjectIds { get; init; }
+    /// <summary>Current relative SQL paths mapped to stable IDs; legacy ID-based paths remain readable.</summary>
+    public IReadOnlyDictionary<string, string> ObjectPaths { get; init; } = new Dictionary<string, string>();
 }
 
 public sealed record GitHistoryMiningResult

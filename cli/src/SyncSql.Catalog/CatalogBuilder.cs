@@ -100,6 +100,7 @@ public sealed class CatalogBuilder(
                 MaxHistoryContentCalls = request.MaxHistoryContentCalls,
                 MaxCoChangeCommitSize = request.MaxCoChangeCommitSize,
                 KnownObjectIds = nodesById.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                ObjectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase),
             }, cancellationToken);
 
             recentChanges = [.. history.RecentChanges];
@@ -148,8 +149,13 @@ public sealed class CatalogBuilder(
         string? schema = segments.Length == 5 ? segments[3] : null;
 
         string[] lines = await File.ReadAllLinesAsync(filePath, cancellationToken);
+        if (segments.Length == 5 && lines.TakeWhile(line => line.StartsWith("-- ", StringComparison.Ordinal)).Contains("-- Path layout: schema/type"))
+        {
+            schema = segments[2];
+            type = segments[3];
+        }
         ParsedObjectFile parsed = ExtractedObjectFile.Parse(lines);
-        string id = relative[..^".sql".Length];
+        string id = ExtractedObjectFile.ObjectId(server, database, schema, type, name);
         string qualifiedName = string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
 
         return new CatalogNode

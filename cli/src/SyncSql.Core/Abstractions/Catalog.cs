@@ -5,7 +5,7 @@ namespace SyncSql.Core.Abstractions;
 /// <summary>Inputs for building a catalog.json document - a direct port of Build-Catalog.ps1's parameters.</summary>
 public sealed record CatalogBuildRequest
 {
-    /// <summary>Root of the extracted tree (server/database/type/[schema/]object.sql).</summary>
+    /// <summary>Root of the extracted tree (server/database/[schema/]type/object.sql).</summary>
     public required string ObjectsRoot { get; init; }
 
     /// <summary>Git checkout containing -PathPrefix, mined for history/heatmap/point-in-time data. Omit to skip all of that (empty history, zero change counts) rather than failing.</summary>

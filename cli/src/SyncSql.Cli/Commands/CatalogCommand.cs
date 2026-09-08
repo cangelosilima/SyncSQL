@@ -16,7 +16,7 @@ internal static class CatalogCommand
         Option<string> outputRootOption = SyncSqlPaths.OutputRootOption();
         Option<string?> objectsRootOption = new("--objects-root")
         {
-            Description = "Root of the extracted tree (server/database/type/[schema/]object.sql). Default: <output-root>, i.e. what `syncsql sync` just wrote.",
+            Description = "Root of the extracted tree (server/database/[schema/]type/object.sql). Default: <output-root>, i.e. what `syncsql sync` just wrote.",
         };
         Option<string?> outputOption = new("--output")
         {

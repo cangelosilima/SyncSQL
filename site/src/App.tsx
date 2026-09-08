@@ -54,8 +54,8 @@ function Shell() {
       <a className="skip-link" href="#main-content" onClick={(event) => { event.preventDefault(); document.getElementById('main-content')?.focus() }}>Skip to content</a>
       <header className="topbar">
         <span className="brand">
-          <span className="brand-mark">SQL</span>
-          <span className="brand-name">SyncSQL</span>
+          <img className="brand-icon" src={`${import.meta.env.BASE_URL}sqlineage-icon.svg`} alt="" width="32" height="32" />
+          <span className="brand-name">SQLineage</span>
           <span className="brand-version">v{pkg.version}</span>
         </span>
         <nav aria-label="Primary">

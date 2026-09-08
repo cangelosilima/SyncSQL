@@ -17,6 +17,36 @@ public sealed class GitHistoryMinerTests : IDisposable
     }
 
     [Fact]
+    public async Task MineAsync_LayoutMove_PreservesIdentityAndReadsEachHistoricalPath()
+    {
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        const string id = "SQLPROD01/AppDb/Tables/dbo/Orders";
+        const string newPath = "SQLPROD01/AppDb/dbo/Tables/Orders.sql";
+        string log = $"@@COMMIT@@new@@COMMIT@@2026-02-01T00:00:00+00:00@@COMMIT@@Move layout\nobjects/{newPath}\nobjects/{id}.sql\n" +
+            $"@@COMMIT@@old@@COMMIT@@2026-01-01T00:00:00+00:00@@COMMIT@@Create table\nobjects/{id}.sql\n";
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains("log")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, log, string.Empty));
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains($"new:objects/{newPath}")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "CREATE TABLE dbo.Orders (Id INT, Total INT);", string.Empty));
+        _processRunner.RunAsync("git", Arg.Is<IReadOnlyList<string>>(a => a.Contains($"old:objects/{id}.sql")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "CREATE TABLE dbo.Orders (Id INT);", string.Empty));
+        var result = await _miner.MineAsync(new GitHistoryMiningRequest
+        {
+            RepoRoot = _repoRoot,
+            PathPrefix = "objects",
+            KnownObjectIds = new HashSet<string> { id },
+            ObjectPaths = new Dictionary<string, string> { [newPath] = id },
+        }, CancellationToken.None);
+        Assert.Equal(2, result.RecentChanges.Count);
+        Assert.All(result.RecentChanges, commit => Assert.Equal(id, Assert.Single(commit.ObjectIds)));
+        var history = result.ObjectHistory[id];
+        Assert.Equal(2, history.ChangeCount);
+        Assert.Contains("Total", history.Versions[0].Ddl);
+        Assert.Equal("CREATE TABLE dbo.Orders (Id INT);", history.Versions[1].Ddl);
+        Assert.Empty(result.CoChangePairs);
+    }
+
+    [Fact]
     public async Task MineAsync_NoGitDirectory_ReturnsEmptyWithoutCallingProcessRunner()
     {
         GitHistoryMiningResult result = await _miner.MineAsync(new GitHistoryMiningRequest

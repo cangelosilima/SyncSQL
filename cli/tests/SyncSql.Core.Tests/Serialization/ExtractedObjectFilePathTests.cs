@@ -54,7 +54,7 @@ public class ExtractedObjectFilePathTests
     {
         string path = ExtractedObjectFile.RelativePath("SQLPROD01", "AppDb", "dbo", "Tables", "Orders");
 
-        Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders.sql", path);
+        Assert.Equal("SQLPROD01/AppDb/dbo/Tables/Orders.sql", path);
         Assert.DoesNotContain('\\', path);
     }
 
@@ -65,17 +65,18 @@ public class ExtractedObjectFilePathTests
         // the result keeps exactly one segment per component, on both platforms.
         string path = ExtractedObjectFile.RelativePath("SQLPROD01", "../../etc", "dbo", "Tables", "..\\Orders");
 
-        Assert.Equal("SQLPROD01/.._.._etc/Tables/dbo/.._Orders.sql", path);
+        Assert.Equal("SQLPROD01/.._.._etc/dbo/Tables/.._Orders.sql", path);
         Assert.Equal(4, path.Count(c => c == '/'));
     }
 
     [Fact]
-    public void ObjectId_IsRelativePathWithoutTheExtension_OnEveryPlatform()
+    public void ObjectId_RemainsStableWhenExportLayoutChanges()
     {
         string path = ExtractedObjectFile.RelativePath("SQLPROD01", "AppDb", "dbo", "Tables", "Orders");
         string id = ExtractedObjectFile.ObjectId("SQLPROD01", "AppDb", "dbo", "Tables", "Orders");
 
-        Assert.Equal(path[..^".sql".Length], id);
+        Assert.Equal("SQLPROD01/AppDb/Tables/dbo/Orders", id);
+        Assert.NotEqual(path[..^".sql".Length], id);
         Assert.DoesNotContain('\\', id);
     }
 

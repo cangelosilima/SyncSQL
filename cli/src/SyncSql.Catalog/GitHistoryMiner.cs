@@ -51,15 +51,28 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
             Dictionary<string, DateTimeOffset> lastChangedAt = [];
             Dictionary<string, List<CatalogObjectVersion>> objectHistory = [];
             Dictionary<string, int> coChangeCounts = [];
+            Dictionary<(string Sha, string Id), string> historicalPaths = [];
 
             string prefixWithSlash = PrefixWithSlash(request.PathPrefix);
 
             foreach (Commit commit in commits)
             {
-                List<string> objectIds = [.. commit.Files
-                    .Where(f => f.StartsWith(prefixWithSlash, StringComparison.Ordinal) && f.EndsWith(".sql", StringComparison.Ordinal))
-                    .Select(f => f[prefixWithSlash.Length..^".sql".Length])
-                    .Where(request.KnownObjectIds.Contains)];
+                Dictionary<string, string> pathsById = new(StringComparer.OrdinalIgnoreCase);
+                foreach (string file in commit.Files.Where(f => f.StartsWith(prefixWithSlash, StringComparison.Ordinal) && f.EndsWith(".sql", StringComparison.Ordinal)))
+                {
+                    string relativePath = file[prefixWithSlash.Length..];
+                    bool currentPath = request.ObjectPaths.TryGetValue(relativePath, out string? mappedId);
+                    string id = mappedId ?? relativePath[..^".sql".Length];
+                    if (request.KnownObjectIds.Contains(id) && (currentPath || !pathsById.ContainsKey(id)))
+                    {
+                        pathsById[id] = file;
+                    }
+                }
+                List<string> objectIds = [.. pathsById.Keys];
+                foreach ((string id, string path) in pathsById)
+                {
+                    historicalPaths[(commit.Sha, id)] = path;
+                }
 
                 if (objectIds.Count == 0)
                 {
@@ -98,7 +111,7 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
                 }
             }
 
-            int showCalls = await FetchHistoricalDdlAsync(request, objectHistory, cancellationToken);
+            int showCalls = await FetchHistoricalDdlAsync(request, objectHistory, historicalPaths, cancellationToken);
 
             Dictionary<string, ObjectHistoryInfo> historyByObject = objectHistory.ToDictionary(
                 kv => kv.Key,
@@ -199,7 +212,7 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
         return commits;
     }
 
-    private async Task<int> FetchHistoricalDdlAsync(GitHistoryMiningRequest request, Dictionary<string, List<CatalogObjectVersion>> objectHistory, CancellationToken cancellationToken)
+    private async Task<int> FetchHistoricalDdlAsync(GitHistoryMiningRequest request, Dictionary<string, List<CatalogObjectVersion>> objectHistory, Dictionary<(string Sha, string Id), string> historicalPaths, CancellationToken cancellationToken)
     {
         logger.LogInformation("Fetching historical DDL content (up to {MaxCalls} `git show` call(s))", request.MaxHistoryContentCalls);
         int showCalls = 0;
@@ -211,7 +224,6 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
                 break;
             }
 
-            string path = $"{PrefixWithSlash(request.PathPrefix)}{id}.sql";
             for (int i = 0; i < versions.Count; i++)
             {
                 if (showCalls >= request.MaxHistoryContentCalls)
@@ -220,6 +232,7 @@ public sealed class GitHistoryMiner(IProcessRunner processRunner, ILogger<GitHis
                 }
 
                 showCalls++;
+                string path = historicalPaths[(versions[i].Sha, id)];
                 ProcessResult result = await processRunner.RunAsync("git", ["-C", request.RepoRoot, "show", $"{versions[i].Sha}:{path}"], cancellationToken: cancellationToken);
                 if (result.Succeeded && !string.IsNullOrEmpty(result.StandardOutput))
                 {

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>SQLineage</title>
+  <rect width="64" height="64" rx="15" fill="#28665c"/>
+  <path d="M29 32h7V19h10M36 32v13h10" stroke="#b2e0cc" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m42 15 4 4-4 4m0 18 4 4-4 4" stroke="#b2e0cc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="47" y="14" width="9" height="10" rx="2.5" fill="#fffdf8"/>
+  <rect x="47" y="40" width="9" height="10" rx="2.5" fill="#fffdf8"/>
+  <path d="M9 24v16c0 3.3 4.5 6 10 6s10-2.7 10-6V24" fill="#28665c" stroke="#fffdf8" stroke-width="3"/>
+  <ellipse cx="19" cy="24" rx="10" ry="6" fill="#28665c" stroke="#fffdf8" stroke-width="3"/>
+  <path d="M9 32c0 3.3 4.5 6 10 6s10-2.7 10-6" stroke="#fffdf8" stroke-width="3"/>
+</svg>
