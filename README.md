@@ -4,7 +4,7 @@ SQLineage is the database catalog and investigation app, formerly branded SyncSQ
 
 [![CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml)
 
-SyncSQL extracts database objects — stored procedures, views, functions,
+SQLineage extracts database objects — stored procedures, views, functions,
 triggers, tables (with foreign keys, check constraints and indexes), schemas,
 synonyms, and linked servers / database links — from a fleet of **MSSQL** and
 **Oracle** servers into a git repository: one file per object, one commit per
@@ -19,26 +19,30 @@ noisy.
 
 ## Screenshots
 
-These screenshots document an earlier interface and do not yet show the warm
-SQLineage theme or the current workspace layout. The descriptions below and
-[the current UX specification](docs/ux-refactor/current-experience.md) describe
-the implemented experience.
+Captured at 1440×900 against a small demo catalog, in the default light theme
+unless noted.
 
-**Overview** — five summary cards (total objects, commits mined, lineage edges,
-Alerts, last change), a per-type change-activity heatmap, latest changes,
-most-referenced tables, most-changed objects and commonly changed pairs.
-The top bar reports the catalog snapshot, not live database connectivity.
+**Overview** — five summary cards (total objects, commits mined, lineage
+edges, **Alerts**, last change), a per-type change-activity heatmap, latest
+changes, most-referenced tables, most-changed objects and commonly changed
+pairs. The top bar reports the catalog snapshot, not live database
+connectivity.
 
 ![Overview page](docs/screenshots/overview.png)
 
-**Alerts** — a dedicated investigation page consolidating metric anomalies
-and orphaned references. Overview shows the complete total and category
-breakdown in its Alerts card; the former two preview panels are removed.
-Category and text filters narrow findings, with links to the affected object
-and its lineage. Metric anomalies are labeled as heuristics.
+**Alerts** — one investigation page for every metric anomaly and orphaned
+reference the snapshot holds. Category and text filters (both kept in the URL)
+narrow the findings, each row carries the evidence behind it, and **Inspect
+object** / **Explore lineage** open the affected object or its graph. Metric
+anomalies are labeled **Heuristic**, orphaned references **Catalog finding** —
+these are snapshot findings, not live notifications.
+
+![Alerts page](docs/screenshots/alerts.png)
 
 **Explorer** — a sortable, filterable table of every extracted object, with a
-GitLab-style filter bar (attribute, operator, value).
+GitLab-style filter bar (attribute, operator, value) and a permanent
+**Catalog** sidebar whose hierarchy is Server → Database → Schema → Type →
+Object.
 
 ![Explorer page](docs/screenshots/explorer.png)
 
@@ -49,19 +53,38 @@ procs reference this column".
 ![Explorer DDL content search](docs/screenshots/explorer-search.png)
 
 **Lineage graph** — an interactive dependency graph with drill-down, built
-from a real SQL parser per engine, not text matching. Edges carrying a known
-column reference are highlighted and labeled. The current filter/focus/hop
-state stays live in the URL (**Copy link** for a shareable view), and
-**Export SVG**/**Export PNG** render the visible graph to a standalone image.
+from a real SQL parser per engine, not text matching. A collapsible legend
+explains direction, reference styles and node types; the inspector stays
+beside the graph. Edges carrying a known column reference are highlighted and
+labeled. The current filter/focus/hop state stays live in the URL (**Copy
+link** for a shareable view), and **Export SVG**/**Export PNG** render the
+visible graph to a standalone image.
 
 ![Lineage graph](docs/screenshots/lineage.png)
 
-**Object detail** — a breadcrumb trail, a quick-facts bar (modified date,
-deps, used-by, columns) with a jump to the lineage graph, full column list,
-DDL, foreign keys / check constraints / indexes, and a metrics panel of
-volume/index/optimizer-statistics trends.
+**Access** — the same page flipped around: search a grantee (user, role or
+group) to see every object they hold a GRANT or DENY on, listed in a table and
+drawn in the same graph.
 
-![Object detail page](docs/screenshots/object-detail.png)
+![Lineage access search](docs/screenshots/lineage-access.png)
+
+**Object explorer** — a breadcrumb trail, a quick-facts bar (modified date,
+deps, used-by, columns) with a jump to the lineage graph, and the **SQL
+definition always visible above** the workspace tabs: Columns, Graph, Access,
+Relationships, Metrics, History and Diff.
+
+![Object explorer](docs/screenshots/object-detail.png)
+
+**Relationships workspace** — "depends on" and "used by" with the column tags
+recorded on each edge, and **All relationship evidence** opening the graph.
+
+![Object relationships workspace](docs/screenshots/object-relationships.png)
+
+**Metrics workspace** — volume, size, index fragmentation/usage and
+optimizer-statistics trends for a table, mined at extraction time and kept out
+of the object's own version history.
+
+![Object metrics workspace](docs/screenshots/object-metrics.png)
 
 **Orphaned reference warning** — flagged directly on the referencing
 object's own page, alongside the catalog-wide investigation in Alerts.
@@ -72,6 +95,13 @@ object's own page, alongside the catalog-wide investigation in Alerts.
 picks any two revisions (including the current definition) for a diff.
 
 ![Object detail side-by-side diff](docs/screenshots/object-diff.png)
+
+**AI filter assistant** — an English request becomes a preview of validated
+Explorer filters and one DDL content query, planned in the browser by a local
+model. It is only ever a preview of filters — no SQL is generated or run — and
+**Open in Explorer** hands the plan to the Explorer filter bar.
+
+![AI filter assistant](docs/screenshots/ai.png)
 
 **In-app help** — every page's heading carries a **?** that opens that page's
 own Markdown guide over the current view: what the page is for, what each
@@ -384,7 +414,8 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   metric anomalies and orphaned references, shows both counts, and links to
   the investigation page. The remaining panels show per-type change activity,
   latest changes, most-referenced tables, most-changed objects and commonly
-  changed pairs. Detailed anomaly/orphan panels now live in Alerts.
+  changed pairs. The evidence behind each anomaly and orphan lives in Alerts,
+  not on this page.
 - **Alerts** (`/#/alerts`) — complete findings with category and text filters
   preserved in the URL (`category` and `q`), incremental results, object and
   lineage links, and in-app help. Metric anomalies are **Heuristic** and
@@ -626,6 +657,8 @@ balanced object details retain technical depth in both themes. SQL viewers
 keep a dark syntax-highlighting surface; the Lineage graph follows the
 selected site theme. Shared colors and spacing live in `site/src/tokens.css`.
 The SQLineage database-and-relationships icon is used in the header and favicon.
+
+![Lineage graph in the dark theme](docs/screenshots/dark-mode-lineage.png)
 
 ### Grant mapping
 
