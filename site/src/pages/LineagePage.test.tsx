@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LineagePage from './LineagePage'
 import { buildIndex } from '../lib/catalog'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
@@ -16,10 +16,11 @@ const readProc = makeNode({ id: 'read', name: 'ReadBoleta', qualifiedName: 'dbo.
 const writeProc = makeNode({ id: 'write', name: 'WriteBoleta', qualifiedName: 'dbo.WriteBoleta', type: 'StoredProcedures' })
 const summaryView = makeNode({ id: 'view', name: 'BoletaSummary', qualifiedName: 'dbo.BoletaSummary', type: 'Views' })
 
-const catalog = makeCatalog({
+const baseCatalog = makeCatalog({
   nodes: [boleta, readProc, writeProc, summaryView],
   edges: [makeEdge('read', 'boleta'), makeEdge('write', 'boleta'), makeEdge('view', 'boleta')],
 })
+let catalog = baseCatalog
 
 vi.mock('../lib/CatalogContext', () => ({
   useCatalog: () => ({ loading: false, error: null, index: buildIndex(catalog) }),
@@ -29,10 +30,12 @@ vi.mock('../lib/CatalogContext', () => ({
 // not provide. The assertions here are about which node ids the page selects,
 // so the graph is stubbed down to a list of the names it was handed.
 vi.mock('../components/LineageGraph', () => ({
-  default: ({ nodeIds }: { nodeIds: string[] }) => (
-    <div data-testid="graph">{nodeIds.join(',')}</div>
+  default: ({ nodeIds, groupIntermediate }: { nodeIds: string[]; groupIntermediate?: boolean }) => (
+    <div data-testid="graph" data-grouped={String(groupIntermediate)}>{nodeIds.join(',')}</div>
   ),
 }))
+
+function Location() { return <span data-testid="location">{useLocation().search}</span> }
 
 function renderAt(entry: string) {
   return render(
@@ -40,6 +43,7 @@ function renderAt(entry: string) {
       <Routes>
         <Route path="/lineage" element={<LineagePage />} />
       </Routes>
+      <Location />
     </MemoryRouter>,
   )
 }
@@ -66,6 +70,7 @@ async function addTypeFilter(user: ReturnType<typeof userEvent.setup>, container
 }
 
 describe('LineagePage', () => {
+  beforeEach(() => { catalog = baseCatalog })
   it('shows the focused object and its neighbours when arriving with ?focus=', () => {
     renderAt('/lineage?focus=boleta')
 
@@ -123,5 +128,46 @@ describe('LineagePage', () => {
     renderAt('/lineage')
 
     expect(graphIds().sort()).toEqual(['boleta', 'read', 'view', 'write'])
+  })
+  it('adds hops on one side, persists grouping and restores the shared view', async () => {
+    const user = userEvent.setup()
+    catalog = makeCatalog({ ...baseCatalog,
+      nodes: [...baseCatalog.nodes, makeNode({ id: 'caller' }), makeNode({ id: 'data' })],
+      edges: [...baseCatalog.edges, makeEdge('caller', 'read'), makeEdge('boleta', 'data')],
+    })
+    const view = renderAt('/lineage?focus=boleta')
+    await user.click(screen.getByRole('button', { name: 'Add dependents hop' }))
+    expect(graphIds()).toContain('caller')
+    expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('1')
+    expect(screen.getByRole('combobox', { name: 'Dependents hops' })).toHaveValue('2')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Dependencies hops' }), '0')
+    expect(graphIds()).not.toContain('data')
+    await user.click(screen.getByRole('checkbox', { name: 'Group intermediate layers' }))
+    const url = screen.getByTestId('location').textContent!
+    expect(url).toContain('dependencies=0')
+    expect(url).toContain('dependents=2')
+    expect(url).toContain('group=intermediate')
+    const ids = graphIds()
+    view.unmount()
+    renderAt(`/lineage${url}`)
+    expect(graphIds()).toEqual(ids)
+    expect(screen.getByTestId('graph')).toHaveAttribute('data-grouped', 'true')
+  })
+  it('keeps a filtered intermediate node when a later hop matches', async () => {
+    const user = userEvent.setup()
+    catalog = makeCatalog({ ...baseCatalog,
+      nodes: [...baseCatalog.nodes, makeNode({ id: 'report', type: 'StoredProcedures' })],
+      edges: [...baseCatalog.edges, makeEdge('report', 'view')],
+    })
+    const { container } = renderAt('/lineage?focus=boleta&hops=2')
+    await addTypeFilter(user, container, 'StoredProcedures')
+    expect(graphIds()).toContain('report')
+    expect(graphIds()).toContain('view')
+    expect(screen.getByText(/1 connecting object kept outside the filters/)).toBeInTheDocument()
+  })
+  it('validates hop limits and keeps old radius links working', () => {
+    renderAt('/lineage?focus=boleta&hops=3&dependencies=-1&dependents=100')
+    expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('3')
+    expect(screen.getByRole('combobox', { name: 'Dependents hops' })).toHaveValue('3')
   })
 })

@@ -10,7 +10,7 @@ import HelpButton from '../components/HelpButton'
 import InspectorPanel from '../components/InspectorPanel'
 import RelatedObjects from '../components/RelatedObjects'
 import { colorForType } from '../lib/typeColors'
-import { getNeighborhoodIds } from '../lib/neighborhood'
+import { getDirectionalNeighborhood, retainConnectingPaths } from '../lib/neighborhood'
 import { findObjectsForGrantee, getSuggestedGrantees } from '../lib/grants'
 import { filterByContent } from '../lib/contentSearch'
 import { useDebouncedValue } from '../lib/useDebouncedValue'
@@ -21,7 +21,11 @@ import { decodeTokensFromUrl, encodeTokensForUrl, newTokenId, type FilterToken }
 import type { CatalogNode } from '../types'
 
 const GRAPH_CAP = 300
-const HOP_OPTIONS = [1, 2, 3] as const
+const HOP_OPTIONS = [0, 1, 2, 3, 4, 5, 6] as const
+function parseHops(value: string | null, fallback = 1): number {
+  const number = value === null ? fallback : Number(value)
+  return Number.isInteger(number) && number >= 0 && number <= 6 ? number : fallback
+}
 type Mode = 'browse' | 'access'
 
 export default function LineagePage() {
@@ -30,7 +34,7 @@ export default function LineagePage() {
   const initialFocus = searchParams.get('focus') ?? undefined
   const initialGrantee = searchParams.get('grantee') ?? ''
   const initialFilterParam = searchParams.get('filter')
-  const initialHops = Number(searchParams.get('hops') ?? '1')
+  const initialHops = parseHops(searchParams.get('hops'))
   const [mode, setMode] = useState<Mode>(searchParams.get('tab') === 'access' || initialGrantee ? 'access' : 'browse')
   const [copied, setCopied] = useState(false)
   const [edgeEvidence, setEdgeEvidence] = useState<EdgeColumnData | null>(null)
@@ -49,9 +53,9 @@ export default function LineagePage() {
   // the whole unfiltered catalog.
   const [tokens, setTokens] = useState<FilterToken[]>(() => decodeTokensFromUrl(initialFilterParam))
   const [focusStack, setFocusStack] = useState<string[]>(initialFocus ? [initialFocus] : [])
-  const [hops, setHops] = useState<(typeof HOP_OPTIONS)[number]>(
-    (HOP_OPTIONS as readonly number[]).includes(initialHops) ? (initialHops as (typeof HOP_OPTIONS)[number]) : 1,
-  )
+  const [dependencyHops, setDependencyHops] = useState(() => parseHops(searchParams.get('dependencies'), initialHops))
+  const [dependentHops, setDependentHops] = useState(() => parseHops(searchParams.get('dependents'), initialHops))
+  const [groupIntermediate, setGroupIntermediate] = useState(searchParams.get('group') === 'intermediate')
   const [contentQuery, setContentQuery] = useState(searchParams.get('q') ?? '')
   const debouncedContentQuery = useDebouncedValue(contentQuery, 150)
 
@@ -72,8 +76,8 @@ export default function LineagePage() {
 
   const neighborhoodIds = useMemo(() => {
     if (!index || !currentFocus) return []
-    return getNeighborhoodIds(index, currentFocus, hops)
-  }, [index, currentFocus, hops])
+    return getDirectionalNeighborhood(index, currentFocus, dependencyHops, dependentHops)
+  }, [index, currentFocus, dependencyHops, dependentHops])
 
   const grantSuggestions = useMemo(
     () => (granteeQuery.trim() ? getSuggestedGrantees(allNodes, granteeQuery, 20) : []),
@@ -102,9 +106,14 @@ export default function LineagePage() {
     if (!currentFocus) return baseIds
     if (mode !== 'browse') return neighborhoodIds
     const allowed = new Set(filtered.map((n) => n.id))
-    return neighborhoodIds.filter((id) => id === currentFocus || allowed.has(id))
+    return index ? retainConnectingPaths(index, currentFocus, neighborhoodIds, allowed) : []
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFocus, mode, neighborhoodIds, filtered, baseIds.join(',')])
+  }, [index, currentFocus, mode, neighborhoodIds, filtered, baseIds.join(',')])
+
+  const connectorIds = useMemo(() => {
+    const matchingIds = new Set(filtered.map(node => node.id))
+    return currentFocus && mode === 'browse' ? nodeIds.filter(id => id !== currentFocus && !matchingIds.has(id)) : []
+  }, [currentFocus, mode, nodeIds, filtered])
 
   /** How much of the focused object's neighborhood the current filters are hiding. */
   const narrowedFrom = currentFocus ? neighborhoodIds.length : 0
@@ -119,11 +128,17 @@ export default function LineagePage() {
     const params: Record<string, string> = {}
     if (tokens.length > 0) params.filter = encodeTokensForUrl(tokens)
     if (currentFocus) params.focus = currentFocus
-    if (hops !== 1) params.hops = String(hops)
+    if (dependencyHops === dependentHops) {
+      if (dependencyHops !== 1) params.hops = String(dependencyHops)
+    } else {
+      params.dependencies = String(dependencyHops)
+      params.dependents = String(dependentHops)
+    }
+    if (groupIntermediate) params.group = 'intermediate'
     if (debouncedContentQuery.trim()) params.q = debouncedContentQuery
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, tokens, currentFocus, hops, debouncedContentQuery])
+  }, [mode, tokens, currentFocus, dependencyHops, dependentHops, groupIntermediate, debouncedContentQuery])
 
   function copyShareableLink() {
     navigator.clipboard
@@ -372,18 +387,31 @@ export default function LineagePage() {
           <button type="button" className="lineage-nav-clear" onClick={clearFocus}>
             Clear focus
           </button>
-          <label className="lineage-hops">
-            Radius
-            <select value={hops} onChange={(e) => setHops(Number(e.target.value) as (typeof HOP_OPTIONS)[number])}>
-              {HOP_OPTIONS.map((h) => (
-                <option key={h} value={h}>
-                  {h} hop{h === 1 ? '' : 's'}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
       ) : null}
+
+      {currentFocus && <details className="lineage-view-options" open>
+        <summary>View options</summary>
+        <div className="lineage-view-controls">
+          {([
+            ['Dependencies', dependencyHops, setDependencyHops],
+            ['Dependents', dependentHops, setDependentHops],
+          ] as const).map(([label, value, setValue]) => <div className="lineage-hop-control" key={label}>
+            <label className="lineage-hops">
+              {label}
+              <select aria-label={`${label} hops`} value={value} onChange={event => setValue(Number(event.target.value))}>
+                {HOP_OPTIONS.map(hop => <option key={hop} value={hop}>{hop} hop{hop === 1 ? '' : 's'}</option>)}
+              </select>
+            </label>
+            <button type="button" className="lineage-nav-back" disabled={value >= 6} onClick={() => setValue(value + 1)} aria-label={`Add ${label.toLowerCase()} hop`}>+ Add hop</button>
+          </div>)}
+          <label className="lineage-group-toggle">
+            <input type="checkbox" checked={groupIntermediate} onChange={event => setGroupIntermediate(event.target.checked)} />
+            Group intermediate layers
+          </label>
+        </div>
+        <p className="muted">Dependencies are objects the focus references; dependents are objects that reference it. Set either direction to 0 to hide it. Grouping combines intermediate objects of the same type and hop, keeping the focus and outer objects visible.</p>
+      </details>}
 
       {currentFocus ? (
         <p className="muted" style={{ margin: '0.5rem 0' }}>
@@ -399,6 +427,8 @@ export default function LineagePage() {
           {nodeIds.length > 0 && 'Click any node to drill into its own dependencies/dependents; double-click to open its full detail page.'}
         </p>
       )}
+
+      {connectorIds.length > 0 && <p className="muted lineage-connector-hint">{connectorIds.length} connecting object{connectorIds.length === 1 ? '' : 's'} kept outside the filters to preserve paths to matching objects.</p>}
 
       <div className="investigation-layout">
       <div className="workspace-content graph-workspace">
@@ -434,7 +464,7 @@ export default function LineagePage() {
             ))}
           </ul>
         </details>
-        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} onEdgeInspect={setEdgeEvidence} />
+        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} onEdgeInspect={setEdgeEvidence} groupIntermediate={groupIntermediate} connectorIds={connectorIds} />
         </>
       )}
       </div>

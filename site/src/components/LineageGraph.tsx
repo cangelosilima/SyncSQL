@@ -7,7 +7,7 @@ import { useTheme } from '../lib/ThemeContext'
 import { layoutGraph } from '../lib/layout'
 import { colorForType } from '../lib/typeColors'
 import { buildLineageGraphSvg, downloadPng, downloadSvg } from '../lib/graphExport'
-import { bundleNeighborhood, isBundleId, type NeighborBundle } from '../lib/neighborhood'
+import { bundleNeighborhood, groupIntermediateLayers, isBundleId, type NeighborBundle } from '../lib/neighborhood'
 
 export interface EdgeColumnData extends Record<string, unknown> {
   from: string
@@ -34,6 +34,8 @@ interface LineageGraphProps {
    * there's no focusId - there's nothing to bundle around.
    */
   maxNodes?: number
+  groupIntermediate?: boolean
+  connectorIds?: string[]
 }
 
 const EDGE_LABEL_CAP = 3
@@ -43,8 +45,9 @@ const DEFAULT_MAX_NODES = 60
 
 /** A single type group larger than this collapses once the graph is over its node budget. */
 const MAX_PER_GROUP = 8
+const NO_CONNECTORS: string[] = []
 
-export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate, onEdgeInspect, maxNodes = DEFAULT_MAX_NODES }: LineageGraphProps) {
+export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate, onEdgeInspect, maxNodes = DEFAULT_MAX_NODES, groupIntermediate = false, connectorIds = NO_CONNECTORS }: LineageGraphProps) {
   const { index } = useCatalog()
   const { theme } = useTheme()
   const navigate = useNavigate()
@@ -53,14 +56,16 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
 
   const bundling = useMemo(() => {
     if (!index || !focusId) return { nodeIds, bundles: [] as NeighborBundle[], bundledCount: 0 }
+    if (groupIntermediate) return groupIntermediateLayers(index, focusId, nodeIds)
     return bundleNeighborhood(index, focusId, nodeIds, { maxNodes, maxPerGroup: MAX_PER_GROUP })
-  }, [index, focusId, nodeIds, maxNodes])
+  }, [index, focusId, nodeIds, maxNodes, groupIntermediate])
 
   const { nodes, edges } = useMemo(() => {
     if (!index) return { nodes: [] as Node[], edges: [] as Edge<EdgeColumnData>[] }
 
     const shownIds = bundling.nodeIds
-    const idSet = new Set(shownIds)
+    const idSet = new Set(nodeIds)
+    const representative = new Map(bundling.bundles.flatMap(bundle => bundle.memberIds.map(id => [id, bundle.id] as const)))
     const flowNodes: Node[] = shownIds
       .map((id) => index.byId.get(id))
       .filter((n): n is NonNullable<typeof n> => Boolean(n))
@@ -69,8 +74,9 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         const color = colorForType(node.type)
         return {
           id: node.id,
+          className: isFocus ? 'lineage-node--focus' : undefined,
           ariaLabel: `${node.qualifiedName}, ${node.type}${isFocus ? ', current focus' : ''}`,
-          data: { label: node.qualifiedName },
+          data: { label: `${node.qualifiedName}${connectorIds.includes(node.id) ? ' (connecting object)' : ''}` },
           position: { x: 0, y: 0 },
           style: {
             background: isFocus ? 'var(--selected)' : 'var(--surface)',
@@ -89,6 +95,29 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
       if (!idSet.has(from)) continue
       for (const to of targets) {
         if (!idSet.has(to)) continue
+        const source = representative.get(from) ?? from
+        const target = representative.get(to) ?? to
+        if (source === target && from !== to) continue
+        if (source !== from || target !== to) {
+          const id = `group:${source}->${target}`
+          const existing = flowEdges.find(edge => edge.id === id)
+          const count = Number(existing?.data?.referenceCount ?? 0) + 1
+          if (existing) {
+            existing.data!.referenceCount = count
+            existing.label = `${count} references`
+          } else {
+            flowEdges.push({
+              id, source, target,
+              markerEnd: { type: 'arrowclosed', width: 20, height: 20, color: 'var(--text-muted)' },
+              label: '1 reference',
+              labelStyle: { fill: 'var(--text-muted)', fontSize: 10 },
+              labelBgStyle: { fill: 'var(--surface)' },
+              style: { stroke: 'var(--text-muted)', strokeWidth: 1.5 },
+              data: { from: source, to: target, columns: [], referenceCount: count },
+            })
+          }
+          continue
+        }
         const columns = index.edgeColumns.get(`${from}|${to}`) ?? []
         const hasColumns = columns.length > 0
         // An edge only dynamically-built SQL produced is drawn dashed: the same
@@ -121,14 +150,14 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
       }
     }
 
-    // Each collapsed group is one dashed node carrying its count, wired to the
-    // focus in the direction its members sit - the shape of the fan-out stays
-    // readable even when the names in it don't fit on a screen.
+    // Edges above are projected through each bundle, preserving outer-hop
+    // connections, cross-links and cycles instead of inventing a focus-only star.
     for (const bundle of bundling.bundles) {
       const color = colorForType(bundle.type)
       flowNodes.push({
         id: bundle.id,
-        data: { label: `${bundle.memberIds.length} ${bundle.type}` },
+        ariaLabel: `${bundle.memberIds.length} grouped ${bundle.type}${bundle.hop ? `, hop ${bundle.hop}` : ''}`,
+        data: { label: `${bundle.memberIds.length} ${bundle.type}${bundle.hop ? ` · ${bundle.direction === 'outgoing' ? 'Dependencies' : 'Dependents'} · hop ${bundle.hop}` : ''}` },
         position: { x: 0, y: 0 },
         style: {
           background: 'var(--surface-alt)',
@@ -141,19 +170,10 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
           cursor: 'pointer',
         },
       })
-      flowEdges.push({
-        id: `bundle:${bundle.id}`,
-        source: bundle.direction === 'outgoing' ? focusId! : bundle.id,
-        target: bundle.direction === 'outgoing' ? bundle.id : focusId!,
-        markerEnd: { type: 'arrowclosed', width: 20, height: 20, color: 'var(--border)' },
-        animated: false,
-        style: { stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 3' },
-        data: { from: focusId!, to: bundle.id, columns: [] },
-      })
     }
 
     return { nodes: layoutGraph(flowNodes, flowEdges), edges: flowEdges }
-  }, [index, bundling, focusId])
+  }, [index, bundling, focusId, nodeIds, connectorIds])
 
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId)
   const selectedData = selectedEdge?.data
@@ -182,7 +202,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
         <p className="muted lineage-bundle-hint">
           {bundling.bundledCount} neighbours are grouped into {bundling.bundles.length} dashed{' '}
           {bundling.bundles.length === 1 ? 'node' : 'nodes'} to keep this readable - click one to list what&apos;s inside
-          it.
+          it. Edges show recorded references between group members and connected objects.
         </p>
       )}
       <div className="lineage-graph" style={{ height }}>
@@ -209,19 +229,21 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
           <Background />
           <Controls showInteractive={false} />
           <ExportControls />
+          <FitGraph nodeIds={nodes.map(node => node.id).join('|')} focusId={focusId} />
         </ReactFlow>
 
         {openBundle && (
           <div className="lineage-edge-panel lineage-bundle-panel">
             <div className="lineage-edge-panel-title">
               <span>
-                {openBundle.memberIds.length} {openBundle.type} {openBundle.direction === 'outgoing' ? 'this object depends on' : 'that use this object'}
+                {openBundle.memberIds.length} {openBundle.type} · {openBundle.direction === 'outgoing' ? 'Dependencies' : 'Dependents'}{openBundle.hop ? ` · hop ${openBundle.hop}` : ''}
               </span>
             </div>
             <ul className="related-list lineage-bundle-list">
               {openBundle.memberIds.map((id) => (
                 <li key={id}>
                   <Link to={`/object/${id}`}>{index.byId.get(id)?.qualifiedName ?? id}</Link>
+                  {onNodeActivate && <button type="button" className="breadcrumb-link" onClick={() => activateNode(id)}>Focus</button>}
                 </li>
               ))}
             </ul>
@@ -254,6 +276,17 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
       </div>
     </>
   )
+}
+
+function FitGraph({ nodeIds, focusId }: { nodeIds: string; focusId?: string }) {
+  const { fitView } = useReactFlow()
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void fitView?.({ padding: 0.15, duration: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 250 })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [nodeIds, focusId, fitView])
+  return null
 }
 
 function timestampForFilename(): string {

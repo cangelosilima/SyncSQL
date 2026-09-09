@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildIndex } from './catalog'
-import { getEdgeColumns, getNeighborhoodIds } from './neighborhood'
+import { getDirectionalNeighborhood, getEdgeColumns, getNeighborhoodIds, groupIntermediateLayers, retainConnectingPaths } from './neighborhood'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
 
 // upstream -> root -> downstream -> far
@@ -45,5 +45,33 @@ describe('getEdgeColumns', () => {
 
   it('is direction-sensitive', () => {
     expect(getEdgeColumns(index, 'downstream', 'root')).toEqual([])
+  })
+})
+
+describe('directional expansion and connecting paths', () => {
+  const directed = buildIndex(makeCatalog({
+    nodes: ['root', 'dep', 'far', 'user', 'caller', 'sibling'].map(id => makeNode({ id })),
+    edges: [makeEdge('root', 'dep'), makeEdge('dep', 'far'), makeEdge('user', 'root'), makeEdge('caller', 'user'), makeEdge('sibling', 'dep'), makeEdge('far', 'root')],
+  }))
+  it('expands each side independently without turning onto sibling branches', () => {
+    expect(getDirectionalNeighborhood(directed, 'root', 2, 0).sort()).toEqual(['dep', 'far', 'root'])
+    expect(getDirectionalNeighborhood(directed, 'root', 0, 2).sort()).toEqual(['caller', 'dep', 'far', 'root', 'user'])
+    expect(getDirectionalNeighborhood(directed, 'root', 0, 0)).toEqual(['root'])
+    expect(getDirectionalNeighborhood(directed, 'root', 6, 0)).not.toContain('sibling')
+    const cyclic = getDirectionalNeighborhood(directed, 'root', 6, 6)
+    expect(new Set(cyclic).size).toBe(cyclic.length)
+  })
+  it('retains filtered intermediate objects without unrelated branches', () => {
+    expect(retainConnectingPaths(index, 'root', getNeighborhoodIds(index, 'root', 2), new Set(['far']))).toEqual(['root', 'downstream', 'far'])
+    expect(retainConnectingPaths(index, 'root', getNeighborhoodIds(index, 'root', 2), new Set(['island']))).toEqual(['root'])
+  })
+  it('groups intermediate types and hops while preserving focus and terminal objects', () => {
+    const groupedIndex = buildIndex(makeCatalog({
+      nodes: ['root', 'a', 'b', 'end', 'leaf'].map(id => makeNode({ id })),
+      edges: [makeEdge('root', 'a'), makeEdge('root', 'b'), makeEdge('a', 'end'), makeEdge('b', 'end'), makeEdge('root', 'leaf')],
+    }))
+    const result = groupIntermediateLayers(groupedIndex, 'root', [...groupedIndex.byId.keys()])
+    expect(result.nodeIds).toEqual(['root', 'end', 'leaf'])
+    expect(result.bundles).toEqual([expect.objectContaining({ direction: 'outgoing', hop: 1, memberIds: ['a', 'b'] })])
   })
 })
