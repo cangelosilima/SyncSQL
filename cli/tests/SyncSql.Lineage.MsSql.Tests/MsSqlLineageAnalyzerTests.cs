@@ -277,4 +277,83 @@ public class MsSqlLineageAnalyzerTests
         Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "Orders" });
         Assert.DoesNotContain(result.ObjectRefs, r => r.Schema == "o");
     }
+
+    /// <summary>
+    /// The reported false positive: T-SQL's multi-table DELETE points at one of the FROM clause's aliases,
+    /// which ScriptDom reports as a table named "a". Ordinary, correct SQL used to produce a permanent
+    /// orphaned reference for it.
+    /// </summary>
+    [Fact]
+    public void Analyze_DeleteTargetingAFromClauseAlias_DoesNotReportTheAliasAsAReference()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze(
+            "DELETE a FROM table_a AS a JOIN table_b AS b ON b.id = a.id;");
+
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: null, Name: "table_a" });
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: null, Name: "table_b" });
+        Assert.DoesNotContain(result.ObjectRefs, r => r.Name is "a" or "b");
+    }
+
+    [Fact]
+    public void Analyze_UpdateTargetingAFromClauseAlias_DoesNotReportTheAliasAsAReference()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("""
+            CREATE PROCEDURE [dbo].[SyncTotals] AS
+            BEGIN
+                UPDATE a
+                SET a.Total = b.Total
+                FROM [dbo].[Orders] AS a
+                JOIN [dbo].[OrderStaging] AS b ON b.OrderId = a.OrderId;
+            END
+            """);
+
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "Orders" });
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "OrderStaging" });
+        Assert.DoesNotContain(result.ObjectRefs, r => r.Name is "a" or "b");
+    }
+
+    [Fact]
+    public void Analyze_DeleteTargetingAnAliasThroughAParenthesizedJoin_DoesNotReportTheAlias()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze(
+            "DELETE a FROM (dbo.table_a AS a JOIN dbo.table_b AS b ON b.id = a.id);");
+
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "table_a" });
+        Assert.DoesNotContain(result.ObjectRefs, r => r.Name == "a");
+    }
+
+    /// <summary>
+    /// The skip is by alias, not by "the target looks unqualified": a plain DELETE names the table itself
+    /// and has to stay a reference.
+    /// </summary>
+    [Fact]
+    public void Analyze_DeleteWithoutASecondFromClause_StillReferencesItsTarget()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze("DELETE FROM dbo.table_a WHERE id = 1;");
+
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "table_a" });
+    }
+
+    [Fact]
+    public void Analyze_DeleteNamingItsTargetInFull_StillReferencesIt()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze(
+            "DELETE dbo.table_a FROM dbo.table_a AS a JOIN dbo.table_b AS b ON b.id = a.id;");
+
+        Assert.Equal(2, result.ObjectRefs.Count(r => r is { Schema: "dbo", Name: "table_a" }));
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "table_b" });
+    }
+
+    /// <summary>
+    /// Why the target is matched by fragment identity rather than by name: an alias may shadow the very
+    /// table name it stands for, and the FROM clause's own reference to that table is genuine.
+    /// </summary>
+    [Fact]
+    public void Analyze_AliasShadowingItsOwnTableName_KeepsTheFromClauseReference()
+    {
+        LineageAnalysisResult result = _analyzer.Analyze(
+            "DELETE a FROM a AS a JOIN table_b AS b ON b.id = a.id;");
+
+        Assert.Equal(1, result.ObjectRefs.Count(r => r is { Schema: null, Name: "a" }));
+    }
 }

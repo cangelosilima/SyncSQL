@@ -34,6 +34,21 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
     /// </summary>
     public HashSet<string> CommonTableExpressionNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The DELETE/UPDATE targets that name a FROM-clause alias rather than a table. T-SQL's multi-table
+    /// forms - <c>DELETE a FROM table_a AS a JOIN table_b AS b ON b.id = a.id</c> and the matching
+    /// <c>UPDATE a SET ... FROM ...</c> - point the statement at one of the aliases its own FROM clause
+    /// declares, and ScriptDom hands that target back as an ordinary <see cref="NamedTableReference"/>
+    /// whose name is the alias. Read at face value it becomes a reference to a table called <c>a</c>,
+    /// which nothing in the catalog answers to, so ordinary correct T-SQL reported a permanent orphaned
+    /// reference. The statement's real target is still collected from the FROM clause, so skipping the
+    /// alias loses no lineage.
+    ///
+    /// Tracked by fragment identity rather than by name: <c>DELETE a FROM a AS a</c> is legal, and there
+    /// the FROM clause's own <c>a</c> is a genuine reference that has to survive.
+    /// </summary>
+    private readonly HashSet<NamedTableReference> _aliasTargets = new(ReferenceEqualityComparer.Instance);
+
     // ScriptDom hands back the parts of a 1- to 4-part name individually, so a cross-database
     // ("OtherDb.dbo.Orders") or cross-linked-server ("LNK.OtherDb.dbo.Orders") reference keeps the
     // qualifiers it was written with instead of collapsing to "dbo.Orders" - the resolver needs them to
@@ -81,6 +96,12 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
     // reference.
     public override void Visit(NamedTableReference node)
     {
+        // An alias standing in for the statement's target (see _aliasTargets) is not a name to resolve.
+        if (_aliasTargets.Contains(node))
+        {
+            return;
+        }
+
         ObjectRef? objRef = FromSchemaObjectName(node.SchemaObject);
         if (objRef is null)
         {
@@ -97,6 +118,68 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
         // Also index by the object's own (unaliased) name/base identifier, so "dbo.Orders.OrderId" or a
         // bare "Orders.OrderId" column reference still resolves without requiring an explicit alias.
         Aliases.TryAdd(objRef.Name, objRef);
+    }
+
+    // DELETE a FROM table_a AS a JOIN table_b AS b ON b.id = a.id - the statement is visited before any
+    // of its children, so the FROM clause is available here and the decision never depends on the order
+    // ScriptDom happens to walk the target and the FROM clause in.
+    public override void Visit(DeleteStatement node) =>
+        SkipTargetNamingAnAlias(node.DeleteSpecification?.Target, node.DeleteSpecification?.FromClause);
+
+    // UPDATE a SET a.total = b.total FROM table_a AS a JOIN table_b AS b ON b.id = a.id
+    public override void Visit(UpdateStatement node) =>
+        SkipTargetNamingAnAlias(node.UpdateSpecification?.Target, node.UpdateSpecification?.FromClause);
+
+    /// <summary>
+    /// Marks a DELETE/UPDATE target for skipping when it is one of the aliases the statement's own FROM
+    /// clause declares (see <see cref="_aliasTargets"/>).
+    /// </summary>
+    private void SkipTargetNamingAnAlias(TableReference? target, FromClause? fromClause)
+    {
+        // Only a bare, single-part name can be an alias: "DELETE dbo.table_a FROM dbo.table_a AS a" names
+        // the table itself, qualifiers and all, and is a reference like any other.
+        if (target is not NamedTableReference named
+            || named.SchemaObject is not { } schemaObject
+            || Empty(schemaObject.BaseIdentifier?.Value) is not { } targetName
+            || Empty(schemaObject.SchemaIdentifier?.Value) is not null
+            || Empty(schemaObject.DatabaseIdentifier?.Value) is not null
+            || Empty(schemaObject.ServerIdentifier?.Value) is not null
+            || fromClause?.TableReferences is not { } tableReferences)
+        {
+            return;
+        }
+
+        HashSet<string> aliases = new(StringComparer.OrdinalIgnoreCase);
+        foreach (TableReference reference in tableReferences)
+        {
+            CollectAliases(reference, aliases);
+        }
+
+        if (aliases.Contains(targetName))
+        {
+            _aliasTargets.Add(named);
+        }
+    }
+
+    /// <summary>
+    /// Collects the aliases one FROM-clause entry declares, descending through joins so
+    /// "FROM table_a AS a JOIN table_b AS b" yields both.
+    /// </summary>
+    private static void CollectAliases(TableReference? reference, HashSet<string> aliases)
+    {
+        switch (reference)
+        {
+            case JoinTableReference join:
+                CollectAliases(join.FirstTableReference, aliases);
+                CollectAliases(join.SecondTableReference, aliases);
+                break;
+            case JoinParenthesisTableReference parenthesis:
+                CollectAliases(parenthesis.Join, aliases);
+                break;
+            case TableReferenceWithAlias { Alias.Value: { } alias } when !string.IsNullOrWhiteSpace(alias):
+                aliases.Add(alias);
+                break;
+        }
     }
 
     // ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES other_table (...) - the appended,
