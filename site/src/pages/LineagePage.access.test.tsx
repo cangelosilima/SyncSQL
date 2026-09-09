@@ -35,7 +35,7 @@ describe('Access investigation', () => {
     expect(screen.getByRole('complementary')).toBeVisible()
     expect(screen.getByTestId('location')).toHaveTextContent(url!)
     expect(screen.getByText('Navigating:')).toBeInTheDocument()
-    expect(screen.getByRole('checkbox')).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Exact match' })).toBeChecked()
   })
   it('allows keyboard selection of a grantee suggestion', async () => {
     render(<MemoryRouter initialEntries={['/lineage?tab=access']}><LineagePage /></MemoryRouter>)

@@ -911,6 +911,31 @@ a {
   color: var(--text);
 }
 
+.lineage-view-options {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.lineage-view-options summary { cursor: pointer; font-weight: 600; }
+.lineage-view-controls, .lineage-hop-control, .lineage-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.lineage-view-controls { flex-wrap: wrap; gap: 1rem 1.5rem; margin-top: 0.75rem; }
+.lineage-view-options p { margin: 0.75rem 0 0; font-size: 0.8rem; }
+.lineage-bundle-list li { display: flex; justify-content: space-between; gap: 0.75rem; }
+.lineage-node--focus { box-shadow: 0 0 0 3px var(--selected); animation: lineage-focus-pulse 850ms ease-out; }
+@keyframes lineage-focus-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent); }
+  45% { box-shadow: 0 0 0 7px var(--selected), 0 0 18px var(--selected); }
+  100% { box-shadow: 0 0 0 3px var(--selected); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lineage-node--focus { animation: none; }
+}
+
 /* Column-level dependency tags (lineage lists, Access page permissions) */
 
 .column-tags {

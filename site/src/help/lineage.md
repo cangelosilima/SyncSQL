@@ -11,10 +11,17 @@ as they do on Explorer) decide which objects enter the graph.
 - **Click** a node to drill into that object's own neighborhood *in place*.
   A breadcrumb trail and a **Back** button walk you out again.
 - **Double-click** a node to open its full detail page.
-- **1 / 2 / 3 hops** sets how far the neighborhood reaches around the
-  focused object.
+- **View options** sets **Dependencies** (objects the focus references) and
+  **Dependents** (objects that reference the focus) independently, from 0 to 6
+  hops. Use **+ Add hop** to expand one direction; 0 hides that side.
+- **Group intermediate layers** combines intermediate objects of the same type,
+  direction and hop into counted nodes. The focus and outer objects stay visible.
+  Click a group to see its members and focus an individual object. Group edges
+  count actual references; they do not imply every member references every object.
+- The focused object briefly glows when focus changes. Reduced-motion settings
+  keep the static highlight without animation.
 - **Copy link** hands over the current view exactly: filter tokens,
-  drill-down focus, hop radius and content search all live in the URL.
+  drill-down focus, directional hop counts, grouping and content search all live in the URL.
   That link is the useful thing to paste into an incident write-up.
 
 **Filters mean different things depending on whether you are navigating.**
@@ -23,7 +30,8 @@ drilled into an object, they narrow *that object's neighborhood* instead - so
 adding "Type is StoredProcedures" while looking at a table shows the
 procedures around it, rather than asking for something that is both. The
 focused object always stays on screen, and the line under the breadcrumb says
-how much of its neighborhood is being hidden.
+how much of its neighborhood is being hidden. Connecting objects outside the
+filters are retained and labeled so matches farther away keep a path to the focus.
 
 **Clear focus** converts the navigation into a real name filter as it
 releases it, so you land on that one object rather than the whole catalog.

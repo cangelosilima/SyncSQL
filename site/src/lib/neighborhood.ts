@@ -26,6 +26,51 @@ export function getNeighborhoodIds(index: CatalogIndex, rootId: string, hops: nu
   return [...seen]
 }
 
+/** Independent, directed traversals: dependencies never turn back into dependents. */
+export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, dependencies: number, dependents: number): string[] {
+  const ids = new Set([rootId])
+  for (const [adjacency, limit] of [[index.outgoing, dependencies], [index.incoming, dependents]] as const) {
+    const seen = new Set([rootId])
+    let frontier = [rootId]
+    for (let hop = 0; hop < limit && frontier.length; hop++) {
+      const next: string[] = []
+      for (const id of frontier) for (const neighbor of adjacency.get(id) ?? []) {
+        if (seen.has(neighbor) || !index.byId.has(neighbor)) continue
+        seen.add(neighbor)
+        ids.add(neighbor)
+        next.push(neighbor)
+      }
+      frontier = next
+    }
+  }
+  return [...ids]
+}
+
+/** Keep one shortest connecting path for each match, including filtered intermediates. */
+export function retainConnectingPaths(index: CatalogIndex, rootId: string, ids: string[], matches: Set<string>): string[] {
+  const allowed = new Set(ids)
+  const parent = new Map<string, string | null>([[rootId, null]])
+  const queue = [rootId]
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i]
+    for (const next of [...(index.outgoing.get(id) ?? []), ...(index.incoming.get(id) ?? [])]) {
+      if (!allowed.has(next) || parent.has(next)) continue
+      parent.set(next, id)
+      queue.push(next)
+    }
+  }
+  const kept = new Set([rootId])
+  for (const match of ids) {
+    if (!matches.has(match) || !parent.has(match)) continue
+    let id: string | null = match
+    while (id !== null && !kept.has(id)) {
+      kept.add(id)
+      id = parent.get(id) ?? null
+    }
+  }
+  return ids.filter(id => kept.has(id))
+}
+
 /** Column names of `toId` that the edge from `fromId` is known to reference, if any. */
 export function getEdgeColumns(index: CatalogIndex, fromId: string, toId: string): string[] {
   return index.edgeColumns.get(`${fromId}|${toId}`) ?? []
@@ -55,6 +100,47 @@ export interface NeighborBundle {
   /** The object type every member shares. */
   type: string
   memberIds: string[]
+  /** Present for optional intermediate-layer grouping. */
+  hop?: number
+}
+
+/** Group only intermediate layers; leave the focus and the outermost objects visible. */
+export function groupIntermediateLayers(index: CatalogIndex, focusId: string, ids: readonly string[]): BundledNeighborhood {
+  const allowed = new Set(ids)
+  const layers = new Map<string, { direction: 'outgoing' | 'incoming'; hop: number }>()
+  for (const direction of ['outgoing', 'incoming'] as const) {
+    const seen = new Set([focusId])
+    let frontier = [focusId]
+    for (let hop = 1; frontier.length; hop++) {
+      const next: string[] = []
+      for (const id of frontier) for (const neighbor of index[direction].get(id) ?? []) {
+        if (!allowed.has(neighbor) || seen.has(neighbor)) continue
+        seen.add(neighbor)
+        next.push(neighbor)
+        const previous = layers.get(neighbor)
+        if (!previous || previous.hop > hop) layers.set(neighbor, { direction, hop })
+      }
+      frontier = next
+    }
+  }
+  const groups = new Map<string, NeighborBundle>()
+  for (const [id, layer] of layers) {
+    // An intermediate has a continuation further away on the same side.
+    const hasContinuation = (index[layer.direction].get(id) ?? []).some(next => {
+      const target = layers.get(next)
+      return target?.direction === layer.direction && target.hop > layer.hop
+    })
+    if (!hasContinuation) continue
+    const type = index.byId.get(id)?.type
+    if (!type) continue
+    const key = `${BUNDLE_ID_PREFIX}:${layer.direction}:${layer.hop}:${type}`
+    const group = groups.get(key)
+    if (group) group.memberIds.push(id)
+    else groups.set(key, { id: key, ...layer, type, memberIds: [id] })
+  }
+  const bundles = [...groups.values()].filter(group => group.memberIds.length > 1)
+  const bundled = new Set(bundles.flatMap(group => group.memberIds))
+  return { nodeIds: ids.filter(id => !bundled.has(id)), bundles, bundledCount: bundled.size }
 }
 
 export interface BundledNeighborhood {
