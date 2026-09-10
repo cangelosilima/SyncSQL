@@ -2,15 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
-import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import CsvExportButton from '../components/CsvExportButton'
 import HelpButton from '../components/HelpButton'
 import { csvFileName } from '../lib/csv'
 import { objectColumns } from '../lib/catalogCsv'
-import { filterByContent } from '../lib/contentSearch'
 import { epochOf } from '../lib/analytics'
-import { useDebouncedValue } from '../lib/useDebouncedValue'
 import type { CatalogNode } from '../types'
 import { decodeTokensFromUrl, encodeTokensForUrl, type FilterToken } from '../lib/filters'
 
@@ -23,14 +20,15 @@ export default function Explorer() {
   const [searchParams, setSearchParams] = useSearchParams()
   const encodedTokens = searchParams.get('filters')
   const contentQuery = searchParams.get('q') ?? ''
-  const tokens = useMemo(() => decodeTokensFromUrl(encodedTokens), [encodedTokens])
-  const debouncedContentQuery = useDebouncedValue(contentQuery, 150)
+  const tokens = useMemo<FilterToken[]>(() => [
+    ...decodeTokensFromUrl(encodedTokens),
+    ...(contentQuery.trim() ? [{ id: 'legacy-ddl-query', attribute: 'ddl' as const, operator: 'contains' as const, values: [contentQuery.trim()] }] : []),
+  ], [encodedTokens, contentQuery])
   const [sortKey, setSortKey] = useState<SortKey>('qualifiedName')
   const [sortDir, setSortDir] = useState<1 | -1>(1)
 
   const nodes = index?.catalog.nodes ?? []
-  const attrFiltered = useFilteredNodes(nodes, tokens)
-  const filtered = useMemo(() => filterByContent(attrFiltered, debouncedContentQuery), [attrFiltered, debouncedContentQuery])
+  const filtered = useFilteredNodes(nodes, tokens)
 
   const sorted = useMemo(() => {
     const copy = [...filtered]
@@ -61,13 +59,7 @@ export default function Explorer() {
     const next = new URLSearchParams(searchParams)
     if (nextTokens.length > 0) next.set('filters', encodeTokensForUrl(nextTokens))
     else next.delete('filters')
-    setSearchParams(next, { replace: true })
-  }
-
-  function setContentQuery(value: string) {
-    const next = new URLSearchParams(searchParams)
-    if (value) next.set('q', value)
-    else next.delete('q')
+    next.delete('q')
     setSearchParams(next, { replace: true })
   }
 
@@ -87,10 +79,10 @@ export default function Explorer() {
       </div>
       <p className="muted" role="status" aria-live="polite">
         {filtered.length} of {nodes.length} object(s) match
-        {tokens.length > 0 || debouncedContentQuery.trim() ? ' the current filter' : ''}.
+        {tokens.length > 0 ? ' the current filter' : ''}.
       </p>
-      <FilterBar nodes={nodes} tokens={tokens} onChange={setTokens} placeholder="Filter objects... (server, database, schema, type, name, description)" />
-      <ContentSearchBar value={contentQuery} onChange={setContentQuery} matchCount={debouncedContentQuery.trim() ? filtered.length : undefined} />
+      <FilterBar nodes={nodes} tokens={tokens} onChange={setTokens} placeholder="Search objects and DDL, or choose a filter..." />
+      <p className="muted">Choose an attribute to narrow your search, or type text and press Enter to search object details and DDL.</p>
 
       {sorted.length > ROW_CAP && (
         <p className="lineage-warning" style={{ marginTop: '0.75rem' }}>

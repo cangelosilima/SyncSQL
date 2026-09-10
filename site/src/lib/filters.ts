@@ -1,11 +1,12 @@
 import type { CatalogNode } from '../types'
+import { nodeContentText } from './contentSearch'
 
-export type FilterAttribute = 'server' | 'database' | 'schema' | 'type' | 'name' | 'description'
+export type FilterAttribute = 'server' | 'database' | 'schema' | 'type' | 'name' | 'description' | 'ddl'
 export type FilterOperator = 'is' | 'is-not' | 'contains' | 'is-in' | 'is-not-in'
 
 export interface FilterToken {
   id: string
-  /** null = plain-text token: substring search across the common text fields. */
+  /** null = plain-text token: substring search across object details and DDL. */
   attribute: FilterAttribute | null
   operator: FilterOperator
   values: string[]
@@ -26,6 +27,7 @@ export const FILTER_ATTRIBUTES: FilterAttributeDef[] = [
   { key: 'type', label: 'Type', kind: 'enum' },
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'description', label: 'Description', kind: 'text' },
+  { key: 'ddl', label: 'DDL content', kind: 'text' },
 ]
 
 export const OPERATOR_LABELS: Record<FilterOperator, string> = {
@@ -56,6 +58,8 @@ export function getFieldValue(node: CatalogNode, attribute: FilterAttribute): st
       return node.qualifiedName
     case 'description':
       return node.description ?? ''
+    case 'ddl':
+      return nodeContentText(node)
   }
 }
 
@@ -85,8 +89,10 @@ export function matchesToken(node: CatalogNode, token: FilterToken): boolean {
       node.qualifiedName.toLowerCase().includes(needle) ||
       node.server.toLowerCase().includes(needle) ||
       node.database.toLowerCase().includes(needle) ||
+      node.type.toLowerCase().includes(needle) ||
       (node.schema ?? '').toLowerCase().includes(needle) ||
-      (node.description ?? '').toLowerCase().includes(needle)
+      (node.description ?? '').toLowerCase().includes(needle) ||
+      nodeContentText(node).toLowerCase().includes(needle)
     )
   }
 

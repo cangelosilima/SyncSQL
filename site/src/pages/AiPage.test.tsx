@@ -35,7 +35,7 @@ describe('local AI presentation and Explorer transition', () => {
     expect(screen.getByText('Review the interpretation.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: 'Open in Explorer' }))
     expect(screen.getByRole('status')).toHaveTextContent('1 of 2 object(s) match')
-    expect(screen.getByRole('textbox', { name: 'Search DDL content' })).toHaveValue('Orders')
+    expect(screen.getByRole('button', { name: 'Remove filter DDL content contains Orders' })).toBeInTheDocument()
   })
   it('blocks transfer of unsupported fragments without discarding the explanation', async () => {
     ai.generateFilterPlan.mockResolvedValue({ ...plan, unsupportedFragments: ['owned by billing'] })

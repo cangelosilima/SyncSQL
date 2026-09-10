@@ -217,7 +217,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
             setHighlight(0)
           }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() => setOpen(false)}
           onKeyDown={handleKeyDown}
         />
       </div>
