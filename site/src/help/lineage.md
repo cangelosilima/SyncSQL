@@ -5,8 +5,9 @@ tabs at the top.
 
 ## Browse
 
-The attribute filter bar and the DDL content search box (both behave exactly
-as they do on Explorer) decide which objects enter the graph.
+The attribute filter bar and the DDL content search box decide which objects
+enter the graph. The filter bar supports the same chips as Explorer; the
+separate DDL box also lets you narrow the graph as you type.
 
 - **Click** a node to drill into that object's own neighborhood *in place*.
   A breadcrumb trail and a **Back** button walk you out again.

@@ -36,7 +36,8 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
   const [operator, setOperator] = useState<FilterOperator | null>(null)
   const [pendingValues, setPendingValues] = useState<string[]>([])
   const [inputText, setInputText] = useState('')
-  const [highlight, setHighlight] = useState(0)
+  // Attribute suggestions are opt-in: Enter searches text until an arrow key selects one.
+  const [highlight, setHighlight] = useState(-1)
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -74,7 +75,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
     setOperator(null)
     setPendingValues([])
     setInputText('')
-    setHighlight(0)
+    setHighlight(-1)
   }
 
   function commit(tok: Omit<FilterToken, 'id'>) {
@@ -134,6 +135,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
     if (e.key === 'ArrowUp') {
       e.preventDefault()
       setHighlight((h) => Math.max(h - 1, 0))
+      setOpen(true)
       return
     }
     if (e.key === 'Enter') {
@@ -166,6 +168,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
       if (stage === 'operator') {
         setStage('attribute')
         setAttribute(null)
+        setHighlight(-1)
         return
       }
       if (tokens.length > 0) {
@@ -214,10 +217,13 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
           value={inputText}
           onChange={(e) => {
             setInputText(e.target.value)
-            setHighlight(0)
+            setHighlight(stage === 'attribute' ? -1 : 0)
           }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() => {
+            setOpen(false)
+            if (stage === 'attribute') setHighlight(-1)
+          }}
           onKeyDown={handleKeyDown}
         />
       </div>
