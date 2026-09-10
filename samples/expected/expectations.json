@@ -1,0 +1,200 @@
+{
+  "$comment": "What cli/tests/SyncSql.Samples.Benchmark.Tests asserts about a run of the sample fleet. Every object below was read out of the upstream DDL that samples/scripts/setup-databases.sh installs, so these are facts about the samples, not a recording of one run - see samples/expected/baseline.json for the recorded side. Node ids are '<server>/<database>/<type>/<schema>/<name>', which is what SyncSql.Core's ExtractedObjectFile.ObjectId produces.",
+  "servers": ["SAMPLES-MSSQL", "SAMPLES-ORACLE"],
+
+  "groups": [
+    {
+      "sampleId": "human-resources",
+      "server": "SAMPLES-ORACLE",
+      "database": "FREEPDB1",
+      "schema": "HR",
+      "exactCounts": { "Tables": 7, "Views": 1, "Procedures": 2, "Triggers": 2 },
+      "objects": [
+        { "type": "Tables", "name": "REGIONS" },
+        { "type": "Tables", "name": "COUNTRIES" },
+        { "type": "Tables", "name": "LOCATIONS" },
+        { "type": "Tables", "name": "DEPARTMENTS" },
+        { "type": "Tables", "name": "JOBS", "ddlContains": ["JOB_TITLE"] },
+        { "type": "Tables", "name": "EMPLOYEES", "ddlContains": ["EMPLOYEE_ID", "SALARY"], "columns": ["EMPLOYEE_ID", "FIRST_NAME", "LAST_NAME", "EMAIL", "SALARY", "MANAGER_ID", "DEPARTMENT_ID"] },
+        { "type": "Tables", "name": "JOB_HISTORY" },
+        { "type": "Views", "name": "EMP_DETAILS_VIEW", "ddlContains": ["EMPLOYEE_ID"] },
+        { "type": "Procedures", "name": "ADD_JOB_HISTORY" },
+        { "type": "Procedures", "name": "SECURE_DML" },
+        { "type": "Triggers", "name": "SECURE_EMPLOYEES" },
+        { "type": "Triggers", "name": "UPDATE_JOB_HISTORY" }
+      ]
+    },
+    {
+      "sampleId": "customer-orders",
+      "server": "SAMPLES-ORACLE",
+      "database": "FREEPDB1",
+      "schema": "CO",
+      "exactCounts": { "Tables": 7, "Views": 4 },
+      "objects": [
+        { "type": "Tables", "name": "CUSTOMERS" },
+        { "type": "Tables", "name": "STORES" },
+        { "type": "Tables", "name": "PRODUCTS" },
+        { "type": "Tables", "name": "ORDERS" },
+        { "type": "Tables", "name": "ORDER_ITEMS" },
+        { "type": "Tables", "name": "SHIPMENTS" },
+        { "type": "Tables", "name": "INVENTORY" },
+        { "type": "Views", "name": "CUSTOMER_ORDER_PRODUCTS" },
+        { "type": "Views", "name": "STORE_ORDERS" },
+        { "type": "Views", "name": "PRODUCT_ORDERS" },
+        { "type": "Views", "name": "PRODUCT_REVIEWS" }
+      ]
+    },
+    {
+      "sampleId": "sales-history",
+      "server": "SAMPLES-ORACLE",
+      "database": "FREEPDB1",
+      "schema": "SH",
+      "$comment": "Tables is a minimum, not an exact count: SH's two materialized views each own a container table, and whether ALL_OBJECTS reports those as generated varies by release.",
+      "minimumCounts": { "Tables": 9 },
+      "exactCounts": { "Views": 1 },
+      "objects": [
+        { "type": "Tables", "name": "SALES" },
+        { "type": "Tables", "name": "COSTS" },
+        { "type": "Tables", "name": "CUSTOMERS" },
+        { "type": "Tables", "name": "COUNTRIES" },
+        { "type": "Tables", "name": "PRODUCTS" },
+        { "type": "Tables", "name": "PROMOTIONS" },
+        { "type": "Tables", "name": "CHANNELS" },
+        { "type": "Tables", "name": "TIMES" },
+        { "type": "Tables", "name": "SUPPLEMENTARY_DEMOGRAPHICS" },
+        { "type": "Views", "name": "PROFITS" }
+      ]
+    },
+    {
+      "sampleId": "belgrade-product-catalog-demo",
+      "server": "SAMPLES-MSSQL",
+      "database": "ProductCatalog",
+      "objects": [
+        { "type": "Tables", "schema": "dbo", "name": "Product", "ddlContains": ["ProductID"] },
+        { "type": "Tables", "schema": "dbo", "name": "Company" },
+        { "type": "Tables", "schema": "dbo", "name": "Logs" },
+        { "type": "Tables", "schema": "History", "name": "Product" },
+        { "type": "Tables", "schema": "xtp", "name": "Product", "ddlContains": ["MEMORY_OPTIMIZED"] },
+        { "type": "StoredProcedures", "schema": "dbo", "name": "InsertProductFromJson" },
+        { "type": "StoredProcedures", "schema": "dbo", "name": "UpdateProductFromJson" },
+        { "type": "StoredProcedures", "schema": "dbo", "name": "GetProducts" },
+        { "type": "StoredProcedures", "schema": "dbo", "name": "GetProductsAsOf" },
+        { "type": "StoredProcedures", "schema": "dbo", "name": "RestoreProduct" },
+        { "type": "StoredProcedures", "schema": "xtp", "name": "InsertProductFromJson" },
+        { "type": "StoredProcedures", "schema": "xtp", "name": "UpdateProductFromJson" },
+        { "type": "Functions", "schema": "dbo", "name": "diff_Product" },
+        { "type": "Functions", "schema": "dbo", "name": "pUserCanAccessCompanyData" },
+        { "type": "Schemas", "name": "History" },
+        { "type": "Schemas", "name": "xtp" }
+      ]
+    },
+    {
+      "sampleId": "ivs-people-register",
+      "server": "SAMPLES-MSSQL",
+      "database": "IvsPeopleRegister",
+      "objects": [
+        { "type": "Tables", "schema": "dbo", "name": "People", "columns": ["id", "name", "surname", "address", "town"] }
+      ]
+    },
+    {
+      "sampleId": "sql-graph",
+      "server": "SAMPLES-MSSQL",
+      "database": "WideWorldImporters",
+      "objects": [
+        { "type": "Tables", "schema": "Nodes", "name": "Person" },
+        { "type": "Tables", "schema": "Nodes", "name": "Customers" },
+        { "type": "Tables", "schema": "Nodes", "name": "StockItems" },
+        { "type": "Tables", "schema": "Edges", "name": "Friends" },
+        { "type": "Tables", "schema": "Edges", "name": "Bought" },
+        { "type": "Schemas", "name": "Nodes" },
+        { "type": "Schemas", "name": "Edges" }
+      ]
+    },
+    {
+      "sampleId": "automatic-tuning",
+      "server": "SAMPLES-MSSQL",
+      "database": "WideWorldImporters",
+      "objects": [
+        { "type": "StoredProcedures", "schema": "dbo", "name": "report", "ddlContains": ["OrderLines"] }
+      ]
+    },
+    {
+      "sampleId": "adventure-works",
+      "server": "SAMPLES-MSSQL",
+      "database": "AdventureWorks2022",
+      "$comment": "A restored backup, not a script this repository can read, so only landmarks and a floor are asserted here. The recorded totals live in baseline.json.",
+      "minimumNodeCount": 100,
+      "objects": [
+        { "type": "Tables", "schema": "Person", "name": "Person" },
+        { "type": "Tables", "schema": "Sales", "name": "SalesOrderHeader" },
+        { "type": "Tables", "schema": "Sales", "name": "SalesOrderDetail" },
+        { "type": "Tables", "schema": "Production", "name": "Product" },
+        { "type": "Tables", "schema": "HumanResources", "name": "Employee" },
+        { "type": "Views", "schema": "HumanResources", "name": "vEmployee" },
+        { "type": "StoredProcedures", "schema": "dbo", "name": "uspGetEmployeeManagers" },
+        { "type": "Functions", "schema": "dbo", "name": "ufnGetStock" }
+      ]
+    },
+    {
+      "sampleId": "adventure-works",
+      "server": "SAMPLES-MSSQL",
+      "database": "AdventureWorksDW2022",
+      "minimumNodeCount": 30,
+      "objects": [
+        { "type": "Tables", "schema": "dbo", "name": "DimCustomer" },
+        { "type": "Tables", "schema": "dbo", "name": "DimProduct" },
+        { "type": "Tables", "schema": "dbo", "name": "FactInternetSales" }
+      ]
+    },
+    {
+      "sampleId": "wide-world-importers",
+      "server": "SAMPLES-MSSQL",
+      "database": "WideWorldImporters",
+      "minimumNodeCount": 60,
+      "objects": [
+        { "type": "Tables", "schema": "Sales", "name": "Orders" },
+        { "type": "Tables", "schema": "Sales", "name": "OrderLines" },
+        { "type": "Tables", "schema": "Application", "name": "People" },
+        { "type": "Tables", "schema": "Warehouse", "name": "StockItems" },
+        { "type": "Views", "schema": "Website", "name": "Customers" }
+      ]
+    },
+    {
+      "sampleId": "wide-world-importers",
+      "server": "SAMPLES-MSSQL",
+      "database": "WideWorldImportersDW",
+      "minimumNodeCount": 20,
+      "objects": [
+        { "type": "Tables", "schema": "Dimension", "name": "Customer" },
+        { "type": "Tables", "schema": "Fact", "name": "Order" }
+      ]
+    }
+  ],
+
+  "$edgeComment": "Lineage edges the catalog must contain. Each one was read out of the DDL the sample installs: a view or module and the object its body actually names.",
+  "edges": [
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Views/HR/EMP_DETAILS_VIEW", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/EMPLOYEES" },
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Views/HR/EMP_DETAILS_VIEW", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/DEPARTMENTS" },
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Views/HR/EMP_DETAILS_VIEW", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/JOBS" },
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Views/HR/EMP_DETAILS_VIEW", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/LOCATIONS" },
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Views/HR/EMP_DETAILS_VIEW", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/COUNTRIES" },
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Views/HR/EMP_DETAILS_VIEW", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/REGIONS" },
+    { "sampleId": "human-resources", "from": "SAMPLES-ORACLE/FREEPDB1/Procedures/HR/ADD_JOB_HISTORY", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/HR/JOB_HISTORY" },
+
+    { "sampleId": "customer-orders", "from": "SAMPLES-ORACLE/FREEPDB1/Views/CO/CUSTOMER_ORDER_PRODUCTS", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/CO/ORDERS" },
+    { "sampleId": "customer-orders", "from": "SAMPLES-ORACLE/FREEPDB1/Views/CO/CUSTOMER_ORDER_PRODUCTS", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/CO/ORDER_ITEMS" },
+    { "sampleId": "customer-orders", "from": "SAMPLES-ORACLE/FREEPDB1/Views/CO/CUSTOMER_ORDER_PRODUCTS", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/CO/CUSTOMERS" },
+    { "sampleId": "customer-orders", "from": "SAMPLES-ORACLE/FREEPDB1/Views/CO/CUSTOMER_ORDER_PRODUCTS", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/CO/PRODUCTS" },
+    { "sampleId": "customer-orders", "from": "SAMPLES-ORACLE/FREEPDB1/Views/CO/STORE_ORDERS", "to": "SAMPLES-ORACLE/FREEPDB1/Tables/CO/STORES" },
+
+    { "sampleId": "belgrade-product-catalog-demo", "from": "SAMPLES-MSSQL/ProductCatalog/StoredProcedures/dbo/GetProducts", "to": "SAMPLES-MSSQL/ProductCatalog/Tables/dbo/Product" },
+    { "sampleId": "belgrade-product-catalog-demo", "from": "SAMPLES-MSSQL/ProductCatalog/StoredProcedures/dbo/GetProducts", "to": "SAMPLES-MSSQL/ProductCatalog/Tables/History/Product" },
+    { "sampleId": "belgrade-product-catalog-demo", "from": "SAMPLES-MSSQL/ProductCatalog/StoredProcedures/dbo/GetProductsAsOf", "to": "SAMPLES-MSSQL/ProductCatalog/Functions/dbo/diff_Product" },
+    { "sampleId": "belgrade-product-catalog-demo", "from": "SAMPLES-MSSQL/ProductCatalog/StoredProcedures/dbo/RestoreProduct", "to": "SAMPLES-MSSQL/ProductCatalog/Tables/dbo/Product" },
+
+    { "sampleId": "automatic-tuning", "from": "SAMPLES-MSSQL/WideWorldImporters/StoredProcedures/dbo/report", "to": "SAMPLES-MSSQL/WideWorldImporters/Tables/Sales/OrderLines" },
+
+    { "sampleId": "adventure-works", "from": "SAMPLES-MSSQL/AdventureWorks2022/Views/HumanResources/vEmployee", "to": "SAMPLES-MSSQL/AdventureWorks2022/Tables/HumanResources/Employee" },
+    { "sampleId": "adventure-works", "from": "SAMPLES-MSSQL/AdventureWorks2022/Views/HumanResources/vEmployee", "to": "SAMPLES-MSSQL/AdventureWorks2022/Tables/Person/Person" }
+  ]
+}

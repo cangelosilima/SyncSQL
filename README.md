@@ -282,6 +282,7 @@ named that way and passes them to the CLI as parameters - see
 |------|---------|------------|
 | [.NET SDK](https://dotnet.microsoft.com/download) | **10.0** (pinned by [`global.json`](global.json)) | building, testing and running the `syncsql` CLI |
 | [Node.js](https://nodejs.org/) | 20 or newer | building and testing the catalog site |
+| [Docker](https://docs.docker.com/get-docker/) + Compose v2, and [`jq`](https://jqlang.github.io/jq/) | current | optional — only for the [sample databases](samples/README.md) and the benchmark that runs against them |
 | Visual Studio 2026, VS Code, or Rider | see below | optional, but this repo ships editor config for VS Code |
 
 The SDK is pinned in `global.json`, so `dotnet` fails with an explicit
@@ -363,6 +364,38 @@ root, so the extension has to be told where to find it.
    folder directly.
 4. Test files must be named `*.test.ts` / `*.test.tsx` (Vitest's default
    glob) — a file named `*.tests.ts` is not picked up.
+
+## Sample databases
+
+[`samples/`](samples/README.md) builds a throwaway database fleet to point
+SyncSQL at: a SQL Server and an Oracle container loaded with twenty samples
+taken from
+[microsoft/sql-server-samples](https://github.com/microsoft/sql-server-samples/tree/master/samples/demos)
+and
+[oracle-samples/db-sample-schemas](https://github.com/oracle-samples/db-sample-schemas)
+— AdventureWorks, Wide World Importers, the SQL Server demos that create
+objects, and Oracle's HR, CO and SH schemas.
+
+```sh
+samples/scripts/setup-databases.sh    # bring the fleet up and load it
+samples/scripts/run-syncsql.sh        # extract it, build catalog.json
+samples/scripts/run-benchmark.sh      # assert the result against samples/expected/
+```
+
+Every script has a PowerShell twin (`.ps1`) taking the same options as
+parameters. Nothing from upstream is vendored: each sample folder holds a
+README and a pointer, and the SQL is fetched into the git-ignored
+`samples/.cache/` at provisioning time.
+
+The third command runs
+[`cli/tests/SyncSql.Samples.Benchmark.Tests`](cli/tests/SyncSql.Samples.Benchmark.Tests/README.md),
+an end-to-end benchmark that extracts the whole fleet, builds the catalog,
+and checks both against expectations written by hand from the upstream DDL —
+including the specific lineage edges each view and procedure body implies.
+It is part of `cli/SyncSql.slnx`, but every test in it skips itself unless
+`SYNCSQL_SAMPLES=1` is set, so a normal `dotnet test` on a machine without
+Docker reports them as skipped rather than failed. Full details:
+[`samples/README.md`](samples/README.md).
 
 ## CI/CD pipeline
 

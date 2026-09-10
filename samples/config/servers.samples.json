@@ -1,0 +1,101 @@
+{
+  "$comment": "SyncSQL config for the sample fleet that samples/scripts/setup-databases brings up. Hosts and ports match samples/docker/.env.example - change MSSQL_PORT/ORACLE_PORT in samples/.env and you must change them here too. Credentials are never stored here: samples/scripts/run-syncsql writes them to a git-ignored credentials file from samples/.env and passes it with --credentials-file.",
+  "git": {
+    "remoteUrl": "",
+    "branch": "main",
+    "pathPrefix": "",
+    "commitUserName": "SyncSQL Bot",
+    "commitUserEmail": "syncsql-bot@example.com",
+    "commitMessage": "chore(samples): update sample database objects"
+  },
+  "defaults": {
+    "databases": {
+      "include": [".*"],
+      "exclude": ["^tempdb$", "^model$", "^msdb$", "^master$"]
+    },
+    "schemas": {
+      "include": [".*"],
+      "exclude": ["^INFORMATION_SCHEMA$", "^sys$"]
+    },
+    "objectNames": {
+      "include": [".*"],
+      "exclude": []
+    },
+    "objectTypes": [
+      "Schemas",
+      "Types",
+      "Tables",
+      "Views",
+      "StoredProcedures",
+      "Functions",
+      "Triggers",
+      "Synonyms",
+      "LinkedServers"
+    ]
+  },
+  "serverSelection": {
+    "include": [".*"],
+    "exclude": []
+  },
+  "discovery": {
+    "linkedServers": {
+      "enabled": false,
+      "maxDepth": 1,
+      "requireMatchingLogin": true,
+      "restrictToLinkedCatalog": true,
+      "linkNames": {
+        "include": [".*"],
+        "exclude": []
+      }
+    }
+  },
+  "servers": [
+    {
+      "name": "SAMPLES-MSSQL",
+      "type": "mssql",
+      "host": "localhost",
+      "port": 14330,
+      "encrypt": true,
+      "trustServerCertificate": true,
+      "credentialsVariablePrefix": "SAMPLES_MSSQL",
+      "databases": {
+        "include": [
+          "^AdventureWorks2022$",
+          "^AdventureWorksDW2022$",
+          "^AdventureWorksDW2016$",
+          "^WideWorldImporters$",
+          "^WideWorldImportersDW$",
+          "^ProductCatalog$",
+          "^IvsPeopleRegister$",
+          "^memgrants$"
+        ],
+        "exclude": []
+      }
+    },
+    {
+      "name": "SAMPLES-ORACLE",
+      "type": "oracle",
+      "host": "localhost",
+      "port": 15210,
+      "serviceName": "FREEPDB1",
+      "credentialsVariablePrefix": "SAMPLES_ORACLE",
+      "schemas": {
+        "include": ["^HR$", "^CO$", "^SH$"],
+        "exclude": []
+      },
+      "objectTypes": [
+        "Tables",
+        "Types",
+        "TypeBodies",
+        "Views",
+        "Procedures",
+        "Functions",
+        "Packages",
+        "PackageBodies",
+        "Triggers",
+        "Synonyms",
+        "DatabaseLinks"
+      ]
+    }
+  ]
+}

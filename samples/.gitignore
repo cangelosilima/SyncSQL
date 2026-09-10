@@ -1,0 +1,8 @@
+# Fetched upstream sources and downloaded backups - never vendored, always re-fetchable.
+.cache/
+
+# What `run-syncsql` extracts: the object tree, metrics and catalog.json.
+output/
+
+# Local credentials for the throwaway containers.
+.env

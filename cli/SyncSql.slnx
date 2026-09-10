@@ -17,5 +17,6 @@
     <Project Path="tests/SyncSql.Extraction.Oracle.Tests/SyncSql.Extraction.Oracle.Tests.csproj" />
     <Project Path="tests/SyncSql.Lineage.MsSql.Tests/SyncSql.Lineage.MsSql.Tests.csproj" />
     <Project Path="tests/SyncSql.Lineage.Oracle.Tests/SyncSql.Lineage.Oracle.Tests.csproj" />
+    <Project Path="tests/SyncSql.Samples.Benchmark.Tests/SyncSql.Samples.Benchmark.Tests.csproj" />
   </Folder>
 </Solution>

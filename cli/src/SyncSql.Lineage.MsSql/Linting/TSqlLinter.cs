@@ -6,7 +6,9 @@ namespace SyncSql.Lineage.MsSql.Linting;
 /// <summary>
 /// Lints a single T-SQL script: real parse errors (via ScriptDom) plus a small set of style/best-practice
 /// rules run over the resulting fragment tree. Parsing is best-effort like <see cref="MsSqlLineageAnalyzer"/>
-/// - ScriptDom returns a partial AST alongside any parse errors, so rules still run over whatever did parse.
+/// - ScriptDom usually returns a partial AST alongside any parse errors, so rules still run over whatever
+/// did parse. "Usually": handed something far enough from T-SQL (a PL/SQL package body, say) it returns no
+/// fragment at all, and then the parse errors are the whole result.
 /// </summary>
 public sealed class TSqlLinter
 {
@@ -44,9 +46,15 @@ public sealed class TSqlLinter
             .Select(error => new TSqlLintFinding(error.Line, error.Column, "syntax-error", TSqlLintSeverity.Error, error.Message))
             .ToList();
 
-        foreach (ITSqlLintRule rule in _rules)
+        // Not annotated as nullable by ScriptDom, but it does return null when nothing parsed at all.
+        // Reporting the syntax errors is the right answer there; visiting a null tree is an
+        // unhandled NullReferenceException out of `syncsql lint`.
+        if (fragment is not null)
         {
-            findings.AddRange(rule.Check(fragment));
+            foreach (ITSqlLintRule rule in _rules)
+            {
+                findings.AddRange(rule.Check(fragment));
+            }
         }
 
         return findings

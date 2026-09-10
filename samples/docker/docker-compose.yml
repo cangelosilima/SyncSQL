@@ -1,0 +1,87 @@
+# The sample database fleet SyncSQL extracts from: one SQL Server and one Oracle
+# instance, both throwaway. Nothing here is meant to outlive a demo - the passwords
+# come from samples/.env, the data lives in named volumes, and
+# `samples/scripts/setup-databases.sh --down` deletes both.
+#
+# Paths are relative to this file (samples/docker/), so `..` is the samples/ folder.
+
+name: syncsql-samples
+
+services:
+  # ---------------------------------------------------------------------------
+  # Microsoft SQL Server - hosts AdventureWorks, WideWorldImporters and every
+  # installable demo out of microsoft/sql-server-samples/samples/demos.
+  # ---------------------------------------------------------------------------
+  mssql:
+    image: ${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}
+    container_name: syncsql-samples-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in samples/.env}
+      # Developer edition: every feature of Enterprise, licensed for non-production only.
+      # The demos need it - columnstore, temporal tables, RLS and in-memory OLTP are not
+      # all present in Express.
+      MSSQL_PID: ${MSSQL_PID:-Developer}
+      MSSQL_COLLATION: ${MSSQL_COLLATION:-SQL_Latin1_General_CP1_CI_AS}
+    ports:
+      - "${MSSQL_PORT:-14330}:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+      # RESTORE reads from here, so the backups have to be inside the server's own
+      # filesystem rather than the client's.
+      - ../.cache/backups:/var/opt/mssql/backup:ro
+    healthcheck:
+      # The SQL Server 2022 images no longer ship sqlcmd, so this can only prove the
+      # port is accepting connections. setup-databases does the real readiness check
+      # (an actual SELECT 1 through the mssql-tools container) before it provisions.
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/1433' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Oracle Database Free - hosts the HR / CO / SH schemas from
+  # oracle-samples/db-sample-schemas, in the FREEPDB1 pluggable database.
+  # ---------------------------------------------------------------------------
+  oracle:
+    image: ${ORACLE_IMAGE:-gvenzl/oracle-free:23-slim}
+    container_name: syncsql-samples-oracle
+    environment:
+      # Sets the password for SYS, SYSTEM and PDBADMIN.
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?set ORACLE_PASSWORD in samples/.env}
+    ports:
+      - "${ORACLE_PORT:-15210}:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      # The upstream install scripts run from here, via SQL*Plus inside this container.
+      - ..:/samples:ro
+    healthcheck:
+      # Ships with the image and runs a real query against the open database.
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 60s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # sqlcmd, as a one-shot client. Behind a profile so `docker compose up` never
+  # starts it; setup-databases reaches it with `docker compose run --rm`.
+  # ---------------------------------------------------------------------------
+  mssql-tools:
+    image: ${MSSQL_TOOLS_IMAGE:-mcr.microsoft.com/mssql-tools:latest}
+    profiles: ["tools"]
+    entrypoint: ["/bin/bash"]
+    working_dir: /samples
+    environment:
+      SQLCMDPASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in samples/.env}
+    volumes:
+      - ..:/samples:ro
+    depends_on:
+      - mssql
+
+volumes:
+  mssql-data:
+  oracle-data:
