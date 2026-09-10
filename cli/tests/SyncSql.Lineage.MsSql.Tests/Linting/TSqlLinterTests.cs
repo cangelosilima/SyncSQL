@@ -52,6 +52,25 @@ public class TSqlLinterTests
     }
 
     [Fact]
+    public void Lint_PlSqlBody_ReportsSyntaxErrorsInsteadOfThrowing()
+    {
+        // ScriptDom usually hands back a partial AST alongside its parse errors, but for input this
+        // far from T-SQL it returns no fragment at all - and visiting that threw a
+        // NullReferenceException straight out of `syncsql lint`. Reported by pointing the linter at an
+        // extraction tree holding both engines' objects.
+        IReadOnlyList<TSqlLintFinding> findings = _linter.Lint("""
+            CREATE OR REPLACE PROCEDURE "HR"."SECURE_DML" IS
+            BEGIN
+              IF TO_CHAR (SYSDATE, 'HH24:MI') NOT BETWEEN '08:00' AND '18:00' THEN
+                RAISE_APPLICATION_ERROR (-20205, 'You may only make changes during normal office hours');
+              END IF;
+            END secure_dml;
+            """);
+
+        Assert.Contains(findings, f => f is { RuleId: "syntax-error", Severity: TSqlLintSeverity.Error });
+    }
+
+    [Fact]
     public void Lint_CleanScript_ReturnsNoFindings()
     {
         IReadOnlyList<TSqlLintFinding> findings = _linter.Lint("""

@@ -57,7 +57,10 @@ internal static class SampleFleet
             ? Path.GetFullPath(configured)
             : Path.Combine(SamplesRoot, "output");
 
-    public static string CatalogPath => Path.Combine(OutputRoot, "catalog.json");
+    /// <summary>Matches SyncSqlPaths.CatalogFileName, which is internal to SyncSql.Cli.</summary>
+    public const string CatalogFileName = "catalog.json";
+
+    public static string CatalogPath => Path.Combine(OutputRoot, CatalogFileName);
 
     public static string MetricsRoot => Path.Combine(OutputRoot, "metrics");
 

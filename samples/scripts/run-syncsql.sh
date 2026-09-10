@@ -58,6 +58,8 @@ while (($# > 0)); do
 done
 
 need_cmd dotnet "Install the .NET SDK pinned by global.json: https://dotnet.microsoft.com/download"
+# jq writes the credentials file below and reads the server names out of the config.
+need_cmd jq "Install it with 'apt install jq', 'brew install jq' or 'winget install jqlang.jq'."
 load_env
 
 [[ -f "$CONFIG" ]] || die "Config not found: $CONFIG"
@@ -110,14 +112,25 @@ syncsql catalog build \
   --output-root "$OUTPUT_ROOT" \
   --metrics-root "$OUTPUT_ROOT/metrics"
 
+# `lint` is the T-SQL parser, and only the T-SQL parser. Handed the shared output
+# root it would walk into SAMPLES-ORACLE too and feed PL/SQL to ScriptDom, so it
+# gets one --path per MSSQL server instead - read from the config, so a renamed or
+# added server stays covered.
+MSSQL_TREES=()
+while IFS= read -r server; do
+  if [[ -n "$server" && -d "$OUTPUT_ROOT/$server" ]]; then MSSQL_TREES+=(--path "$OUTPUT_ROOT/$server"); fi
+done < <(jq -r '.servers[] | select(.type == "mssql") | .name' "$CONFIG")
+
 if ((SKIP_LINT)); then
   step "lint skipped (--skip-lint)"
+elif ((${#MSSQL_TREES[@]} == 0)); then
+  step "lint skipped (nothing was extracted from an MSSQL server)"
 else
   log "lint"
   # Findings are informational here: these are third-party sample scripts, and
   # SELECT */NOLOCK/cursor hits in them are exactly what the demo is meant to
   # show. Only a parse error should be loud.
-  syncsql lint --output-root "$OUTPUT_ROOT" --fail-on error
+  syncsql lint "${MSSQL_TREES[@]}" --fail-on error
 fi
 
 log "Done"

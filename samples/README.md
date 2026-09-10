@@ -67,7 +67,9 @@ starts the containers, and installs every sample in the standard tier.
 ```
 --engine mssql|oracle|all   Which engine to provision. Default: all.
 --tier standard|heavy|all   Which tier. Default: standard.
---only  <id>[,<id>...]      Provision exactly these samples (ignores --tier).
+--only  <id>[,<id>...]      Provision these samples (ignores --tier). A sample's declared
+                            prerequisites come with it: `--only sql-graph` restores
+                            WideWorldImporters first, because the graph scripts need it.
 --skip  <id>[,<id>...]      Skip these samples.
 --skip-fetch                Reuse samples/.cache as-is.
 --status                    What is running and what is available.
@@ -138,6 +140,11 @@ No git is involved anywhere: `sync` only writes local files, and `catalog build`
 runs without `--repo-root`, so the history and heatmap parts of `catalog.json`
 stay empty. Passwords are written to a git-ignored credentials file and passed
 with `--credentials-file`, never as arguments.
+
+`lint` is the T-SQL parser and only the T-SQL parser, so it is pointed at the
+MSSQL servers' subtrees rather than at the shared output root - handed the root it
+would walk into `SAMPLES-ORACLE` and report every PL/SQL body as a syntax error.
+The server names come from the config, so renaming or adding one keeps working.
 
 ```
 --config <path>          Default: samples/config/servers.samples.json

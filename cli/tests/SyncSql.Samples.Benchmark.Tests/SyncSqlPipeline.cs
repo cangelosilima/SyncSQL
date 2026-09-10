@@ -23,6 +23,7 @@ internal sealed class SyncSqlPipeline
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         WriteCredentialsFile();
+        ClearOutputRoot();
         Directory.CreateDirectory(SampleFleet.OutputRoot);
 
         await InvokeAsync(["validate-config", "--config", SampleFleet.ConfigPath], cancellationToken);
@@ -45,6 +46,40 @@ internal sealed class SyncSqlPipeline
                 "--metrics-root", SampleFleet.MetricsRoot,
             ],
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Extraction writes each object as its own file but never removes one it has stopped producing,
+    /// and `catalog build` then scans every *.sql still on disk. Leaving the previous run's tree in
+    /// place would therefore let a stale file stand in for an object the extractor just dropped -
+    /// node counts, baseline totals and even the per-type assertions would all still pass, which is
+    /// precisely the regression this benchmark exists to catch. So the root is emptied first.
+    ///
+    /// SYNCSQL_SAMPLES_OUTPUT can point anywhere, so this refuses to delete a directory that does not
+    /// look like a previous extraction rather than trusting the variable.
+    /// </summary>
+    private static void ClearOutputRoot()
+    {
+        string root = SampleFleet.OutputRoot;
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        string[] entries = [.. Directory.EnumerateFileSystemEntries(root).Select(Path.GetFileName).OfType<string>()];
+        bool looksLikeOutput = entries.All(name =>
+            Directory.Exists(Path.Combine(root, name))
+            || name.Equals(SampleFleet.CatalogFileName, StringComparison.OrdinalIgnoreCase));
+
+        if (!looksLikeOutput)
+        {
+            throw new InvalidOperationException(
+                $"Refusing to clear '{root}' before extracting: it holds files that no syncsql run put there "
+                + $"({string.Join(", ", entries.Where(name => !Directory.Exists(Path.Combine(root, name))).Take(5))}). "
+                + $"Point {SampleFleet.OutputVariable} at a directory of its own, or delete that content yourself.");
+        }
+
+        Directory.Delete(root, recursive: true);
     }
 
     /// <summary>

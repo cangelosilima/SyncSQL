@@ -68,9 +68,15 @@ function Import-SampleEnvironment {
     $settings
 }
 
+# Shared by Invoke-Compose and by the Oracle installer, which has to invoke docker
+# natively so it can pipe SQL*Plus's prompt answers into it.
+function Get-ComposeArguments {
+    @('compose', '--project-directory', (Join-Path $script:SamplesDir 'docker'), '-f', $script:ComposeFile, '--env-file', $script:EnvFile)
+}
+
 function Invoke-Compose {
     param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
-    & docker compose --project-directory (Join-Path $script:SamplesDir 'docker') -f $script:ComposeFile --env-file $script:EnvFile @Arguments
+    & docker @(Get-ComposeArguments) @Arguments
 }
 
 # --- manifest ---------------------------------------------------------------
@@ -79,6 +85,10 @@ function Get-SampleManifest {
     Get-Content -Raw -Encoding UTF8 $script:Manifest | ConvertFrom-Json
 }
 
+# A sample's declared prerequisites are pulled in transitively, because they are not
+# optional: -Only sql-graph on a fresh fleet has to restore WideWorldImporters first
+# or the graph scripts run against an empty database. An explicit -Skip still wins -
+# see Get-SkippedRequirement, which is what warns about it.
 function Select-Samples {
     param(
         [Parameter(Mandatory)]$Manifest,
@@ -88,13 +98,58 @@ function Select-Samples {
         [string[]]$Skip = @()
     )
     $tiers = if ($Tier -eq 'all') { @('standard', 'heavy') } else { @($Tier) }
-    $Manifest.samples |
-        Sort-Object order |
+    $byId = @{}
+    foreach ($sample in $Manifest.samples) { $byId[$sample.id] = $sample }
+
+    $seed = @($Manifest.samples |
         Where-Object { $Engine -eq 'all' -or $_.engine -eq $Engine } |
-        Where-Object { $_.provision.type -ne 'none' } |
         Where-Object { $Only.Count -eq 0 -or $Only -contains $_.id } |
+        Where-Object { $Only.Count -gt 0 -or $tiers -contains $_.tier } |
+        ForEach-Object { $_.id })
+
+    $ids = [System.Collections.Generic.HashSet[string]]::new([string[]]$seed, [StringComparer]::Ordinal)
+    $queue = [System.Collections.Generic.Queue[string]]::new([string[]]$seed)
+    while ($queue.Count -gt 0) {
+        $current = $byId[$queue.Dequeue()]
+        if (-not $current -or -not $current.PSObject.Properties['requires']) { continue }
+        foreach ($required in @($current.requires)) {
+            if ($ids.Add($required)) { $queue.Enqueue($required) }
+        }
+    }
+
+    $ids |
+        Where-Object { $byId.ContainsKey($_) -and $byId[$_].provision.type -ne 'none' } |
+        Where-Object { $Skip -notcontains $_ } |
+        ForEach-Object { $byId[$_] } |
+        Sort-Object order
+}
+
+# Prerequisites that -Skip removed from the selection, so the caller can say so rather
+# than let a sample install against a base database nobody restored.
+function Get-SkippedRequirement {
+    param(
+        [Parameter(Mandatory)]$Manifest,
+        [ValidateSet('mssql', 'oracle', 'all')][string]$Engine = 'all',
+        [ValidateSet('standard', 'heavy', 'all')][string]$Tier = 'standard',
+        [string[]]$Only = @(),
+        [string[]]$Skip = @()
+    )
+    if ($Skip.Count -eq 0) { return }
+    $tiers = if ($Tier -eq 'all') { @('standard', 'heavy') } else { @($Tier) }
+    $Manifest.samples |
+        Where-Object { $Engine -eq 'all' -or $_.engine -eq $Engine } |
+        Where-Object { $Only.Count -eq 0 -or $Only -contains $_.id } |
+        Where-Object { $Only.Count -gt 0 -or $tiers -contains $_.tier } |
         Where-Object { $Skip -notcontains $_.id } |
-        Where-Object { $Only.Count -gt 0 -or $tiers -contains $_.tier }
+        ForEach-Object {
+            $sample = $_
+            if ($sample.PSObject.Properties['requires']) {
+                foreach ($required in @($sample.requires)) {
+                    if ($Skip -contains $required) { "$($sample.id) needs $required" }
+                }
+            }
+        } |
+        Sort-Object -Unique
 }
 
 # --- sources ----------------------------------------------------------------
@@ -285,7 +340,12 @@ function Invoke-OracleInstallScript {
     )
     $path = "/samples/.cache/sources/db-sample-schemas/$WorkDir/$Script"
     $answers = "$SystemPassword`n$SchemaPassword`n`nYES`n"
-    $answers | Invoke-Compose exec -T --workdir /tmp oracle sqlplus -s -L 'system@localhost:1521/FREEPDB1' "@$path"
+    # Piped straight at docker, not through Invoke-Compose: a function whose only
+    # parameter is ValueFromRemainingArguments accepts no pipeline input, so piping
+    # into the wrapper is a binding error and SQL*Plus would get none of the answers.
+    $composeArgs = @(Get-ComposeArguments) + @('exec', '-T', '--workdir', '/tmp', 'oracle',
+        'sqlplus', '-s', '-L', 'system@localhost:1521/FREEPDB1', "@$path")
+    $answers | & docker @composeArgs
     if ($LASTEXITCODE -ne 0) { throw "sqlplus failed for $WorkDir/$Script" }
 }
 

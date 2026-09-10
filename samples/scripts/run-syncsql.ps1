@@ -101,15 +101,32 @@ Invoke-SyncSql metrics update --output-root $OutputRoot
 Write-Note 'catalog build'
 Invoke-SyncSql catalog build --output-root $OutputRoot --metrics-root (Join-Path $OutputRoot 'metrics')
 
+# `lint` is the T-SQL parser, and only the T-SQL parser. Handed the shared output
+# root it would walk into SAMPLES-ORACLE too and feed PL/SQL to ScriptDom, so it
+# gets one -Path per MSSQL server instead - read from the config, so a renamed or
+# added server stays covered.
+$mssqlTrees = @(
+    (Get-Content -Raw -Encoding UTF8 $Config | ConvertFrom-Json).servers |
+        Where-Object { $_.type -eq 'mssql' } |
+        ForEach-Object { Join-Path $OutputRoot $_.name } |
+        Where-Object { Test-Path $_ }
+)
+
 if ($SkipLint) {
     Write-Step 'lint skipped (-SkipLint)'
+}
+elseif ($mssqlTrees.Count -eq 0) {
+    Write-Step 'lint skipped (nothing was extracted from an MSSQL server)'
 }
 else {
     # Findings are informational here: these are third-party sample scripts, and
     # SELECT */NOLOCK/cursor hits in them are exactly what the demo is meant to
     # show. Only a parse error should be loud.
     Write-Note 'lint'
-    Invoke-SyncSql lint --output-root $OutputRoot --fail-on error
+    $lintArgs = @('lint')
+    foreach ($tree in $mssqlTrees) { $lintArgs += @('--path', $tree) }
+    $lintArgs += @('--fail-on', 'error')
+    Invoke-SyncSql @lintArgs
 }
 
 Write-Note 'Done'

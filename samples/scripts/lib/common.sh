@@ -69,21 +69,55 @@ compose() { docker compose --project-directory "$SAMPLES_DIR/docker" -f "$COMPOS
 manifest() { jq -r "$1" "$MANIFEST"; }
 
 # Sample ids in provisioning order, filtered by engine/tier/only/skip.
+#
+# A sample's declared prerequisites are pulled in transitively, because they are
+# not optional: `--only sql-graph` on a fresh fleet has to restore
+# WideWorldImporters first or the graph scripts run against an empty database.
+# An explicit --skip still wins over that - see skipped_requirements, which is
+# what warns about it.
 select_samples() {
   local engine="$1" tier="$2" only="$3" skip="$4"
   jq -r \
     --arg engine "$engine" --arg tier "$tier" --arg only "$only" --arg skip "$skip" '
+    def closure($byId):
+      . as $ids
+      | (($ids + ($ids | map($byId[.].requires // []) | flatten)) | unique) as $next
+      | if ($next | length) == ($ids | length) then $ids else ($next | closure($byId)) end;
+
     ($only  | split(",") | map(select(length > 0))) as $only  |
     ($skip  | split(",") | map(select(length > 0))) as $skip  |
     ($tier  | if . == "all" then ["standard","heavy"] else [.] end) as $tiers |
+    (.samples | map({ key: .id, value: . }) | from_entries) as $byId |
     .samples
-    | sort_by(.order)
     | map(select($engine == "all" or .engine == $engine))
-    | map(select(.provision.type != "none"))
     | map(select(($only | length) == 0 or (.id | IN($only[]))))
-    | map(select((.id | IN($skip[])) | not))
     | map(select(($only | length) > 0 or (.tier | IN($tiers[]))))
-    | .[].id' "$MANIFEST"
+    | map(.id)
+    | closure($byId)
+    | map(select(($byId[.].provision.type // "none") != "none"))
+    | map(select((. | IN($skip[])) | not))
+    | sort_by($byId[.].order)
+    | .[]' "$MANIFEST"
+}
+
+# Prerequisites that --skip removed from the selection, so the caller can say so
+# rather than let a sample fail against a base database nobody installed.
+skipped_requirements() {
+  local engine="$1" tier="$2" only="$3" skip="$4"
+  jq -r \
+    --arg engine "$engine" --arg tier "$tier" --arg only "$only" --arg skip "$skip" '
+    ($only | split(",") | map(select(length > 0))) as $only |
+    ($skip | split(",") | map(select(length > 0))) as $skip |
+    ($tier | if . == "all" then ["standard","heavy"] else [.] end) as $tiers |
+    .samples
+    | map(select($engine == "all" or .engine == $engine))
+    | map(select(($only | length) == 0 or (.id | IN($only[]))))
+    | map(select(($only | length) > 0 or (.tier | IN($tiers[]))))
+    | map(select((.id | IN($skip[])) | not))
+    | map(. as $s | (.requires // []) | map(select(IN($skip[])) | "\($s.id) needs \(.)"))
+    | flatten
+    | unique
+    | .[]' "$MANIFEST"
 }
 
 sample_field() { jq -r --arg id "$1" ".samples[] | select(.id == \$id) | $2" "$MANIFEST"; }

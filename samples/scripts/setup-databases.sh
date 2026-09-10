@@ -32,7 +32,7 @@ Options:
   --tier standard|heavy|all   Which tier to install. Default: standard.
                               'heavy' covers the samples that need a very large
                               download or hours of row-by-row inserts.
-  --only  <id>[,<id>...]      Provision exactly these sample ids (ignores --tier).
+  --only  <id>[,<id>...]      Provision these sample ids and their prerequisites (ignores --tier).
   --skip  <id>[,<id>...]      Skip these sample ids.
   --skip-fetch                Reuse samples/.cache as-is; do not fetch or download.
   --status                    Report container and sample state, then exit.
@@ -94,6 +94,13 @@ while IFS= read -r line; do SELECTED+=("$line"); done < <(select_samples "$ENGIN
 ((${#SELECTED[@]} > 0)) || die "No samples matched --engine $ENGINE --tier $TIER${ONLY:+ --only $ONLY}${SKIP:+ --skip $SKIP}."
 
 log "Provisioning ${#SELECTED[@]} sample(s): ${SELECTED[*]}"
+
+# The selection above pulls in each sample's declared prerequisites, so this only
+# fires when --skip removed one on purpose - in which case the dependent sample is
+# about to install against a base database nobody restored.
+while IFS= read -r unmet; do
+  if [[ -n "$unmet" ]]; then warn "$unmet, which --skip excluded - it will install against whatever is already there"; fi
+done < <(skipped_requirements "$ENGINE" "$TIER" "$ONLY" "$SKIP")
 
 # Which engines the selection actually needs, so an --engine oracle run never
 # waits on SQL Server (or downloads a single backup).

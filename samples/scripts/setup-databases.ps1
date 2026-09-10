@@ -12,7 +12,7 @@
     Which tier to install. Default: standard. 'heavy' covers the samples that need
     a very large download or hours of row-by-row inserts.
 .PARAMETER Only
-    Provision exactly these sample ids (ignores -Tier).
+    Provision these sample ids and their prerequisites (ignores -Tier).
 .PARAMETER Skip
     Skip these sample ids.
 .PARAMETER SkipFetch
@@ -71,6 +71,13 @@ if ($selected.Count -eq 0) {
 }
 
 Write-Note "Provisioning $($selected.Count) sample(s): $($selected.id -join ', ')"
+
+# The selection above pulls in each sample's declared prerequisites, so this only
+# fires when -Skip removed one on purpose - in which case the dependent sample is
+# about to install against a base database nobody restored.
+foreach ($unmet in Get-SkippedRequirement -Manifest $manifest -Engine $Engine -Tier $Tier -Only $Only -Skip $Skip) {
+    Write-Warn "$unmet, which -Skip excluded - it will install against whatever is already there"
+}
 
 $needsMssql = [bool]($selected | Where-Object { $_.engine -eq 'mssql' })
 $needsOracle = [bool]($selected | Where-Object { $_.engine -eq 'oracle' })
