@@ -8,3 +8,10 @@ grammar/**/Generated/*.cs -whitespace
 # text conversion for every vendored asset, even on core.autocrlf=true checkouts.
 site/vendor/ai/** -text
 site/vendor/ai/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+
+# The sample fleet's scripts and SQL are fed to Linux containers. A Windows
+# checkout with core.autocrlf=true would hand bash and sqlcmd CRLF line endings,
+# which both mis-handle - keep these LF regardless of platform.
+samples/scripts/**/*.sh text eol=lf
+samples/**/*.sql text eol=lf
+samples/docker/.env.example text eol=lf

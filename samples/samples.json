@@ -1,0 +1,431 @@
+{
+  "$comment": "Single source of truth for samples/. Read by samples/scripts/setup-databases.{sh,ps1} to provision, and by cli/tests/SyncSql.Samples.Benchmark.Tests to know what should have been extracted. Every path under 'upstream' is relative to that source's checkout in samples/.cache/sources/<source>/; every path under 'local' is relative to the sample's own folder.",
+  "version": 1,
+  "sources": {
+    "sql-server-samples": {
+      "repo": "https://github.com/microsoft/sql-server-samples",
+      "ref": "master",
+      "sparseMode": "cone",
+      "sparsePaths": ["samples/demos"],
+      "license": "MIT",
+      "licenseUrl": "https://github.com/microsoft/sql-server-samples/blob/master/license.txt"
+    },
+    "db-sample-schemas": {
+      "repo": "https://github.com/oracle-samples/db-sample-schemas",
+      "ref": "main",
+      "$comment": "Non-cone patterns so the 87 MB of sales_history CSVs and the archived schemas' binary media stay out of the checkout - the install scripts need nothing but SQL.",
+      "sparseMode": "no-cone",
+      "sparsePaths": [
+        "/*.md",
+        "/LICENSE.txt",
+        "/human_resources/**",
+        "/customer_orders/**",
+        "/sales_history/*.sql",
+        "/sales_history/*.md"
+      ],
+      "license": "MIT",
+      "licenseUrl": "https://github.com/oracle-samples/db-sample-schemas/blob/main/LICENSE.txt"
+    }
+  },
+  "downloads": {
+    "AdventureWorks2022.bak": {
+      "url": "https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorks2022.bak",
+      "sizeBytes": 209838080
+    },
+    "AdventureWorksDW2022.bak": {
+      "url": "https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorksDW2022.bak",
+      "sizeBytes": 101834752
+    },
+    "AdventureWorksDW2016_EXT.bak": {
+      "url": "https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorksDW2016_EXT.bak",
+      "sizeBytes": 926232064
+    },
+    "WideWorldImporters-Full.bak": {
+      "url": "https://github.com/Microsoft/sql-server-samples/releases/download/wide-world-importers-v1.0/WideWorldImporters-Full.bak",
+      "sizeBytes": 127111168
+    },
+    "WideWorldImportersDW-Full.bak": {
+      "url": "https://github.com/Microsoft/sql-server-samples/releases/download/wide-world-importers-v1.0/WideWorldImportersDW-Full.bak",
+      "sizeBytes": 50044416
+    }
+  },
+  "samples": [
+    {
+      "id": "adventure-works",
+      "engine": "mssql",
+      "kind": "database",
+      "tier": "standard",
+      "order": 10,
+      "title": "AdventureWorks (OLTP + DW)",
+      "summary": "The classic Microsoft sample databases. Not a demo of its own, but the base every AdventureWorks-based demo in samples/demos reads from.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/databases/adventure-works" },
+      "databases": ["AdventureWorks2022", "AdventureWorksDW2022"],
+      "provision": {
+        "type": "mssql-restore",
+        "restores": [
+          { "backup": "AdventureWorks2022.bak", "database": "AdventureWorks2022" },
+          { "backup": "AdventureWorksDW2022.bak", "database": "AdventureWorksDW2022" }
+        ]
+      }
+    },
+    {
+      "id": "wide-world-importers",
+      "engine": "mssql",
+      "kind": "database",
+      "tier": "standard",
+      "order": 11,
+      "title": "Wide World Importers (OLTP + DW)",
+      "summary": "The modern Microsoft sample databases. Base for the sql-graph and automatic-tuning demos.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/databases/wide-world-importers" },
+      "databases": ["WideWorldImporters", "WideWorldImportersDW"],
+      "provision": {
+        "type": "mssql-restore",
+        "restores": [
+          { "backup": "WideWorldImporters-Full.bak", "database": "WideWorldImporters" },
+          { "backup": "WideWorldImportersDW-Full.bak", "database": "WideWorldImportersDW" }
+        ]
+      }
+    },
+    {
+      "id": "belgrade-product-catalog-demo",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "standard",
+      "order": 20,
+      "title": "Belgrade product catalog",
+      "summary": "JSON columns, system-versioned temporal tables, dynamic data masking, row-level security and a memory-optimized (XTP) table - the densest object graph of any demo here.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/belgrade-product-catalog-demo" },
+      "databases": ["ProductCatalog"],
+      "provision": {
+        "type": "mssql-scripts",
+        "database": "ProductCatalog",
+        "scripts": [
+          { "from": "local", "path": "install/00-prepare.sql" },
+          { "from": "upstream", "path": "sql-scripts/1 setup.sql" },
+          { "from": "upstream", "path": "sql-scripts/3 setup-temporal.sql" },
+          { "from": "upstream", "path": "sql-scripts/5 data-masking.sql" },
+          { "from": "upstream", "path": "sql-scripts/6 rls.sql" },
+          { "from": "upstream", "path": "sql-scripts/7. xtp.sql" }
+        ],
+        "skipped": [
+          { "path": "sql-scripts/0 cleanup.sql", "reason": "Drops everything the other scripts create." },
+          { "path": "sql-scripts/2 json.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "sql-scripts/4 temporal.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "sql-scripts/8. bcp.sql", "reason": "Needs the bcp utility and an existing WideWorldImporters export." },
+          { "path": "sql-scripts/9. string-agg.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "sql-scripts/A1 fraud-detection.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "sql-scripts/A2 compare-products.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "sql-scripts/A3 setup-temporal-3-part-name.sql", "reason": "Alternative to '3 setup-temporal.sql' - the two define History.Product incompatibly, so only one can be installed." }
+        ]
+      }
+    },
+    {
+      "id": "ivs-people-register",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "standard",
+      "order": 21,
+      "title": "IVS people register",
+      "summary": "Ideographic Variation Sequence collations and OPENJSON shredding over Japanese names.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/ivs-people-register" },
+      "databases": ["IvsPeopleRegister"],
+      "provision": {
+        "type": "mssql-scripts",
+        "database": "IvsPeopleRegister",
+        "scripts": [
+          { "from": "upstream", "path": "sql-scripts/1 setup.sql" },
+          { "from": "upstream", "path": "sql-scripts/2 vss.sql" }
+        ]
+      }
+    },
+    {
+      "id": "sql-graph",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "standard",
+      "order": 22,
+      "title": "SQL Graph recommendation system",
+      "summary": "Graph node and edge tables (Nodes./Edges. schemas) added to WideWorldImporters, plus MATCH queries over them.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/sql-graph" },
+      "databases": ["WideWorldImporters"],
+      "requires": ["wide-world-importers"],
+      "provision": {
+        "type": "mssql-scripts",
+        "database": "WideWorldImporters",
+        "scripts": [
+          { "from": "local", "path": "install/00-prepare.sql" },
+          { "from": "upstream", "path": "recommendation-system/before-you-begin.sql" },
+          { "from": "upstream", "path": "recommendation-system/demo1-create-and-populate-nodes-and-edges.sql" },
+          { "from": "upstream", "path": "recommendation-system/demo3-create-and-populate-nodes-and-edges.sql" }
+        ],
+        "skipped": [
+          { "path": "recommendation-system/demo2-using-the-match-clause.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "recommendation-system/demo3-recommendation-system-for-sales.sql", "reason": "Query-only demo script - creates no objects." }
+        ]
+      }
+    },
+    {
+      "id": "automatic-tuning",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "standard",
+      "order": 23,
+      "title": "Automatic tuning",
+      "summary": "The dbo.report procedure the automatic-tuning workload regresses and the engine then force-plans. The Windows Forms workload driver is not installed.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/automatic-tuning" },
+      "databases": ["WideWorldImporters"],
+      "requires": ["wide-world-importers"],
+      "provision": {
+        "type": "mssql-scripts",
+        "database": "WideWorldImporters",
+        "scripts": [
+          { "from": "local", "path": "install/00-prepare.sql" },
+          { "from": "upstream", "path": "WideWorldImporters/dbo/Stored Procedures/report.sql" }
+        ],
+        "skipped": [
+          { "path": "DemoWorkload", "reason": "A .NET Framework Windows Forms workload driver - not a database object." }
+        ]
+      }
+    },
+    {
+      "id": "lqs",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "standard",
+      "order": 24,
+      "title": "Live Query Statistics",
+      "summary": "Two long-running AdventureWorks queries meant to be watched live in SSMS. They create no objects, so the demo contributes its base database only.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/LQS" },
+      "databases": ["AdventureWorks2022"],
+      "requires": ["adventure-works"],
+      "provision": {
+        "type": "none",
+        "reason": "Query-only: both scripts are SELECTs against AdventureWorks, written for SSMS's Live Query Statistics pane. Nothing to install - `adventure-works` already provides the objects they read."
+      }
+    },
+    {
+      "id": "showplan",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "heavy",
+      "order": 25,
+      "title": "Showplan warnings",
+      "summary": "Hash, sort and memory-grant warnings in actual execution plans, against a purpose-built 'memgrants' database.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/Showplan" },
+      "databases": ["memgrants"],
+      "provision": {
+        "type": "mssql-scripts",
+        "database": "memgrants",
+        "scripts": [
+          { "from": "upstream", "path": "MemoryGrant_Warning_Setup.sql" }
+        ],
+        "skipped": [
+          { "path": "HashWarning.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "SortWarning.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "MemoryGrant_Warning.sql", "reason": "Query-only demo script - creates no objects." }
+        ],
+        "note": "The setup script inserts 10,000,000 rows one at a time in a WHILE loop, which takes hours in a container. That is why this sample is tier 'heavy' and is skipped unless you ask for it."
+      }
+    },
+    {
+      "id": "xevents",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "heavy",
+      "order": 26,
+      "title": "Extended Events",
+      "summary": "The same warnings as the Showplan demo, observed through Extended Events sessions instead of showplan XML.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/xEvents" },
+      "databases": ["memgrants"],
+      "requires": ["showplan"],
+      "provision": {
+        "type": "mssql-scripts",
+        "database": "memgrants",
+        "scripts": [
+          { "from": "upstream", "path": "MemoryGrant_XE_Setup.sql" }
+        ],
+        "skipped": [
+          { "path": "HashWarning.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "SortWarning.sql", "reason": "Query-only demo script - creates no objects." },
+          { "path": "MemoryGrant_XE.sql", "reason": "Creates a server-level Extended Events session, not a database object SyncSQL extracts." },
+          { "path": "PerfStats_XE_Demo.sql", "reason": "Creates a server-level Extended Events session, not a database object SyncSQL extracts." }
+        ],
+        "note": "Identical 10,000,000-row setup to the Showplan demo, hence tier 'heavy'."
+      }
+    },
+    {
+      "id": "columnstore",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "heavy",
+      "order": 27,
+      "title": "Rowstore vs columnstore",
+      "summary": "Side-by-side IO comparison of a page-compressed rowstore table against a clustered columnstore index, over the extended AdventureWorksDW tables.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/columnstore" },
+      "databases": ["AdventureWorksDW2016"],
+      "provision": {
+        "type": "mssql-restore",
+        "restores": [
+          { "backup": "AdventureWorksDW2016_EXT.bak", "database": "AdventureWorksDW2016" }
+        ],
+        "note": "The demo query reads FactResellerSalesXL_PageCompressed and FactResellerSalesXL_CCI, which only exist in the 'EXT' backup - an 883 MB download, hence tier 'heavy'. The .sql file itself is query-only and creates no objects."
+      }
+    },
+    {
+      "id": "sqldw",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "unsupported",
+      "order": 28,
+      "title": "SQL Data Warehouse free trial lab",
+      "summary": "PolyBase external data sources, external file formats and external tables over Azure Blob Storage.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/SQLDW" },
+      "databases": [],
+      "provision": {
+        "type": "none",
+        "reason": "Targets a dedicated Azure Synapse SQL pool: the scripts use CREATE EXTERNAL DATA SOURCE over Azure Blob Storage, CTAS with distribution hints, and Synapse-only resource classes. None of it runs on a SQL Server container, and there is no local equivalent to substitute."
+      }
+    },
+    {
+      "id": "plan-comparison",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "unsupported",
+      "order": 29,
+      "title": "Plan comparison",
+      "summary": "Two saved .sqlplan files compared side by side in SSMS, plus a Query Store bacpac and a workload .exe.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/Plan-Comparison" },
+      "databases": [],
+      "provision": {
+        "type": "none",
+        "reason": "Ships no SQL. The offline half is two .sqlplan files opened in SSMS; the Query Store half is a Windows .exe plus a .bacpac that needs SqlPackage and an Azure SQL Database target."
+      }
+    },
+    {
+      "id": "query-tuning-assistant",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "unsupported",
+      "order": 30,
+      "title": "Query Tuning Assistant",
+      "summary": "The SSMS Query Tuning Assistant walkthrough after a compatibility-level upgrade.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/query-tuning-assistant" },
+      "databases": [],
+      "provision": {
+        "type": "none",
+        "reason": "Ships a single qta-demo.zip of SSMS workload artifacts, with no SQL script to install. The walkthrough is driven from the SSMS UI."
+      }
+    },
+    {
+      "id": "azure-sql-edge-demos",
+      "engine": "mssql",
+      "kind": "demo",
+      "tier": "unsupported",
+      "order": 31,
+      "title": "Azure SQL Edge demos",
+      "summary": "IoT and ONNX scoring demos for Azure SQL Edge.",
+      "upstream": { "source": "sql-server-samples", "path": "samples/demos/azure-sql-edge-demos" },
+      "databases": [],
+      "provision": {
+        "type": "none",
+        "reason": "The folder is a readme that redirects to the separate microsoft/sql-server-samples Azure SQL Edge repository; it contains no scripts of its own, and the demos need the Azure SQL Edge image rather than SQL Server."
+      }
+    },
+    {
+      "id": "human-resources",
+      "engine": "oracle",
+      "kind": "schema",
+      "tier": "standard",
+      "order": 40,
+      "title": "HR - Human Resources",
+      "summary": "The small introductory schema: 7 tables, a view, 2 procedures and a trigger. The best first thing to look at in the catalog.",
+      "upstream": { "source": "db-sample-schemas", "path": "human_resources" },
+      "schemas": ["HR"],
+      "provision": {
+        "type": "oracle-install-script",
+        "workdir": "human_resources",
+        "script": "hr_install.sql",
+        "uninstall": "hr_uninstall.sql"
+      }
+    },
+    {
+      "id": "customer-orders",
+      "engine": "oracle",
+      "kind": "schema",
+      "tier": "standard",
+      "order": 41,
+      "title": "CO - Customer Orders",
+      "summary": "The modern e-commerce schema, including JSON columns for semi-structured order data.",
+      "upstream": { "source": "db-sample-schemas", "path": "customer_orders" },
+      "schemas": ["CO"],
+      "provision": {
+        "type": "oracle-install-script",
+        "workdir": "customer_orders",
+        "script": "co_install.sql",
+        "uninstall": "co_uninstall.sql"
+      }
+    },
+    {
+      "id": "sales-history",
+      "engine": "oracle",
+      "kind": "schema",
+      "tier": "standard",
+      "order": 42,
+      "title": "SH - Sales History",
+      "summary": "The star-schema warehouse: fact and dimension tables, materialized views and partitioning - the richest lineage of the three supported Oracle schemas.",
+      "upstream": { "source": "db-sample-schemas", "path": "sales_history" },
+      "schemas": ["SH"],
+      "provision": {
+        "type": "oracle-install-script",
+        "workdir": "sales_history",
+        "script": "sh_install.sql",
+        "uninstall": "sh_uninstall.sql"
+      }
+    },
+    {
+      "id": "order-entry",
+      "engine": "oracle",
+      "kind": "schema",
+      "tier": "unsupported",
+      "order": 43,
+      "title": "OE - Order Entry (archived)",
+      "summary": "The intermediate-complexity schema, with object types, XMLType and spatial columns.",
+      "upstream": { "source": "db-sample-schemas", "path": "order_entry" },
+      "schemas": ["OE"],
+      "provision": {
+        "type": "none",
+        "reason": "Archived upstream and no longer maintained. Unlike HR/CO/SH there is no <schema>_install.sql driver: installing it means running a dozen scripts in order, importing PurchaseOrders.dmp with Data Pump, loading .dat files with SQL*Loader and registering XDB resources - none of which the upstream repository automates or still tests."
+      }
+    },
+    {
+      "id": "online-catalog",
+      "engine": "oracle",
+      "kind": "schema",
+      "tier": "unsupported",
+      "order": 44,
+      "title": "OC - Online Catalog (archived)",
+      "summary": "Object-relational views and types built on top of the OE schema.",
+      "upstream": { "source": "db-sample-schemas", "path": "order_entry" },
+      "schemas": ["OC"],
+      "provision": {
+        "type": "none",
+        "reason": "Archived upstream, and built inside the OE schema (the oc_*.sql scripts live in order_entry/) - so it inherits every OE prerequisite above."
+      }
+    },
+    {
+      "id": "product-media",
+      "engine": "oracle",
+      "kind": "schema",
+      "tier": "unsupported",
+      "order": 45,
+      "title": "PM - Product Media (archived)",
+      "summary": "Print-media LOB types: images, audio, video and formatted documents.",
+      "upstream": { "source": "db-sample-schemas", "path": "product_media" },
+      "schemas": ["PM"],
+      "provision": {
+        "type": "none",
+        "reason": "Archived upstream. Its data is binary media loaded with SQL*Loader through LOB control files, and its column types depend on Oracle Multimedia, which was desupported in 19c and is absent from Oracle Database Free 23ai."
+      }
+    }
+  ]
+}
