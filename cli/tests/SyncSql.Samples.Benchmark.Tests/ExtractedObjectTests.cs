@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using SyncSql.Core.Serialization;
 
 namespace SyncSql.Samples.Benchmark.Tests;

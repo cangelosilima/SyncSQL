@@ -1,4 +1,4 @@
-namespace SyncSql.Samples.Benchmark.Tests;
+﻿namespace SyncSql.Samples.Benchmark.Tests;
 
 /// <summary>
 /// Where the sample fleet lives and whether this run is allowed to touch it.

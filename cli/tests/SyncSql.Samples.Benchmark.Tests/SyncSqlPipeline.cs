@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
@@ -154,6 +154,8 @@ internal sealed class SyncSqlPipeline
                 : (configured, []);
         }
 
-        return ("dotnet", ["run", "--project", SampleFleet.CliProjectPath, "-c", "Release", "--nologo", "--"]);
+        // No --nologo: `dotnet run` does not define it, so it would be forwarded to syncsql
+        // as an argument and rejected there.
+        return ("dotnet", ["run", "--project", SampleFleet.CliProjectPath, "-c", "Release", "--"]);
     }
 }

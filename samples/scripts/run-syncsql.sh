@@ -88,7 +88,9 @@ if ((BUILD)); then
   dotnet build "$CLI_PROJECT" -c Release --nologo --verbosity quiet
 fi
 
-syncsql() { dotnet run --project "$CLI_PROJECT" -c Release --no-build --nologo -- "$@"; }
+# No --nologo here: `dotnet run` does not define it, so it would be forwarded
+# to syncsql as an argument and rejected there.
+syncsql() { dotnet run --project "$CLI_PROJECT" -c Release --no-build -- "$@"; }
 
 log "validate-config"
 syncsql validate-config --config "$CONFIG"

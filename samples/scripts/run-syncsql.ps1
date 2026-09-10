@@ -79,7 +79,9 @@ if (-not $NoBuild) {
 
 function Invoke-SyncSql {
     param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
-    & dotnet run --project $cliProject -c Release --no-build --nologo -- @Arguments
+    # No --nologo here: `dotnet run` does not define it, so it would be forwarded
+    # to syncsql as an argument and rejected there.
+    & dotnet run --project $cliProject -c Release --no-build -- @Arguments
     if ($LASTEXITCODE -ne 0) { throw "syncsql $($Arguments[0]) exited with $LASTEXITCODE." }
 }
 

@@ -1,4 +1,4 @@
-namespace SyncSql.Samples.Benchmark.Tests;
+﻿namespace SyncSql.Samples.Benchmark.Tests;
 
 /// <summary>
 /// A [Fact] that skips itself when the sample fleet is not switched on.

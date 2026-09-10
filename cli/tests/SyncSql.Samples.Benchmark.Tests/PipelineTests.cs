@@ -1,4 +1,4 @@
-namespace SyncSql.Samples.Benchmark.Tests;
+﻿namespace SyncSql.Samples.Benchmark.Tests;
 
 /// <summary>
 /// That the run itself produced what a pipeline would publish. These are the first assertions to look
