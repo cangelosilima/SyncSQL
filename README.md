@@ -873,7 +873,7 @@ only ever get to speak for a name nothing answers to. A prefixed name under
 somebody's own schema (`app.sp_Nightly`) is treated as the user object it is,
 so a missing one is still worth knowing about.
 
-### Local names: temp tables and CTEs
+### Local names: temp tables, CTEs and statement aliases
 
 A temp table (`#Staging`, `##Shared`) and a common table expression are
 referenced exactly like tables, so both used to surface as orphaned references
@@ -883,6 +883,17 @@ tables are dropped in the parser, where the name alone gives them away; CTE
 names need the full set a `WITH` clause declares, so they are filtered once the
 walk is over. Table variables (`@Result`) were already ignored, since the
 parser models them as a distinct node type.
+
+T-SQL's multi-table `DELETE`/`UPDATE` forms are a third case. In
+`DELETE a FROM table_a AS a JOIN table_b AS b ON b.id = a.id` (and the matching
+`UPDATE a SET ... FROM ...`) the statement points at an alias its own `FROM`
+clause declares, and the parser reports that target as a table named `a` -
+so correct, ordinary SQL used to be flagged for a table nothing could ever
+answer to. The target is now recognized as the alias it is and skipped; the
+real target still comes from the `FROM` clause, so the lineage edge to
+`table_a` is unchanged. The match is per statement and by parse-tree identity,
+not by name, so the genuine reference in `DELETE a FROM a AS a` - an alias
+shadowing the very table it stands for - survives.
 
 ### Orphaned reference detection
 
@@ -909,9 +920,10 @@ is missing":
   stays visible without being counted as a bug.
 - A **system object** - see [System objects](#system-objects). Built into the
   engine, so it was never going to be extracted.
-- A **temp table or CTE** - see
-  [Local names](#local-names-temp-tables-and-ctes). Created by the script that
-  reads it.
+- A **temp table, CTE or statement alias** - see
+  [Local names](#local-names-temp-tables-ctes-and-statement-aliases). A name the
+  script creates for itself, whether it names a result the script builds or one
+  of its own `FROM`-clause aliases.
 - A reference recovered from **dynamically-built SQL** that resolves nowhere -
   see [Dynamic SQL and OPENQUERY](#dynamic-sql-and-openquery). The text may be
   assembled from values this analysis cannot know, so a miss proves nothing.

@@ -90,7 +90,8 @@ appears here. It usually means a renamed or dropped target that this caller
 was never updated for.
 
 Deliberately not flagged, because none of them means "the target is missing":
-system objects (above), temp tables and CTE names (created by this very
-script), anything merely ambiguous or outside what gets extracted, and
-references recovered from dynamically-built SQL, whose text may depend on
-values only known at runtime.
+system objects (above), temp tables, CTE names and the FROM-clause aliases a
+multi-table DELETE/UPDATE targets (all names created by this very script),
+anything merely ambiguous or outside what gets extracted, and references
+recovered from dynamically-built SQL, whose text may depend on values only
+known at runtime.

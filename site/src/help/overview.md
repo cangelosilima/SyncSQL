@@ -32,9 +32,9 @@ database, the rest of its server, or a server one linked server away.
 These are usually a renamed or dropped target whose caller was never
 updated. The count is scoped to available analysis, so several things are
 deliberately not counted: a reference into a database nobody extracts, a
-system object the engine provides (`sp_executesql`, `sys.*`), a temp table or
-CTE the script creates for itself, an ambiguous name, and anything recovered
-from SQL built as a string at runtime. That keeps it quiet on
+system object the engine provides (`sp_executesql`, `sys.*`), a temp table,
+CTE or statement alias the script creates for itself, an ambiguous name, and
+anything recovered from SQL built as a string at runtime. That keeps it quiet on
 partially-extracted estates and on ordinary, correct code.
 
 Overview shows the full count. Alerts provides searchable findings and investigation links.
