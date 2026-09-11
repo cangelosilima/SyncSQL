@@ -188,6 +188,7 @@ internal sealed class ReplicationRow
     public string? PublicationName { get; set; }
     public string? Description { get; set; }
     public string? Articles { get; set; }
+    public string? SourceDefinitions { get; set; }
 }
 
 internal sealed class LinkedServerRow

@@ -39,6 +39,9 @@ public sealed record ExtractedObject
 {
     public required string Server { get; init; }
     public required string Database { get; init; }
+    /// <summary>Database routing context for BEGIN DIALOG; not part of the logical object identity.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ServiceBrokerGuid { get; init; }
     public string? Schema { get; init; }
     public required string Type { get; init; }
     public required string Name { get; init; }

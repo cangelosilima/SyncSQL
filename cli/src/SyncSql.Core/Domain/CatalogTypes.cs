@@ -30,6 +30,10 @@ public sealed record CatalogNode
     [JsonPropertyName("database")]
     public required string Database { get; init; }
 
+    [JsonPropertyName("serviceBrokerGuid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ServiceBrokerGuid { get; init; }
+
     [JsonPropertyName("schema")]
     public string? Schema { get; init; }
 

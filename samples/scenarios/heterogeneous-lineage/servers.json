@@ -32,7 +32,12 @@
       "StoredProcedures",
       "Functions",
       "Triggers",
-      "LinkedServers"
+      "LinkedServers",
+      "Replication",
+      "MessageTypes",
+      "Contracts",
+      "Queues",
+      "Services"
     ]
   },
   "discovery": {

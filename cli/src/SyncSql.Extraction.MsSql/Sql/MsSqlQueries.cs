@@ -9,6 +9,8 @@ internal static class MsSqlQueries
 {
     public const string Databases = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name;";
 
+    public const string ServiceBrokerGuid = "SELECT service_broker_guid FROM sys.databases WHERE database_id = DB_ID();";
+
     public const string ColumnDefinitions = """
         SELECT c.object_id AS ObjectId, c.name AS ColumnName, ty.name AS TypeName, SCHEMA_NAME(ty.schema_id) AS TypeSchema,
             ty.is_user_defined AS IsUserDefined, c.max_length AS MaxLength, c.precision AS Precision, c.scale AS Scale,
@@ -444,7 +446,8 @@ internal static class MsSqlQueries
     public const string Replication = """
         IF OBJECT_ID('dbo.syspublications') IS NULL
         BEGIN
-            SELECT CAST(NULL AS sysname) AS PublicationName, CAST(NULL AS NVARCHAR(MAX)) AS Description, CAST(NULL AS NVARCHAR(MAX)) AS Articles WHERE 1 = 0;
+            SELECT CAST(NULL AS sysname) AS PublicationName, CAST(NULL AS NVARCHAR(MAX)) AS Description,
+                CAST(NULL AS NVARCHAR(MAX)) AS Articles, CAST(NULL AS NVARCHAR(MAX)) AS SourceDefinitions WHERE 1 = 0;
         END
         ELSE
         BEGIN
@@ -457,7 +460,13 @@ internal static class MsSqlQueries
                     WHERE a.pubid = p.pubid
                     ORDER BY a.name
                     FOR XML PATH(''), TYPE
-                ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS Articles
+                ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS Articles,
+                (SELECT 'EXEC sys.sp_addarticle @publication = N''' + REPLACE(p.name, '''', '''''')
+                    + ''', @article = N''' + REPLACE(a.name, '''', '''''')
+                    + ''', @source_owner = N''' + REPLACE(OBJECT_SCHEMA_NAME(a.objid), '''', '''''')
+                    + ''', @source_object = N''' + REPLACE(OBJECT_NAME(a.objid), '''', '''''') + ''';' + CHAR(10)
+                 FROM dbo.sysarticles a WHERE a.pubid = p.pubid ORDER BY a.name
+                 FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS SourceDefinitions
             FROM dbo.syspublications p
             ORDER BY p.name;
         END

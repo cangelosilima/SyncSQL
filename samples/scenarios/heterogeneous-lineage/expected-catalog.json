@@ -2406,6 +2406,346 @@
         "ID",
         "AMOUNT"
       ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": null,
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": null,
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Queues/ORDER_ENTRY/EVENT_OUTBOX",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": null,
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": null,
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Queues/INVOICING/EVENT_OUTBOX",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": null,
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": null,
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Queues/INVENTORY/EVENT_OUTBOX",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": null,
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": null,
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Queues/REPORTING/EVENT_OUTBOX",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": null,
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": null,
+      "type": "Replication",
+      "name": "Commerce_ITEMS_PUBLICATION",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": null,
+      "type": "Replication",
+      "name": "Distribution_ITEMS_PUBLICATION",
+      "columns": []
     }
   ],
   "dependencies": [
@@ -3271,6 +3611,294 @@
       "from": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
       "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
       "via": "ATLAS_SQL/_ServerLevel/LinkedServers/MERIDIAN_SQL",
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER",
+      "to": "ATLAS_SQL/Commerce/Queues/ORDER_ENTRY/EVENT_OUTBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER",
+      "to": "ATLAS_SQL/Receivables/Queues/INVOICING/EVENT_OUTBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER",
+      "to": "MERIDIAN_SQL/Distribution/Queues/INVENTORY/EVENT_OUTBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER",
+      "to": "MERIDIAN_SQL/Intelligence/Queues/REPORTING/EVENT_OUTBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "via": null,
       "dynamic": false
     }
   ],
@@ -4198,6 +4826,62 @@
       "permission": "SELECT",
       "state": "GRANT",
       "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "user": "ORDER_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "user": "INVOICING_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "user": "FINANCE_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "user": "INVENTORY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "user": "STOCK_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "user": "REPORTING_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "user": "REPORT_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
     }
   ],
   "paths": [
@@ -4250,6 +4934,84 @@
       "nodes": [
         "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_STOCK",
         "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+        "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS"
+      ]
+    },
+    {
+      "name": "Commerce Broker sender > receiver > queue",
+      "nodes": [
+        "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+        "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+        "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX"
+      ]
+    },
+    {
+      "name": "Commerce Broker receiver > contract > message",
+      "nodes": [
+        "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+        "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+        "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT"
+      ]
+    },
+    {
+      "name": "Receivables Broker sender > receiver > queue",
+      "nodes": [
+        "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+        "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+        "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX"
+      ]
+    },
+    {
+      "name": "Receivables Broker receiver > contract > message",
+      "nodes": [
+        "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+        "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+        "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT"
+      ]
+    },
+    {
+      "name": "Distribution Broker sender > receiver > queue",
+      "nodes": [
+        "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+        "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+        "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX"
+      ]
+    },
+    {
+      "name": "Distribution Broker receiver > contract > message",
+      "nodes": [
+        "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+        "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+        "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT"
+      ]
+    },
+    {
+      "name": "Intelligence Broker sender > receiver > queue",
+      "nodes": [
+        "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+        "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+        "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX"
+      ]
+    },
+    {
+      "name": "Intelligence Broker receiver > contract > message",
+      "nodes": [
+        "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+        "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+        "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT"
+      ]
+    },
+    {
+      "name": "Commerce publication > source table",
+      "nodes": [
+        "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+        "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS"
+      ]
+    },
+    {
+      "name": "Distribution publication > source table",
+      "nodes": [
+        "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
         "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS"
       ]
     }

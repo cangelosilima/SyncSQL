@@ -10,10 +10,10 @@ import { findObjectsForGrantee } from '../lib/grants'
 
 const catalog = snapshot as unknown as Catalog
 
-it('offers all six paths, preserves repeated cycle endpoints and links every object', () => {
+it('offers all scenario paths, preserves repeated cycle endpoints and links every object', () => {
   const { container } = render(<MemoryRouter><BenchmarkExample catalog={catalog} /></MemoryRouter>)
   expect(screen.getByRole('heading', { name: 'Helios, Atlas & Meridian' })).toBeVisible()
-  expect(container.querySelectorAll('details')).toHaveLength(6)
+  expect(container.querySelectorAll('details')).toHaveLength(catalog.example!.paths.length)
   expect(container.querySelectorAll('ol li')).toHaveLength(catalog.example!.paths.reduce((sum, path) => sum + path.nodes.length, 0))
   for (const link of container.querySelectorAll<HTMLAnchorElement>('ol a')) {
     expect(buildIndex(catalog).byId.has(link.getAttribute('href')!.slice('/object/'.length))).toBe(true)

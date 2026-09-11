@@ -7,7 +7,7 @@
 /// </summary>
 internal static class ReplicationDdlBuilder
 {
-    public static string Build(string publicationName, string? description, string? articlesCsv)
+    public static string Build(string publicationName, string? description, string? articlesCsv, string? sourceDefinitions = null)
     {
         List<string> lines = [$"-- Publication: {publicationName}"];
 
@@ -30,6 +30,11 @@ internal static class ReplicationDdlBuilder
         }
 
         lines.Add("-- Subscribers are not enumerated - see Replication Monitor for current subscription state.");
+        if (!string.IsNullOrWhiteSpace(sourceDefinitions))
+        {
+            lines.Add("-- Article source declarations for lineage; not a complete replication deployment script.");
+            lines.Add(sourceDefinitions.TrimEnd());
+        }
         return string.Join('\n', lines);
     }
 }

@@ -2,7 +2,8 @@
 
 A first-party scenario with an independent, engine-neutral expected catalog. It
 tests extraction, object identities, explicit grants, linked-hop attribution,
-package implementation dependencies and cycles.
+package implementation dependencies, cycles, replication publications and Service
+Broker messaging.
 
 | Server | Database/service | Schemas |
 |---|---|---|
@@ -17,7 +18,7 @@ tables, two views, two procedures, a function and a trigger. Additional objects
 exercise remote paths. Oracle also has PROCUREMENT_API and COMPLIANCE_API, each
 with ten callable functions and a separate specification/body.
 
-There are **174 catalog objects**, **144 semantic dependencies**, and **48 workload
+There are **208 catalog objects**, **192 semantic dependencies**, and **48 workload
 users**: three per schema (42), plus three for each Oracle package (6). Schema
 owners and engine administrators are infrastructure accounts outside that total.
 Packages are not schemas and cannot own tables or triggers.
@@ -33,6 +34,110 @@ lineage traversal entry points into every chain and cycle.
 Objects deliberately reuse names such as ITEMS and P_READ across different,
 uniquely named schemas. The two Oracle owners both declare REMOTE, pointing to
 different SQL Server instances. This catches resolution that loses scope.
+
+## Bigger picture
+
+Solid arrows below show declared dependencies and local Broker message flow.
+Dashed arrows cross a server boundary; their labels describe execution support.
+Publication arrows identify article sources, not subscriber delivery. Database
+links remain owner-scoped even where this overview groups their destinations.
+
+```mermaid
+flowchart TB
+    subgraph atlas["ATLAS_SQL · SQL Server"]
+        subgraph commerce["Commerce"]
+            orders["ORDER_ENTRY · FULFILLMENT · ORDER_AUDIT"]
+            commercePub["Commerce_ITEMS_PUBLICATION"]
+            commerceArticles["ORDER_ENTRY.ITEMS + FULFILLMENT.ITEMS"]
+            commerceBroker["Broker: ORDER_ENTRY → ORDER_AUDIT"]
+            commercePub -->|"2 articles"| commerceArticles
+            orders --> commerceBroker
+        end
+        subgraph receivables["Receivables"]
+            billing["INVOICING · SETTLEMENT · FINANCE_AUDIT"]
+            billingBroker["Broker: INVOICING → FINANCE_AUDIT"]
+            billing --> billingBroker
+        end
+        orders -->|"V_BILLING"| billing
+    end
+    subgraph meridian["MERIDIAN_SQL · SQL Server"]
+        subgraph distribution["Distribution"]
+            stock["INVENTORY · DISPATCH · STOCK_AUDIT"]
+            stockPub["Distribution_ITEMS_PUBLICATION"]
+            stockArticles["INVENTORY.ITEMS + DISPATCH.ITEMS"]
+            stockBroker["Broker: INVENTORY → STOCK_AUDIT"]
+            stockPub -->|"2 articles"| stockArticles
+            stock --> stockBroker
+        end
+        subgraph intelligence["Intelligence"]
+            reports["REPORTING · ANALYTICS_ETL · REPORT_AUDIT"]
+            reportsBroker["Broker: REPORTING → REPORT_AUDIT"]
+            reports --> reportsBroker
+        end
+    end
+    subgraph helios["HELIOS_ORACLE · FREEPDB1"]
+        procurement["PROCUREMENT + PROCUREMENT_API"]
+        compliance["COMPLIANCE + COMPLIANCE_API"]
+        procurement -->|"P_SCHEMA → package → body → ITEMS"| compliance
+    end
+    orders -.->|"SQL linked server: reads + lineage"| stock
+    stock -.->|"SQL linked server: procedure chains"| orders
+    orders -.->|"Oracle links: metadata only on Linux"| procurement
+    stock -.->|"Oracle link: metadata only on Linux"| compliance
+    procurement -.->|"REMOTE: optional gateway"| orders
+    procurement -.->|"BILLING_REMOTE: optional gateway"| billing
+    compliance -.->|"REMOTE: optional gateway"| stock
+    compliance -.->|"BI_REMOTE: optional gateway"| reports
+    subgraph brokerPattern["Broker pattern · repeated locally in each SQL database"]
+        send["P_SEND_EVENT reads source ITEMS"]
+        service["ITEM_EVENT_SENDER → ITEM_EVENT_RECEIVER"]
+        inbox["audit schema EVENT_INBOX"]
+        receive["P_RECEIVE_EVENT → audit AUDIT_LOG"]
+        contract["ITEM_EVENT_CONTRACT → ITEM_EVENT message type"]
+        send --> service --> inbox --> receive
+        service --> contract
+    end
+```
+
+## Replication and Service Broker
+
+Two real transactional publications each publish two existing `ITEMS` tables:
+`Commerce_ITEMS_PUBLICATION` on ATLAS_SQL and `Distribution_ITEMS_PUBLICATION` on
+MERIDIAN_SQL. Both instances have a local `lineage_distribution` infrastructure
+database, excluded from catalog extraction. The benchmark recreates publications
+on reruns and compares all four article-to-source dependencies. Article names
+include their schema to distinguish tables with the same name.
+
+This scenario does not configure subscriptions or assert replicated row delivery.
+SQL Server Agent stays disabled so replication jobs do not run; SQL Server may
+create infrastructure jobs when publications are registered. Extracted
+publication SQL is an informational snapshot with article source declarations,
+not a complete replication deployment script.
+
+All four SQL databases enable Service Broker and contain a message type, a
+contract, two queues, two services and two procedures. Names deliberately repeat
+across databases. `P_SEND_EVENT` reads the source schema's `ITEMS`, builds an XML
+message and sends it to the audit service. `P_RECEIVE_EVENT` receives the message
+and inserts its values into the audit schema's `AUDIT_LOG`. Queue activation is
+not configured; the benchmark invokes the receiver explicitly.
+
+| Database | Sender schema | Receiver schema |
+|---|---|---|
+| Commerce | ORDER_ENTRY | ORDER_AUDIT |
+| Receivables | INVOICING | FINANCE_AUDIT |
+| Distribution | INVENTORY | STOCK_AUDIT |
+| Intelligence | REPORTING | REPORT_AUDIT |
+
+The existing EXEC users receive execution rights on their respective procedures,
+which run as owner. The live check sends as the source EXEC user, verifies that
+the READ user cannot execute the sender, receives as the audit EXEC user, checks
+the delivered payload, completes the EndDialog handshake and removes probe rows.
+Messaging stays within each database; no cross-instance Broker transport is
+claimed. `benchmark.json` records Broker execution, publication metadata and the
+replication delivery boundary separately.
+
+References: [SQL Server replication distribution setup](https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-adddistributiondb-transact-sql),
+[Service Broker objects](https://learn.microsoft.com/en-us/sql/database-engine/service-broker/creating-service-broker-objects).
 
 ## Run
 
@@ -69,7 +174,7 @@ tests always run the offline contract and skip only the Docker test.
 ## Contract and test design
 
 - [expected-catalog.json](expected-catalog.json) contains identities, columns,
-  explicit privileges, attributed dependencies and six named paths. It contains
+  explicit privileges, attributed dependencies and sixteen named paths. It contains
   no SQL or parser output and is never updated from a benchmark run.
 - [objects.json](objects.json) contains independently authored SQL and metadata
   for the offline catalog test. The provisioner executes the SQL and GRANT/DENY
@@ -84,6 +189,10 @@ owner-scoped links and package calls. It now exercises the production analyzers,
 serializer and catalog builder. The live test provisions, logs in as every workload
 user, checks allowed and forbidden table access, then invokes the real CLI:
 validate-config, sync, metrics update and catalog build.
+
+It also verifies the publication article metadata and four local Broker flows
+before extraction. The offline contract checks Broker namespaces, source-table
+references, queue/service/contract/message dependencies and their named paths.
 
 Both compare exact object, column, grant and edge sets. Extra edges fail just like
 missing ones. Paths follow attributed linked-server references, so a shared link

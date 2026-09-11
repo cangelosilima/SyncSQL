@@ -44,12 +44,17 @@ public sealed class HeterogeneousLiveTests(ITestOutputHelper output)
         Dictionary<string, double> timings = [];
         bool passed = false;
         bool gatewayPassed = false;
+        bool messagingPassed = false;
         using CancellationTokenSource timeout = new(TimeSpan.FromMinutes(20));
         Stopwatch watch = Stopwatch.StartNew();
         try
         {
             await new HeterogeneousFleet().ProvisionAsync(timeout.Token);
             timings["provisionSeconds"] = watch.Elapsed.TotalSeconds;
+            watch.Restart();
+            await HeterogeneousMessaging.AssertAsync(timeout.Token);
+            messagingPassed = true;
+            timings["messagingSeconds"] = watch.Elapsed.TotalSeconds;
             watch.Restart();
             await AssertUserAccessAsync(timeout.Token);
             await AssertOwnerExtractionAsync(timeout.Token);
@@ -81,6 +86,11 @@ public sealed class HeterogeneousLiveTests(ITestOutputHelper output)
                 ParsedObjectFile parsed = ExtractedObjectFile.Parse(await File.ReadAllLinesAsync(path, timeout.Token));
                 Assert.NotNull(parsed.Identity);
                 Assert.Equal(node.Server, parsed.Identity.Server);
+                Assert.Equal(node.ServiceBrokerGuid, parsed.Identity.ServiceBrokerGuid);
+                if (node.Engine == DatabaseEngine.MsSql && node.Database != "_ServerLevel")
+                {
+                    Assert.NotNull(node.ServiceBrokerGuid);
+                }
             }
             // Packages are catalog objects; each body must preserve all ten callable members.
             foreach (CatalogNode package in catalog.Nodes.Where(n => n.Type == "PackageBodies"))
@@ -105,6 +115,9 @@ public sealed class HeterogeneousLiveTests(ITestOutputHelper output)
                 scenario = "heterogeneous-lineage",
                 passed,
                 timings,
+                serviceBrokerExecution = messagingPassed ? "passed: four database-local send/receive flows, permissions and EndDialog" : "failed or not reached",
+                replicationPublications = messagingPassed ? "passed: two transactional publications, four article sources" : "failed or not reached",
+                replicationDelivery = "not configured: no subscriptions; SQL Server Agent disabled; publication metadata and source lineage only",
                 oracleLinkedServerRegistration = "metadata-only: labelled MSOLEDBSQL transport placeholders; Linux rejects Oracle OLE DB registration",
                 oracleToSqlServerExecution = gatewayPassed ? "passed: dg4msql, four databases, both schemas, workload permissions and SQL linked-server hop"
                     : HeterogeneousFleet.GatewayEnabled ? "failed or not reached" : "not requested: run with -Gateway / --gateway",

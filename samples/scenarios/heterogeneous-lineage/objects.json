@@ -3690,5 +3690,443 @@
         "column": null
       }
     ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": null,
+    "type": "MessageTypes",
+    "name": "ITEM_EVENT",
+    "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION dbo VALIDATION = WELL_FORMED_XML;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": null,
+    "type": "Contracts",
+    "name": "ITEM_EVENT_CONTRACT",
+    "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION dbo ([ITEM_EVENT] SENT BY INITIATOR);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Queues",
+    "name": "EVENT_OUTBOX",
+    "ddl": "CREATE QUEUE ORDER_ENTRY.EVENT_OUTBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Queues",
+    "name": "EVENT_INBOX",
+    "ddl": "CREATE QUEUE ORDER_AUDIT.EVENT_INBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_SENDER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION dbo ON QUEUE ORDER_ENTRY.EVENT_OUTBOX;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_RECEIVER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION dbo ON QUEUE ORDER_AUDIT.EVENT_INBOX ([ITEM_EVENT_CONTRACT]);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_SEND_EVENT",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM ORDER_ENTRY.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_RECEIVE_EVENT",
+    "ddl": "CREATE PROCEDURE ORDER_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM ORDER_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO ORDER_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": null,
+    "type": "MessageTypes",
+    "name": "ITEM_EVENT",
+    "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION dbo VALIDATION = WELL_FORMED_XML;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": null,
+    "type": "Contracts",
+    "name": "ITEM_EVENT_CONTRACT",
+    "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION dbo ([ITEM_EVENT] SENT BY INITIATOR);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Queues",
+    "name": "EVENT_OUTBOX",
+    "ddl": "CREATE QUEUE INVOICING.EVENT_OUTBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Queues",
+    "name": "EVENT_INBOX",
+    "ddl": "CREATE QUEUE FINANCE_AUDIT.EVENT_INBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_SENDER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION dbo ON QUEUE INVOICING.EVENT_OUTBOX;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_RECEIVER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION dbo ON QUEUE FINANCE_AUDIT.EVENT_INBOX ([ITEM_EVENT_CONTRACT]);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "StoredProcedures",
+    "name": "P_SEND_EVENT",
+    "ddl": "CREATE PROCEDURE INVOICING.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM INVOICING.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVOICING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_RECEIVE_EVENT",
+    "ddl": "CREATE PROCEDURE FINANCE_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM FINANCE_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO FINANCE_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": null,
+    "type": "MessageTypes",
+    "name": "ITEM_EVENT",
+    "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION dbo VALIDATION = WELL_FORMED_XML;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": null,
+    "type": "Contracts",
+    "name": "ITEM_EVENT_CONTRACT",
+    "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION dbo ([ITEM_EVENT] SENT BY INITIATOR);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Queues",
+    "name": "EVENT_OUTBOX",
+    "ddl": "CREATE QUEUE INVENTORY.EVENT_OUTBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Queues",
+    "name": "EVENT_INBOX",
+    "ddl": "CREATE QUEUE STOCK_AUDIT.EVENT_INBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_SENDER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION dbo ON QUEUE INVENTORY.EVENT_OUTBOX;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_RECEIVER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION dbo ON QUEUE STOCK_AUDIT.EVENT_INBOX ([ITEM_EVENT_CONTRACT]);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "StoredProcedures",
+    "name": "P_SEND_EVENT",
+    "ddl": "CREATE PROCEDURE INVENTORY.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM INVENTORY.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_RECEIVE_EVENT",
+    "ddl": "CREATE PROCEDURE STOCK_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM STOCK_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO STOCK_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": null,
+    "type": "MessageTypes",
+    "name": "ITEM_EVENT",
+    "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION dbo VALIDATION = WELL_FORMED_XML;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": null,
+    "type": "Contracts",
+    "name": "ITEM_EVENT_CONTRACT",
+    "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION dbo ([ITEM_EVENT] SENT BY INITIATOR);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Queues",
+    "name": "EVENT_OUTBOX",
+    "ddl": "CREATE QUEUE REPORTING.EVENT_OUTBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Queues",
+    "name": "EVENT_INBOX",
+    "ddl": "CREATE QUEUE REPORT_AUDIT.EVENT_INBOX WITH STATUS = ON, RETENTION = OFF;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_SENDER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION dbo ON QUEUE REPORTING.EVENT_OUTBOX;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": null,
+    "type": "Services",
+    "name": "ITEM_EVENT_RECEIVER",
+    "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION dbo ON QUEUE REPORT_AUDIT.EVENT_INBOX ([ITEM_EVENT_CONTRACT]);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "StoredProcedures",
+    "name": "P_SEND_EVENT",
+    "ddl": "CREATE PROCEDURE REPORTING.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM REPORTING.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "REPORTING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_RECEIVE_EVENT",
+    "ddl": "CREATE PROCEDURE REPORT_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM REPORT_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO REPORT_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": null,
+    "type": "Replication",
+    "name": "Commerce_ITEMS_PUBLICATION",
+    "ddl": "EXEC sys.sp_addpublication @publication = N'Commerce_ITEMS_PUBLICATION', @description = N'Commerce item sources for the lineage benchmark', @repl_freq = N'continuous', @status = N'active', @independent_agent = N'true';\nEXEC sys.sp_addarticle @publication = N'Commerce_ITEMS_PUBLICATION', @article = N'ORDER_ENTRY_ITEMS', @source_owner = N'ORDER_ENTRY', @source_object = N'ITEMS', @type = N'logbased', @pre_creation_cmd = N'none';\nEXEC sys.sp_addarticle @publication = N'Commerce_ITEMS_PUBLICATION', @article = N'FULFILLMENT_ITEMS', @source_owner = N'FULFILLMENT', @source_object = N'ITEMS', @type = N'logbased', @pre_creation_cmd = N'none';",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": null,
+    "type": "Replication",
+    "name": "Distribution_ITEMS_PUBLICATION",
+    "ddl": "EXEC sys.sp_addpublication @publication = N'Distribution_ITEMS_PUBLICATION', @description = N'Distribution item sources for the lineage benchmark', @repl_freq = N'continuous', @status = N'active', @independent_agent = N'true';\nEXEC sys.sp_addarticle @publication = N'Distribution_ITEMS_PUBLICATION', @article = N'INVENTORY_ITEMS', @source_owner = N'INVENTORY', @source_object = N'ITEMS', @type = N'logbased', @pre_creation_cmd = N'none';\nEXEC sys.sp_addarticle @publication = N'Distribution_ITEMS_PUBLICATION', @article = N'DISPATCH_ITEMS', @source_owner = N'DISPATCH', @source_object = N'ITEMS', @type = N'logbased', @pre_creation_cmd = N'none';",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
   }
 ]

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T02:14:11.7648835+00:00",
+  "generatedAt": "2026-09-11T06:09:30.3563657+00:00",
   "servers": [
     "ATLAS_SQL",
     "HELIOS_ORACLE",
@@ -7,11 +7,16 @@
   ],
   "typeCounts": {
     "LinkedServers": 4,
+    "Contracts": 4,
+    "MessageTypes": 4,
+    "Replication": 2,
+    "Services": 8,
     "Functions": 14,
-    "StoredProcedures": 32,
+    "StoredProcedures": 40,
     "Tables": 56,
     "Triggers": 14,
     "Views": 30,
+    "Queues": 8,
     "DatabaseLinks": 6,
     "PackageBodies": 2,
     "Packages": 2,
@@ -85,6 +90,330 @@
       "grants": [],
       "sections": [],
       "sizeBytes": 1571,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "qualifiedName": "ITEM_EVENT_CONTRACT",
+      "path": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT.sql",
+      "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION [dbo] ([ITEM_EVENT] SENT BY INITIATOR);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "qualifiedName": "ITEM_EVENT",
+      "path": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT.sql",
+      "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION [dbo] VALIDATION = WELL_FORMED_XML;",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 82,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "type": "Replication",
+      "name": "Commerce_ITEMS_PUBLICATION",
+      "qualifiedName": "Commerce_ITEMS_PUBLICATION",
+      "path": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION.sql",
+      "ddl": "-- Publication: Commerce_ITEMS_PUBLICATION\n-- Description: Commerce item sources for the lineage benchmark\n-- Articles (replicated objects):\n--   - FULFILLMENT_ITEMS\n--   - ORDER_ENTRY_ITEMS\n-- Subscribers are not enumerated - see Replication Monitor for current subscription state.\n-- Article source declarations for lineage; not a complete replication deployment script.\nEXEC sys.sp_addarticle @publication = N'Commerce_ITEMS_PUBLICATION', @article = N'FULFILLMENT_ITEMS', @source_owner = N'FULFILLMENT', @source_object = N'ITEMS';\nEXEC sys.sp_addarticle @publication = N'Commerce_ITEMS_PUBLICATION', @article = N'ORDER_ENTRY_ITEMS', @source_owner = N'ORDER_ENTRY', @source_object = N'ITEMS';",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 694,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "qualifiedName": "ITEM_EVENT_RECEIVER",
+      "path": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION [dbo] ON QUEUE [ORDER_AUDIT].[EVENT_INBOX] ([ITEM_EVENT_CONTRACT]);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 118,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "qualifiedName": "ITEM_EVENT_SENDER",
+      "path": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION [dbo] ON QUEUE [ORDER_ENTRY].[EVENT_OUTBOX];",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 93,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "qualifiedName": "ITEM_EVENT_CONTRACT",
+      "path": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT.sql",
+      "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION [dbo] ([ITEM_EVENT] SENT BY INITIATOR);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "qualifiedName": "ITEM_EVENT",
+      "path": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT.sql",
+      "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION [dbo] VALIDATION = WELL_FORMED_XML;",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 82,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "qualifiedName": "ITEM_EVENT_RECEIVER",
+      "path": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION [dbo] ON QUEUE [FINANCE_AUDIT].[EVENT_INBOX] ([ITEM_EVENT_CONTRACT]);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 120,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "qualifiedName": "ITEM_EVENT_SENDER",
+      "path": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION [dbo] ON QUEUE [INVOICING].[EVENT_OUTBOX];",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "qualifiedName": "ITEM_EVENT_CONTRACT",
+      "path": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT.sql",
+      "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION [dbo] ([ITEM_EVENT] SENT BY INITIATOR);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "qualifiedName": "ITEM_EVENT",
+      "path": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT.sql",
+      "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION [dbo] VALIDATION = WELL_FORMED_XML;",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 82,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "type": "Replication",
+      "name": "Distribution_ITEMS_PUBLICATION",
+      "qualifiedName": "Distribution_ITEMS_PUBLICATION",
+      "path": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION.sql",
+      "ddl": "-- Publication: Distribution_ITEMS_PUBLICATION\n-- Description: Distribution item sources for the lineage benchmark\n-- Articles (replicated objects):\n--   - DISPATCH_ITEMS\n--   - INVENTORY_ITEMS\n-- Subscribers are not enumerated - see Replication Monitor for current subscription state.\n-- Article source declarations for lineage; not a complete replication deployment script.\nEXEC sys.sp_addarticle @publication = N'Distribution_ITEMS_PUBLICATION', @article = N'DISPATCH_ITEMS', @source_owner = N'DISPATCH', @source_object = N'ITEMS';\nEXEC sys.sp_addarticle @publication = N'Distribution_ITEMS_PUBLICATION', @article = N'INVENTORY_ITEMS', @source_owner = N'INVENTORY', @source_object = N'ITEMS';",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 695,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "qualifiedName": "ITEM_EVENT_RECEIVER",
+      "path": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION [dbo] ON QUEUE [STOCK_AUDIT].[EVENT_INBOX] ([ITEM_EVENT_CONTRACT]);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 118,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "qualifiedName": "ITEM_EVENT_SENDER",
+      "path": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION [dbo] ON QUEUE [INVENTORY].[EVENT_OUTBOX];",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "type": "Contracts",
+      "name": "ITEM_EVENT_CONTRACT",
+      "qualifiedName": "ITEM_EVENT_CONTRACT",
+      "path": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT.sql",
+      "ddl": "CREATE CONTRACT [ITEM_EVENT_CONTRACT] AUTHORIZATION [dbo] ([ITEM_EVENT] SENT BY INITIATOR);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "type": "MessageTypes",
+      "name": "ITEM_EVENT",
+      "qualifiedName": "ITEM_EVENT",
+      "path": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT.sql",
+      "ddl": "CREATE MESSAGE TYPE [ITEM_EVENT] AUTHORIZATION [dbo] VALIDATION = WELL_FORMED_XML;",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 82,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "type": "Services",
+      "name": "ITEM_EVENT_RECEIVER",
+      "qualifiedName": "ITEM_EVENT_RECEIVER",
+      "path": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_RECEIVER] AUTHORIZATION [dbo] ON QUEUE [REPORT_AUDIT].[EVENT_INBOX] ([ITEM_EVENT_CONTRACT]);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 119,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "type": "Services",
+      "name": "ITEM_EVENT_SENDER",
+      "qualifiedName": "ITEM_EVENT_SENDER",
+      "path": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER.sql",
+      "ddl": "CREATE SERVICE [ITEM_EVENT_SENDER] AUTHORIZATION [dbo] ON QUEUE [REPORTING].[EVENT_OUTBOX];",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 91,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -198,7 +527,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -236,7 +565,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -256,7 +585,7 @@
       "name": "ITEMS",
       "qualifiedName": "FULFILLMENT.ITEMS",
       "path": "ATLAS_SQL/Commerce/FULFILLMENT/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [FULFILLMENT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27DF54BA34] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [FULFILLMENT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27940BC4D6] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -305,14 +634,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC27DF54BA34",
+              "name": "PK__ITEMS__3214EC27940BC4D6",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -323,7 +652,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC27DF54BA34"
+              "name": "PK__ITEMS__3214EC27940BC4D6"
             }
           ]
         }
@@ -357,7 +686,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -475,6 +804,25 @@
       "engine": "mssql"
     },
     {
+      "id": "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "qualifiedName": "ORDER_AUDIT.EVENT_INBOX",
+      "path": "ATLAS_SQL/Commerce/ORDER_AUDIT/Queues/EVENT_INBOX.sql",
+      "ddl": "CREATE QUEUE [ORDER_AUDIT].[EVENT_INBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 114,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_READ",
       "server": "ATLAS_SQL",
       "database": "Commerce",
@@ -500,6 +848,37 @@
         }
       ],
       "sizeBytes": 135,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "qualifiedName": "ORDER_AUDIT.P_RECEIVE_EVENT",
+      "path": "ATLAS_SQL/Commerce/ORDER_AUDIT/StoredProcedures/P_RECEIVE_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE ORDER_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM ORDER_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO ORDER_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "ORDER_AUDIT_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[ORDER_AUDIT].[P_RECEIVE_EVENT] TO [ORDER_AUDIT_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 695,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -563,13 +942,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
-          "reservedKB": 0,
-          "dataKB": 0,
+          "reservedKB": 72,
+          "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_74AE54BC",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.3266667+00:00"
+            },
+            {
+              "name": "_WA_Sys_00000002_74AE54BC",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.3233333+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -601,7 +997,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -621,7 +1017,7 @@
       "name": "ITEMS",
       "qualifiedName": "ORDER_AUDIT.ITEMS",
       "path": "ATLAS_SQL/Commerce/ORDER_AUDIT/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [ORDER_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27B4B84F96] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [ORDER_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2715FD5061] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -670,14 +1066,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC27B4B84F96",
+              "name": "PK__ITEMS__3214EC2715FD5061",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -688,7 +1084,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC27B4B84F96"
+              "name": "PK__ITEMS__3214EC2715FD5061"
             }
           ]
         }
@@ -722,7 +1118,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -834,6 +1230,25 @@
       "grants": [],
       "sections": [],
       "sizeBytes": 186,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Queues/ORDER_ENTRY/EVENT_OUTBOX",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "qualifiedName": "ORDER_ENTRY.EVENT_OUTBOX",
+      "path": "ATLAS_SQL/Commerce/ORDER_ENTRY/Queues/EVENT_OUTBOX.sql",
+      "ddl": "CREATE QUEUE [ORDER_ENTRY].[EVENT_OUTBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 115,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -995,6 +1410,37 @@
       "engine": "mssql"
     },
     {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "qualifiedName": "ORDER_ENTRY.P_SEND_EVENT",
+      "path": "ATLAS_SQL/Commerce/ORDER_ENTRY/StoredProcedures/P_SEND_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE ORDER_ENTRY.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM ORDER_ENTRY.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "ORDER_ENTRY_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[ORDER_ENTRY].[P_SEND_EVENT] TO [ORDER_ENTRY_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 523,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
       "server": "ATLAS_SQL",
       "database": "Commerce",
@@ -1095,13 +1541,22 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_6B24EA82",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.4666667+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -1133,7 +1588,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -1153,7 +1608,7 @@
       "name": "ITEMS",
       "qualifiedName": "ORDER_ENTRY.ITEMS",
       "path": "ATLAS_SQL/Commerce/ORDER_ENTRY/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [ORDER_ENTRY].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27956672EF] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [ORDER_ENTRY].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27D07130F5] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -1208,30 +1663,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC27956672EF",
+              "name": "PK__ITEMS__3214EC27D07130F5",
               "fragmentationPct": 0,
               "pageCount": 1,
-              "seeks": 3,
+              "seeks": 5,
               "scans": 2,
               "lookups": 0,
-              "updates": 1
+              "updates": 3
             }
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC27956672EF",
-              "rows": 1,
-              "rowsSampled": 1,
-              "steps": 1,
-              "modificationCounter": 0,
-              "lastUpdated": "2026-09-11T02:14:04.9866667+00:00"
+              "name": "PK__ITEMS__3214EC27D07130F5",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.1033333+00:00"
             }
           ]
         }
@@ -1265,7 +1720,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:46.3939058+00:00",
+          "capturedAt": "2026-09-11T06:09:07.9085614+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -1469,6 +1924,25 @@
       "engine": "mssql"
     },
     {
+      "id": "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "qualifiedName": "FINANCE_AUDIT.EVENT_INBOX",
+      "path": "ATLAS_SQL/Receivables/FINANCE_AUDIT/Queues/EVENT_INBOX.sql",
+      "ddl": "CREATE QUEUE [FINANCE_AUDIT].[EVENT_INBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 116,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_READ",
       "server": "ATLAS_SQL",
       "database": "Receivables",
@@ -1494,6 +1968,37 @@
         }
       ],
       "sizeBytes": 139,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "qualifiedName": "FINANCE_AUDIT.P_RECEIVE_EVENT",
+      "path": "ATLAS_SQL/Receivables/FINANCE_AUDIT/StoredProcedures/P_RECEIVE_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE FINANCE_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM FINANCE_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO FINANCE_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "FINANCE_AUDIT_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[FINANCE_AUDIT].[P_RECEIVE_EVENT] TO [FINANCE_AUDIT_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 701,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -1557,13 +2062,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
-          "reservedKB": 0,
-          "dataKB": 0,
+          "reservedKB": 72,
+          "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_4222D4EF",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.92+00:00"
+            },
+            {
+              "name": "_WA_Sys_00000002_4222D4EF",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.8666667+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -1595,7 +2117,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -1615,7 +2137,7 @@
       "name": "ITEMS",
       "qualifiedName": "FINANCE_AUDIT.ITEMS",
       "path": "ATLAS_SQL/Receivables/FINANCE_AUDIT/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [FINANCE_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC276EA8C32C] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [FINANCE_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2727C37607] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -1664,14 +2186,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC276EA8C32C",
+              "name": "PK__ITEMS__3214EC2727C37607",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -1682,7 +2204,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC276EA8C32C"
+              "name": "PK__ITEMS__3214EC2727C37607"
             }
           ]
         }
@@ -1716,7 +2238,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -1834,6 +2356,25 @@
       "engine": "mssql"
     },
     {
+      "id": "ATLAS_SQL/Receivables/Queues/INVOICING/EVENT_OUTBOX",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "qualifiedName": "INVOICING.EVENT_OUTBOX",
+      "path": "ATLAS_SQL/Receivables/INVOICING/Queues/EVENT_OUTBOX.sql",
+      "ddl": "CREATE QUEUE [INVOICING].[EVENT_OUTBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 113,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_READ",
       "server": "ATLAS_SQL",
       "database": "Receivables",
@@ -1859,6 +2400,37 @@
         }
       ],
       "sizeBytes": 131,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "qualifiedName": "INVOICING.P_SEND_EVENT",
+      "path": "ATLAS_SQL/Receivables/INVOICING/StoredProcedures/P_SEND_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE INVOICING.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM INVOICING.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "INVOICING_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[INVOICING].[P_SEND_EVENT] TO [INVOICING_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 519,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -1934,13 +2506,22 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_38996AB5",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:15.06+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -1972,7 +2553,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -1992,7 +2573,7 @@
       "name": "ITEMS",
       "qualifiedName": "INVOICING.ITEMS",
       "path": "ATLAS_SQL/Receivables/INVOICING/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [INVOICING].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2702741305] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [INVOICING].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC274DFD8724] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -2047,30 +2628,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC2702741305",
+              "name": "PK__ITEMS__3214EC274DFD8724",
               "fragmentationPct": 0,
               "pageCount": 1,
-              "seeks": 2,
+              "seeks": 4,
               "scans": 1,
               "lookups": 0,
-              "updates": 1
+              "updates": 3
             }
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC2702741305",
-              "rows": 1,
-              "rowsSampled": 1,
-              "steps": 1,
-              "modificationCounter": 0,
-              "lastUpdated": "2026-09-11T02:14:05.0233333+00:00"
+              "name": "PK__ITEMS__3214EC274DFD8724",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:14.69+00:00"
             }
           ]
         }
@@ -2104,7 +2685,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -2310,7 +2891,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -2348,7 +2929,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -2368,7 +2949,7 @@
       "name": "ITEMS",
       "qualifiedName": "SETTLEMENT.ITEMS",
       "path": "ATLAS_SQL/Receivables/SETTLEMENT/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [SETTLEMENT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2711425A4A] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [SETTLEMENT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27A8A48C5C] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -2417,14 +2998,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC2711425A4A",
+              "name": "PK__ITEMS__3214EC27A8A48C5C",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -2435,7 +3016,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC2711425A4A"
+              "name": "PK__ITEMS__3214EC27A8A48C5C"
             }
           ]
         }
@@ -2469,7 +3050,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:47.364315+00:00",
+          "capturedAt": "2026-09-11T06:09:09.683421+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -2900,7 +3481,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:54.7104625+00:00",
+          "capturedAt": "2026-09-11T06:09:16.71902+00:00",
           "indexes": [],
           "statistics": [
             {
@@ -2938,7 +3519,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:54.7104625+00:00",
+          "capturedAt": "2026-09-11T06:09:16.71902+00:00",
           "indexes": [],
           "statistics": [
             {
@@ -3004,10 +3585,10 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:54.7104625+00:00",
+          "capturedAt": "2026-09-11T06:09:16.71902+00:00",
           "indexes": [
             {
-              "name": "SYS_C008754"
+              "name": "SYS_C008775"
             }
           ],
           "statistics": [
@@ -3046,7 +3627,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:54.7104625+00:00",
+          "capturedAt": "2026-09-11T06:09:16.71902+00:00",
           "indexes": [],
           "statistics": [
             {
@@ -3547,7 +4128,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:58.0180426+00:00",
+          "capturedAt": "2026-09-11T06:09:20.9639728+00:00",
           "indexes": [],
           "statistics": [
             {
@@ -3585,7 +4166,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:58.0180426+00:00",
+          "capturedAt": "2026-09-11T06:09:20.9639728+00:00",
           "indexes": [],
           "statistics": [
             {
@@ -3651,10 +4232,10 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:58.0180426+00:00",
+          "capturedAt": "2026-09-11T06:09:20.9639728+00:00",
           "indexes": [
             {
-              "name": "SYS_C008752"
+              "name": "SYS_C008773"
             }
           ],
           "statistics": [
@@ -3693,7 +4274,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:58.0180426+00:00",
+          "capturedAt": "2026-09-11T06:09:20.9639728+00:00",
           "indexes": [],
           "statistics": [
             {
@@ -3893,7 +4474,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -3931,7 +4512,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -3951,7 +4532,7 @@
       "name": "ITEMS",
       "qualifiedName": "DISPATCH.ITEMS",
       "path": "MERIDIAN_SQL/Distribution/DISPATCH/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [DISPATCH].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27AB7CBEF2] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [DISPATCH].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27EEA9A332] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -4000,14 +4581,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC27AB7CBEF2",
+              "name": "PK__ITEMS__3214EC27EEA9A332",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -4018,7 +4599,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC27AB7CBEF2"
+              "name": "PK__ITEMS__3214EC27EEA9A332"
             }
           ]
         }
@@ -4052,7 +4633,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -4164,6 +4745,25 @@
       "grants": [],
       "sections": [],
       "sizeBytes": 182,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Queues/INVENTORY/EVENT_OUTBOX",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "qualifiedName": "INVENTORY.EVENT_OUTBOX",
+      "path": "MERIDIAN_SQL/Distribution/INVENTORY/Queues/EVENT_OUTBOX.sql",
+      "ddl": "CREATE QUEUE [INVENTORY].[EVENT_OUTBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 113,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -4294,6 +4894,37 @@
       "engine": "mssql"
     },
     {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "qualifiedName": "INVENTORY.P_SEND_EVENT",
+      "path": "MERIDIAN_SQL/Distribution/INVENTORY/StoredProcedures/P_SEND_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE INVENTORY.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM INVENTORY.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "INVENTORY_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[INVENTORY].[P_SEND_EVENT] TO [INVENTORY_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 519,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_WRITE",
       "server": "MERIDIAN_SQL",
       "database": "Distribution",
@@ -4363,13 +4994,22 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_6B24EA82",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:15.67+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -4401,7 +5041,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -4421,7 +5061,7 @@
       "name": "ITEMS",
       "qualifiedName": "INVENTORY.ITEMS",
       "path": "MERIDIAN_SQL/Distribution/INVENTORY/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [INVENTORY].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2706437688] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [INVENTORY].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC270E24DC9B] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -4476,30 +5116,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC2706437688",
+              "name": "PK__ITEMS__3214EC270E24DC9B",
               "fragmentationPct": 0,
               "pageCount": 1,
-              "seeks": 5,
+              "seeks": 7,
               "scans": 3,
               "lookups": 0,
-              "updates": 1
+              "updates": 3
             }
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC2706437688",
-              "rows": 1,
-              "rowsSampled": 1,
-              "steps": 1,
-              "modificationCounter": 0,
-              "lastUpdated": "2026-09-11T02:14:05.0466667+00:00"
+              "name": "PK__ITEMS__3214EC270E24DC9B",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:15.2633333+00:00"
             }
           ]
         }
@@ -4533,7 +5173,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -4651,6 +5291,25 @@
       "engine": "mssql"
     },
     {
+      "id": "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "qualifiedName": "STOCK_AUDIT.EVENT_INBOX",
+      "path": "MERIDIAN_SQL/Distribution/STOCK_AUDIT/Queues/EVENT_INBOX.sql",
+      "ddl": "CREATE QUEUE [STOCK_AUDIT].[EVENT_INBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 114,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_READ",
       "server": "MERIDIAN_SQL",
       "database": "Distribution",
@@ -4676,6 +5335,37 @@
         }
       ],
       "sizeBytes": 135,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "qualifiedName": "STOCK_AUDIT.P_RECEIVE_EVENT",
+      "path": "MERIDIAN_SQL/Distribution/STOCK_AUDIT/StoredProcedures/P_RECEIVE_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE STOCK_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM STOCK_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO STOCK_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "STOCK_AUDIT_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[STOCK_AUDIT].[P_RECEIVE_EVENT] TO [STOCK_AUDIT_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 695,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -4739,13 +5429,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
-          "reservedKB": 0,
-          "dataKB": 0,
+          "reservedKB": 72,
+          "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_74AE54BC",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:15.53+00:00"
+            },
+            {
+              "name": "_WA_Sys_00000002_74AE54BC",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:15.5+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -4777,7 +5484,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -4797,7 +5504,7 @@
       "name": "ITEMS",
       "qualifiedName": "STOCK_AUDIT.ITEMS",
       "path": "MERIDIAN_SQL/Distribution/STOCK_AUDIT/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [STOCK_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2795CAD35F] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [STOCK_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC2700E1414E] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -4846,14 +5553,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC2795CAD35F",
+              "name": "PK__ITEMS__3214EC2700E1414E",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -4864,7 +5571,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC2795CAD35F"
+              "name": "PK__ITEMS__3214EC2700E1414E"
             }
           ]
         }
@@ -4898,7 +5605,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:49.019123+00:00",
+          "capturedAt": "2026-09-11T06:09:11.3960546+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5104,7 +5811,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5142,7 +5849,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5162,7 +5869,7 @@
       "name": "ITEMS",
       "qualifiedName": "ANALYTICS_ETL.ITEMS",
       "path": "MERIDIAN_SQL/Intelligence/ANALYTICS_ETL/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [ANALYTICS_ETL].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27496181A6] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [ANALYTICS_ETL].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC275895A58C] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -5211,14 +5918,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC27496181A6",
+              "name": "PK__ITEMS__3214EC275895A58C",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -5229,7 +5936,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC27496181A6"
+              "name": "PK__ITEMS__3214EC275895A58C"
             }
           ]
         }
@@ -5263,7 +5970,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5381,6 +6088,25 @@
       "engine": "mssql"
     },
     {
+      "id": "MERIDIAN_SQL/Intelligence/Queues/REPORTING/EVENT_OUTBOX",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Queues",
+      "name": "EVENT_OUTBOX",
+      "qualifiedName": "REPORTING.EVENT_OUTBOX",
+      "path": "MERIDIAN_SQL/Intelligence/REPORTING/Queues/EVENT_OUTBOX.sql",
+      "ddl": "CREATE QUEUE [REPORTING].[EVENT_OUTBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 113,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_READ",
       "server": "MERIDIAN_SQL",
       "database": "Intelligence",
@@ -5406,6 +6132,37 @@
         }
       ],
       "sizeBytes": 131,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "StoredProcedures",
+      "name": "P_SEND_EVENT",
+      "qualifiedName": "REPORTING.P_SEND_EVENT",
+      "path": "MERIDIAN_SQL/Intelligence/REPORTING/StoredProcedures/P_SEND_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE REPORTING.P_SEND_EVENT @id int, @dialog uniqueidentifier OUTPUT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @payload xml = (SELECT ID, AMOUNT FROM REPORTING.ITEMS WHERE ID = @id FOR XML PATH('item'), TYPE);\n BEGIN DIALOG CONVERSATION @dialog FROM SERVICE [ITEM_EVENT_SENDER] TO SERVICE N'ITEM_EVENT_RECEIVER' ON CONTRACT [ITEM_EVENT_CONTRACT] WITH ENCRYPTION = OFF;\n SEND ON CONVERSATION @dialog MESSAGE TYPE [ITEM_EVENT] (@payload);\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "REPORTING_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[REPORTING].[P_SEND_EVENT] TO [REPORTING_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 519,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -5481,13 +6238,22 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_38996AB5",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:16.2266667+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -5519,7 +6285,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5539,7 +6305,7 @@
       "name": "ITEMS",
       "qualifiedName": "REPORTING.ITEMS",
       "path": "MERIDIAN_SQL/Intelligence/REPORTING/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [REPORTING].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27691E768B] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [REPORTING].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC27D619F192] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -5594,30 +6360,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 1,
           "reservedKB": 72,
           "dataKB": 16,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC27691E768B",
+              "name": "PK__ITEMS__3214EC27D619F192",
               "fragmentationPct": 0,
               "pageCount": 1,
-              "seeks": 2,
+              "seeks": 4,
               "scans": 1,
               "lookups": 0,
-              "updates": 1
+              "updates": 3
             }
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC27691E768B",
-              "rows": 1,
-              "rowsSampled": 1,
-              "steps": 1,
-              "modificationCounter": 0,
-              "lastUpdated": "2026-09-11T02:14:05.07+00:00"
+              "name": "PK__ITEMS__3214EC27D619F192",
+              "rows": 2,
+              "rowsSampled": 2,
+              "steps": 2,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:15.82+00:00"
             }
           ]
         }
@@ -5651,7 +6417,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5769,6 +6535,25 @@
       "engine": "mssql"
     },
     {
+      "id": "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Queues",
+      "name": "EVENT_INBOX",
+      "qualifiedName": "REPORT_AUDIT.EVENT_INBOX",
+      "path": "MERIDIAN_SQL/Intelligence/REPORT_AUDIT/Queues/EVENT_INBOX.sql",
+      "ddl": "CREATE QUEUE [REPORT_AUDIT].[EVENT_INBOX] WITH STATUS = ON, RETENTION = OFF, POISON_MESSAGE_HANDLING (STATUS = ON);",
+      "columns": [],
+      "grants": [],
+      "sections": [],
+      "sizeBytes": 115,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
       "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_READ",
       "server": "MERIDIAN_SQL",
       "database": "Intelligence",
@@ -5794,6 +6579,37 @@
         }
       ],
       "sizeBytes": 137,
+      "changeCount": 0,
+      "history": [],
+      "metrics": [],
+      "engine": "mssql"
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_RECEIVE_EVENT",
+      "qualifiedName": "REPORT_AUDIT.P_RECEIVE_EVENT",
+      "path": "MERIDIAN_SQL/Intelligence/REPORT_AUDIT/StoredProcedures/P_RECEIVE_EVENT.sql",
+      "ddl": "SET ANSI_NULLS ON;\nGO\nSET QUOTED_IDENTIFIER ON;\nGO\nCREATE PROCEDURE REPORT_AUDIT.P_RECEIVE_EVENT WITH EXECUTE AS OWNER AS\nBEGIN\n SET NOCOUNT ON;\n DECLARE @dialog uniqueidentifier, @body varbinary(max), @type sysname;\n BEGIN TRANSACTION;\n WAITFOR (RECEIVE TOP (1) @dialog = conversation_handle, @body = message_body, @type = message_type_name FROM REPORT_AUDIT.EVENT_INBOX), TIMEOUT 5000;\n IF @dialog IS NOT NULL\n BEGIN\n  IF @type = N'ITEM_EVENT'\n  BEGIN\n   DECLARE @payload xml = CAST(@body AS xml);\n   INSERT INTO REPORT_AUDIT.AUDIT_LOG (ID, AMOUNT) VALUES (@payload.value('(/item/ID)[1]', 'int'), @payload.value('(/item/AMOUNT)[1]', 'int'));\n  END;\n  END CONVERSATION @dialog;\n END;\n COMMIT;\nEND;",
+      "columns": [],
+      "grants": [
+        {
+          "permission": "EXECUTE",
+          "state": "GRANT",
+          "grantee": "REPORT_AUDIT_EXEC",
+          "granteeType": "SQL_USER"
+        }
+      ],
+      "sections": [
+        {
+          "title": "Permissions",
+          "content": "GO\nGRANT EXECUTE ON OBJECT::[REPORT_AUDIT].[P_RECEIVE_EVENT] TO [REPORT_AUDIT_EXEC] AS [dbo];"
+        }
+      ],
+      "sizeBytes": 698,
       "changeCount": 0,
       "history": [],
       "metrics": [],
@@ -5857,13 +6673,30 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
-          "reservedKB": 0,
-          "dataKB": 0,
+          "reservedKB": 72,
+          "dataKB": 16,
           "indexKB": 0,
           "indexes": [],
-          "statistics": []
+          "statistics": [
+            {
+              "name": "_WA_Sys_00000001_4222D4EF",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:16.08+00:00"
+            },
+            {
+              "name": "_WA_Sys_00000002_4222D4EF",
+              "rows": 1,
+              "rowsSampled": 1,
+              "steps": 1,
+              "modificationCounter": 1,
+              "lastUpdated": "2026-09-11T06:09:16.03+00:00"
+            }
+          ]
         }
       ],
       "engine": "mssql"
@@ -5895,7 +6728,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -5915,7 +6748,7 @@
       "name": "ITEMS",
       "qualifiedName": "REPORT_AUDIT.ITEMS",
       "path": "MERIDIAN_SQL/Intelligence/REPORT_AUDIT/Tables/ITEMS.sql",
-      "ddl": "CREATE TABLE [REPORT_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC275ED0DD10] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
+      "ddl": "CREATE TABLE [REPORT_AUDIT].[ITEMS] (\n    [ID] INT NOT NULL,\n    [AMOUNT] INT NULL,\n  CONSTRAINT [PK__ITEMS__3214EC272DE0C000] PRIMARY KEY CLUSTERED ([ID] ASC)\n);",
       "columns": [
         {
           "name": "ID",
@@ -5964,14 +6797,14 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
           "indexKB": 0,
           "indexes": [
             {
-              "name": "PK__ITEMS__3214EC275ED0DD10",
+              "name": "PK__ITEMS__3214EC272DE0C000",
               "fragmentationPct": 0,
               "pageCount": 0,
               "seeks": 0,
@@ -5982,7 +6815,7 @@
           ],
           "statistics": [
             {
-              "name": "PK__ITEMS__3214EC275ED0DD10"
+              "name": "PK__ITEMS__3214EC272DE0C000"
             }
           ]
         }
@@ -6016,7 +6849,7 @@
       "history": [],
       "metrics": [
         {
-          "capturedAt": "2026-09-11T02:13:50.0961227+00:00",
+          "capturedAt": "2026-09-11T06:09:13.9683279+00:00",
           "rowCount": 0,
           "reservedKB": 0,
           "dataKB": 0,
@@ -6129,6 +6962,126 @@
       "dynamic": false
     },
     {
+      "from": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER",
+      "to": "ATLAS_SQL/Commerce/Queues/ORDER_ENTRY/EVENT_OUTBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "to": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER",
+      "to": "ATLAS_SQL/Receivables/Queues/INVOICING/EVENT_OUTBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER",
+      "to": "MERIDIAN_SQL/Distribution/Queues/INVENTORY/EVENT_OUTBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "to": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "to": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER",
+      "to": "MERIDIAN_SQL/Intelligence/Queues/REPORTING/EVENT_OUTBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
       "from": "ATLAS_SQL/Commerce/Functions/FULFILLMENT/F_COUNT",
       "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
       "columns": [],
@@ -6193,6 +7146,18 @@
     {
       "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_READ",
       "to": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_DETAILS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/AUDIT_LOG",
       "columns": [],
       "dynamic": false
     },
@@ -6307,6 +7272,36 @@
       "dynamic": true
     },
     {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_SENDER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
       "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
       "to": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
       "columns": [],
@@ -6402,6 +7397,18 @@
       "dynamic": false
     },
     {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_RECEIVE_EVENT",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/AUDIT_LOG",
+      "columns": [],
+      "dynamic": false
+    },
+    {
       "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_WRITE",
       "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
       "columns": [],
@@ -6454,6 +7461,36 @@
     {
       "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_READ",
       "to": "ATLAS_SQL/Receivables/Views/INVOICING/V_DETAILS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_SENDER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+      "to": "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT",
       "columns": [],
       "dynamic": false
     },
@@ -6924,6 +7961,36 @@
       "dynamic": false
     },
     {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_SENDER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
       "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_WRITE",
       "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
       "columns": [],
@@ -6976,6 +8043,18 @@
     {
       "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_READ",
       "to": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_DETAILS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/AUDIT_LOG",
       "columns": [],
       "dynamic": false
     },
@@ -7092,6 +8171,36 @@
       "dynamic": false
     },
     {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_SENDER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT",
+      "columns": [],
+      "dynamic": false
+    },
+    {
       "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_WRITE",
       "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
       "columns": [],
@@ -7148,6 +8257,18 @@
       "dynamic": false
     },
     {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX",
+      "columns": [],
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_RECEIVE_EVENT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/AUDIT_LOG",
+      "columns": [],
+      "dynamic": false
+    },
+    {
       "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_WRITE",
       "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
       "columns": [],
@@ -7197,6 +8318,11 @@
   "orphanedReferences": [],
   "systemReferences": [
     {
+      "from": "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+      "schema": "sys",
+      "name": "sp_addarticle"
+    },
+    {
       "from": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
       "name": "sp_addlinkedserver"
     },
@@ -7227,6 +8353,11 @@
     {
       "from": "ATLAS_SQL/_ServerLevel/LinkedServers/MERIDIAN_SQL",
       "name": "sp_serveroption"
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
+      "schema": "sys",
+      "name": "sp_addarticle"
     },
     {
       "from": "MERIDIAN_SQL/_ServerLevel/LinkedServers/ATLAS_SQL",
@@ -7804,6 +8935,84 @@
         "nodes": [
           "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_STOCK",
           "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+          "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS"
+        ]
+      },
+      {
+        "name": "Commerce Broker sender > receiver > queue",
+        "nodes": [
+          "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SEND_EVENT",
+          "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+          "ATLAS_SQL/Commerce/Queues/ORDER_AUDIT/EVENT_INBOX"
+        ]
+      },
+      {
+        "name": "Commerce Broker receiver > contract > message",
+        "nodes": [
+          "ATLAS_SQL/Commerce/Services/ITEM_EVENT_RECEIVER",
+          "ATLAS_SQL/Commerce/Contracts/ITEM_EVENT_CONTRACT",
+          "ATLAS_SQL/Commerce/MessageTypes/ITEM_EVENT"
+        ]
+      },
+      {
+        "name": "Receivables Broker sender > receiver > queue",
+        "nodes": [
+          "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_SEND_EVENT",
+          "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+          "ATLAS_SQL/Receivables/Queues/FINANCE_AUDIT/EVENT_INBOX"
+        ]
+      },
+      {
+        "name": "Receivables Broker receiver > contract > message",
+        "nodes": [
+          "ATLAS_SQL/Receivables/Services/ITEM_EVENT_RECEIVER",
+          "ATLAS_SQL/Receivables/Contracts/ITEM_EVENT_CONTRACT",
+          "ATLAS_SQL/Receivables/MessageTypes/ITEM_EVENT"
+        ]
+      },
+      {
+        "name": "Distribution Broker sender > receiver > queue",
+        "nodes": [
+          "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_SEND_EVENT",
+          "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+          "MERIDIAN_SQL/Distribution/Queues/STOCK_AUDIT/EVENT_INBOX"
+        ]
+      },
+      {
+        "name": "Distribution Broker receiver > contract > message",
+        "nodes": [
+          "MERIDIAN_SQL/Distribution/Services/ITEM_EVENT_RECEIVER",
+          "MERIDIAN_SQL/Distribution/Contracts/ITEM_EVENT_CONTRACT",
+          "MERIDIAN_SQL/Distribution/MessageTypes/ITEM_EVENT"
+        ]
+      },
+      {
+        "name": "Intelligence Broker sender > receiver > queue",
+        "nodes": [
+          "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_SEND_EVENT",
+          "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+          "MERIDIAN_SQL/Intelligence/Queues/REPORT_AUDIT/EVENT_INBOX"
+        ]
+      },
+      {
+        "name": "Intelligence Broker receiver > contract > message",
+        "nodes": [
+          "MERIDIAN_SQL/Intelligence/Services/ITEM_EVENT_RECEIVER",
+          "MERIDIAN_SQL/Intelligence/Contracts/ITEM_EVENT_CONTRACT",
+          "MERIDIAN_SQL/Intelligence/MessageTypes/ITEM_EVENT"
+        ]
+      },
+      {
+        "name": "Commerce publication > source table",
+        "nodes": [
+          "ATLAS_SQL/Commerce/Replication/Commerce_ITEMS_PUBLICATION",
+          "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS"
+        ]
+      },
+      {
+        "name": "Distribution publication > source table",
+        "nodes": [
+          "MERIDIAN_SQL/Distribution/Replication/Distribution_ITEMS_PUBLICATION",
           "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS"
         ]
       }

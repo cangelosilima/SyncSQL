@@ -182,6 +182,7 @@ public sealed class CatalogBuilder(
             Grants = parsed.Grants,
             Sections = parsed.Sections,
             Engine = parsed.Engine,
+            ServiceBrokerGuid = parsed.Identity?.ServiceBrokerGuid,
             SizeBytes = Encoding.UTF8.GetByteCount(parsed.Ddl),
         };
     }
@@ -244,7 +245,7 @@ public sealed class CatalogBuilder(
             }
 
             ILineageAnalyzer analyzer = lineageAnalyzerResolver.Resolve(engine);
-            LineageAnalysisResult analysis = analyzer.Analyze(scanText, analysisOptions);
+            LineageAnalysisResult analysis = analyzer.Analyze(scanText, analysisOptions with { ServiceBrokerGuid = node.ServiceBrokerGuid });
             analysisByNodeId[node.Id] = analysis;
 
             foreach (ObjectRef reference in analysis.ObjectRefs)

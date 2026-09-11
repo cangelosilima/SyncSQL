@@ -24,6 +24,9 @@ public enum ReferenceOrigin
 /// </summary>
 public sealed record ObjectRef(string? Schema, string Name)
 {
+    /// <summary>Broker namespace, when syntax identifies a specific database-local object kind.</summary>
+    public string? ObjectType { get; init; }
+
     /// <summary>True for a callable reference, allowing a remote dialect to interpret package-member names.</summary>
     public bool IsRoutine { get; init; }
 
