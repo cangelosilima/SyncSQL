@@ -38,15 +38,25 @@ const propertyColumns = [
 
 /** A reference the DDL makes, as the four "where it pointed" columns plus the name. */
 const referenceColumns = [
-  { header: 'Reference', value: (ref: { server?: string | null; database?: string | null; schema: string | null; name: string }) => qualifiedRefName(ref) },
+  {
+    header: 'Reference',
+    value: (ref: { server?: string | null; database?: string | null; schema: string | null; name: string }) =>
+      qualifiedRefName(ref),
+  },
   { header: 'Server', value: (ref: { server?: string | null }) => ref.server ?? null },
   { header: 'Database', value: (ref: { database?: string | null }) => ref.database ?? null },
   { header: 'Schema', value: (ref: { schema: string | null }) => ref.schema },
   { header: 'Name', value: (ref: { name: string }) => ref.name },
 ]
 
-const orphanedReferenceColumns = referenceColumns as { header: string; value: (row: CatalogOrphanedReference) => string | null }[]
-const systemReferenceColumns = referenceColumns as { header: string; value: (row: CatalogSystemReference) => string | null }[]
+const orphanedReferenceColumns = referenceColumns as {
+  header: string
+  value: (row: CatalogOrphanedReference) => string | null
+}[]
+const systemReferenceColumns = referenceColumns as {
+  header: string
+  value: (row: CatalogSystemReference) => string | null
+}[]
 
 function linkedServerReferenceColumns(index: CatalogIndex) {
   return [

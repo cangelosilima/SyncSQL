@@ -32,7 +32,12 @@ export class WorkerEmbeddingAdapter implements EmbeddingAdapter {
   load(options: EmbeddingLoadOptions): Promise<void> {
     if (this.loaded) return Promise.resolve()
     if (this.loadPromise) return this.loadPromise
-    this.loadPromise = this.request<void>('load', { modelBaseUrl: options.modelBaseUrl }, options.signal, options.onProgress)
+    this.loadPromise = this.request<void>(
+      'load',
+      { modelBaseUrl: options.modelBaseUrl },
+      options.signal,
+      options.onProgress,
+    )
       .then(() => {
         this.loaded = true
       })
@@ -58,7 +63,12 @@ export class WorkerEmbeddingAdapter implements EmbeddingAdapter {
     this.pending.clear()
   }
 
-  private request<T>(type: 'load' | 'embed', payload: Record<string, unknown>, signal?: AbortSignal, onProgress?: (progress: ModelLoadProgress) => void): Promise<T> {
+  private request<T>(
+    type: 'load' | 'embed',
+    payload: Record<string, unknown>,
+    signal?: AbortSignal,
+    onProgress?: (progress: ModelLoadProgress) => void,
+  ): Promise<T> {
     if (signal?.aborted) return Promise.reject(abortError())
     const id = ++this.sequence
     return new Promise<T>((resolve, reject) => {

@@ -26,7 +26,16 @@ export function layoutGraph(nodes: Node[], edges: Edge[], direction: 'LR' | 'TB'
       ...node,
       sourcePosition: (direction === 'LR' ? 'right' : 'bottom') as Node['sourcePosition'],
       targetPosition: (direction === 'LR' ? 'left' : 'top') as Node['targetPosition'],
-      style: { ...node.style, width: pos.width, height: pos.height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflowWrap: 'anywhere', lineHeight: '18px' },
+      style: {
+        ...node.style,
+        width: pos.width,
+        height: pos.height,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflowWrap: 'anywhere',
+        lineHeight: '18px',
+      },
       position: { x: pos.x - pos.width / 2, y: pos.y - pos.height / 2 },
     }
   })

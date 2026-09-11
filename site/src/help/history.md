@@ -26,6 +26,6 @@ without `-RepoRoot` and mined nothing for this snapshot.
 - For one object's history - including a point-in-time view of its
   definition and a side-by-side diff of any two revisions - open the object
   and use its **Change history** panel.
-- For change *patterns* rather than a raw list - what changes most often,
+- For change _patterns_ rather than a raw list - what changes most often,
   what tends to change together, activity by type over time - use the
   Overview page.

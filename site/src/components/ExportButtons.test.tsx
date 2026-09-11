@@ -6,12 +6,15 @@ import { downloadCsv } from '../lib/csv'
 import { downloadXlsx } from '../lib/xlsx'
 
 vi.mock('../lib/csv', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../lib/csv')>(),
+  ...(await importOriginal<typeof import('../lib/csv')>()),
   downloadCsv: vi.fn(),
 }))
 vi.mock('../lib/xlsx', () => ({ downloadXlsx: vi.fn() }))
 
-afterEach(() => { cleanup(); vi.resetAllMocks() })
+afterEach(() => {
+  cleanup()
+  vi.resetAllMocks()
+})
 
 describe('export action parity through shared Button', () => {
   const columns = [{ header: 'Object', value: (row: { name: string }) => row.name }]
@@ -39,7 +42,9 @@ describe('export action parity through shared Button', () => {
 
   it('builds XLSX lazily, prevents repeat clicks while busy and allows retry after failure', async () => {
     let rejectExport!: (reason: Error) => void
-    const pending = new Promise<void>((_, reject) => { rejectExport = reject })
+    const pending = new Promise<void>((_, reject) => {
+      rejectExport = reject
+    })
     vi.mocked(downloadXlsx).mockReturnValueOnce(pending).mockResolvedValueOnce(undefined)
     const sheets = vi.fn(() => [{ name: 'Objects', headers: ['Object'], rows: [['dbo.Orders']] }])
     render(<XlsxExportButton sheets={sheets} filename="object.xlsx" />)
@@ -50,9 +55,14 @@ describe('export action parity through shared Button', () => {
     expect(busy).toHaveAttribute('aria-busy', 'true')
     fireEvent.click(busy)
     expect(sheets).toHaveBeenCalledOnce()
-    await act(async () => { rejectExport(new Error('Workbook failed')); await pending.catch(() => {}) })
+    await act(async () => {
+      rejectExport(new Error('Workbook failed'))
+      await pending.catch(() => {})
+    })
     expect(screen.getByRole('alert')).toHaveTextContent('Workbook failed')
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export XLSX' })) })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Export XLSX' }))
+    })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Export XLSX' })).toBeEnabled()
     expect(downloadXlsx).toHaveBeenCalledTimes(2)

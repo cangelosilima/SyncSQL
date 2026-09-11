@@ -16,7 +16,13 @@ describe('optional AI model packaging', () => {
     for (const entry of manifest.files.filter((file) => !file.path.endsWith('.onnx'))) {
       // Apply checkout filters to committed bytes using the working tree's attributes.
       // This reproduces Windows checkout conversion even when this test runs on Linux.
-      const bytes = execFileSync('git', ['-c', `core.autocrlf=${autocrlf}`, 'cat-file', '--filters', `HEAD:${modelPath}/${entry.path}`])
+      const bytes = execFileSync('git', [
+        '-c',
+        `core.autocrlf=${autocrlf}`,
+        'cat-file',
+        '--filters',
+        `HEAD:${modelPath}/${entry.path}`,
+      ])
       expect(bytes.length, entry.path).toBe(entry.size)
       expect(createHash('sha256').update(bytes).digest('hex'), entry.path).toBe(entry.sha256)
     }
@@ -26,7 +32,9 @@ describe('optional AI model packaging', () => {
     const fixture = createFixture('real model bytes')
     run([], fixture.source, fixture.output)
     expect(readCapability(fixture.output).filterGenerator.available).toBe(true)
-    expect(readFileSync(path.join(fixture.output, 'models', 'all-MiniLM-L6-v2', 'onnx', 'model_quantized.onnx'), 'utf8')).toBe('real model bytes')
+    expect(
+      readFileSync(path.join(fixture.output, 'models', 'all-MiniLM-L6-v2', 'onnx', 'model_quantized.onnx'), 'utf8'),
+    ).toBe('real model bytes')
   })
 
   it('keeps optional builds successful when the model is missing', () => {
@@ -45,7 +53,11 @@ describe('optional AI model packaging', () => {
   it('fails strict verification when the model is missing', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'syncsql-ai-strict-'))
     const result = spawnSync(process.execPath, [script, '--strict', '--verify-only'], {
-      env: { ...process.env, AI_MODEL_SOURCE_ROOT: path.join(root, 'missing'), AI_MODEL_OUTPUT_ROOT: path.join(root, 'dist') },
+      env: {
+        ...process.env,
+        AI_MODEL_SOURCE_ROOT: path.join(root, 'missing'),
+        AI_MODEL_OUTPUT_ROOT: path.join(root, 'dist'),
+      },
       encoding: 'utf8',
     })
     expect(result.status).not.toBe(0)
@@ -63,7 +75,10 @@ describe('optional AI model packaging', () => {
     const fixture = createFixture('expected')
     writeFileSync(path.join(fixture.source, 'onnx', 'model_quantized.onnx'), 'changed')
     run([], fixture.source, fixture.output)
-    expect(readCapability(fixture.output).filterGenerator).toMatchObject({ available: false, reason: 'checksum-mismatch' })
+    expect(readCapability(fixture.output).filterGenerator).toMatchObject({
+      available: false,
+      reason: 'checksum-mismatch',
+    })
     expect(runStrict(fixture.source, fixture.output).status).not.toBe(0)
   })
 
@@ -71,7 +86,10 @@ describe('optional AI model packaging', () => {
     const fixture = createFixture('valid weights')
     rmSync(path.join(fixture.source, 'ATTRIBUTION.md'))
     run([], fixture.source, fixture.output)
-    expect(readCapability(fixture.output).filterGenerator).toMatchObject({ available: false, reason: 'packaging-failed' })
+    expect(readCapability(fixture.output).filterGenerator).toMatchObject({
+      available: false,
+      reason: 'packaging-failed',
+    })
     expect(existsSync(path.join(fixture.output, 'models', 'all-MiniLM-L6-v2'))).toBe(false)
     expect(runStrict(fixture.source, fixture.output, false).status).not.toBe(0)
   })
@@ -96,16 +114,19 @@ function createFixture(modelContent: string) {
     writeFileSync(filePath, content)
   }
   writeFileSync(path.join(source, 'ATTRIBUTION.md'), 'fixture')
-  writeFileSync(path.join(source, 'manifest.json'), JSON.stringify({
-    schemaVersion: 1,
-    model: 'all-MiniLM-L6-v2',
-    revision: '0123456789abcdef0123456789abcdef01234567',
-    files: Object.entries(files).map(([relativePath, content]) => ({
-      path: relativePath,
-      size: Buffer.byteLength(content),
-      sha256: hash(content),
-    })),
-  }))
+  writeFileSync(
+    path.join(source, 'manifest.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      model: 'all-MiniLM-L6-v2',
+      revision: '0123456789abcdef0123456789abcdef01234567',
+      files: Object.entries(files).map(([relativePath, content]) => ({
+        path: relativePath,
+        size: Buffer.byteLength(content),
+        sha256: hash(content),
+      })),
+    }),
+  )
   return { source, output }
 }
 

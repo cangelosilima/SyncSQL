@@ -7,15 +7,50 @@ import { makeCatalog, makeNode } from '../test/fixtures'
 import { downloadCsv } from '../lib/csv'
 import { encodeTokensForUrl, type FilterTokenInput } from '../lib/filters'
 
-const nodes = [makeNode({ id: 'orders', ddl: 'SELECT private_marker', grants: [
-  { grantee: 'app_reader', granteeType: 'DATABASE_ROLE', permission: 'SELECT', state: 'GRANT', column: null },
-  { grantee: 'app_reader', granteeType: 'DATABASE_ROLE', permission: 'UPDATE', state: 'DENY', column: 'Total' },
-] }), makeNode({ id: 'users', ddl: 'SELECT public_marker', grants: [{ grantee: 'app_reader_extra', granteeType: 'DATABASE_ROLE', permission: 'SELECT', state: 'GRANT', column: null }] })]
+const nodes = [
+  makeNode({
+    id: 'orders',
+    ddl: 'SELECT private_marker',
+    grants: [
+      { grantee: 'app_reader', granteeType: 'DATABASE_ROLE', permission: 'SELECT', state: 'GRANT', column: null },
+      { grantee: 'app_reader', granteeType: 'DATABASE_ROLE', permission: 'UPDATE', state: 'DENY', column: 'Total' },
+    ],
+  }),
+  makeNode({
+    id: 'users',
+    ddl: 'SELECT public_marker',
+    grants: [
+      { grantee: 'app_reader_extra', granteeType: 'DATABASE_ROLE', permission: 'SELECT', state: 'GRANT', column: null },
+    ],
+  }),
+]
 vi.mock('../lib/CatalogContext', () => ({ useCatalog: () => ({ index: buildIndex(makeCatalog({ nodes })) }) }))
-vi.mock('../lib/csv', async (original) => ({ ...await original<typeof import('../lib/csv')>(), downloadCsv: vi.fn() }))
-vi.mock('../components/LineageGraph', () => ({ default: ({ nodeIds, onNodeActivate }: { nodeIds: string[]; onNodeActivate: (id: string) => void }) => <div>{nodeIds.map(id => <button key={id} onClick={() => onNodeActivate(id)}>Focus {id}</button>)}</div> }))
-function Location() { return <span data-testid="location">{useLocation().search}</span> }
-function show(url: string) { return render(<MemoryRouter initialEntries={[url]}><LineagePage /><Location /></MemoryRouter>) }
+vi.mock('../lib/csv', async (original) => ({
+  ...(await original<typeof import('../lib/csv')>()),
+  downloadCsv: vi.fn(),
+}))
+vi.mock('../components/LineageGraph', () => ({
+  default: ({ nodeIds, onNodeActivate }: { nodeIds: string[]; onNodeActivate: (id: string) => void }) => (
+    <div>
+      {nodeIds.map((id) => (
+        <button key={id} onClick={() => onNodeActivate(id)}>
+          Focus {id}
+        </button>
+      ))}
+    </div>
+  ),
+}))
+function Location() {
+  return <span data-testid="location">{useLocation().search}</span>
+}
+function show(url: string) {
+  return render(
+    <MemoryRouter initialEntries={[url]}>
+      <LineagePage />
+      <Location />
+    </MemoryRouter>,
+  )
+}
 
 it('migrates legacy exact user links into one filter and preserves permission export and focus', () => {
   show('/lineage?tab=access&grantee=app_reader&exact=1')
@@ -27,7 +62,8 @@ it('migrates legacy exact user links into one filter and preserves permission ex
   fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
   const csv = vi.mocked(downloadCsv).mock.calls.slice(-1)[0][0]
   expect(csv.trim().split(/\r?\n/)).toHaveLength(3)
-  expect(csv).toContain('DENY'); expect(csv).toContain('Total')
+  expect(csv).toContain('DENY')
+  expect(csv).toContain('Total')
   expect(csv).not.toContain('app_reader_extra')
   fireEvent.click(screen.getByRole('button', { name: 'Focus orders' }))
   expect(screen.getByRole('heading', { name: 'Recorded permissions' })).toBeVisible()
@@ -79,5 +115,8 @@ it('places the collapsed legend after the graph with a visible reminder', () => 
   expect(legend).not.toHaveAttribute('open')
   expect(legend.querySelector('summary')).toHaveTextContent('Graph legend')
   expect(legend.querySelector('summary')).toHaveTextContent('dashed = dynamic SQL')
-  expect(screen.getByRole('button', { name: 'Focus orders' }).compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(
+    screen.getByRole('button', { name: 'Focus orders' }).compareDocumentPosition(legend) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
 })

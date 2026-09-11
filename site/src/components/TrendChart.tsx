@@ -63,7 +63,9 @@ export default function TrendChart({ labels, series, height = 160, formatValue =
         <line x1={PAD_X} y1={yFor(min)} x2={WIDTH - PAD_X} y2={yFor(min)} className="trend-chart-axis" />
         {paths.map(
           (s) =>
-            s.d && <path key={s.name} d={s.d} fill="none" stroke={s.color} strokeWidth={1.75} className="trend-chart-line" />,
+            s.d && (
+              <path key={s.name} d={s.d} fill="none" stroke={s.color} strokeWidth={1.75} className="trend-chart-line" />
+            ),
         )}
         {paths.map((s) =>
           s.values.map((v, i) =>

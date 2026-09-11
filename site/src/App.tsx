@@ -28,7 +28,9 @@ function Shell() {
   useBrowserTitle(index)
   const ai = useAi()
   const { pathname } = useLocation()
-  useEffect(() => { document.getElementById('main-content')?.scrollTo?.({ top: 0 }) }, [pathname])
+  useEffect(() => {
+    document.getElementById('main-content')?.scrollTo?.({ top: 0 })
+  }, [pathname])
 
   if (loading) {
     return (
@@ -41,7 +43,9 @@ function Shell() {
   if (error) {
     return (
       <div className="center-screen">
-        <p className="error-text" role="alert">Failed to load catalog: {error}</p>
+        <p className="error-text" role="alert">
+          Failed to load catalog: {error}
+        </p>
         <p className="muted">
           This page expects data/catalog.json to be published alongside the site by the analyze-catalog CI job.
         </p>
@@ -51,10 +55,25 @@ function Shell() {
 
   return (
     <div className="layout">
-      <a className="skip-link" href="#main-content" onClick={(event) => { event.preventDefault(); document.getElementById('main-content')?.focus() }}>Skip to content</a>
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById('main-content')?.focus()
+        }}
+      >
+        Skip to content
+      </a>
       <header className="topbar">
         <span className="brand">
-          <img className="brand-icon" src={`${import.meta.env.BASE_URL}sqlineage-icon.svg`} alt="" width="32" height="32" />
+          <img
+            className="brand-icon"
+            src={`${import.meta.env.BASE_URL}sqlineage-icon.svg`}
+            alt=""
+            width="32"
+            height="32"
+          />
           <span className="brand-name">SQLineage</span>
           <span className="brand-version">v{pkg.version}</span>
           {index?.catalog.example && <span className="sync-line-badge">Example catalog</span>}
@@ -66,31 +85,41 @@ function Shell() {
           <NavLink to="/explorer">Explorer</NavLink>
           <NavLink to="/lineage">Lineage</NavLink>
           <NavLink to="/alerts">Alerts</NavLink>
-          {ai.available
-            ? <NavLink to="/ai">AI</NavLink>
-            : (
-              <span
-                className="nav-link-disabled"
-                aria-disabled="true"
-                title={ai.checking
+          {ai.available ? (
+            <NavLink to="/ai">AI</NavLink>
+          ) : (
+            <span
+              className="nav-link-disabled"
+              aria-disabled="true"
+              title={
+                ai.checking
                   ? 'Checking AI availability'
                   : ai.reason === 'runtime-error'
                     ? 'AI disabled after the local model failed to load'
-                    : 'AI model not included in this deployment'}
-              >
-                AI
-              </span>
-            )}
+                    : 'AI model not included in this deployment'
+              }
+            >
+              AI
+            </span>
+          )}
           <NavLink to="/history">History</NavLink>
         </nav>
         <div className="topbar-status">
-          <span className="status-pill" title="Catalog data is a static snapshot published by the analyze-catalog CI job">
+          <span
+            className="status-pill"
+            title="Catalog data is a static snapshot published by the analyze-catalog CI job"
+          >
             Snapshot · {index && new Date(index.catalog.generatedAt).toLocaleString()}
           </span>
         </div>
       </header>
       <div className="body">
-        {(pathname.replace(/\/$/, '') === '/explorer' || pathname.startsWith('/object/')) && <CatalogSidebar nodes={index?.catalog.nodes ?? []} linkedServerReferences={index?.catalog.linkedServerReferences} />}
+        {(pathname.replace(/\/$/, '') === '/explorer' || pathname.startsWith('/object/')) && (
+          <CatalogSidebar
+            nodes={index?.catalog.nodes ?? []}
+            linkedServerReferences={index?.catalog.linkedServerReferences}
+          />
+        )}
         <main className="content" id="main-content" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<Home />} />

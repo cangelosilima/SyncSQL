@@ -35,7 +35,12 @@ function node(id: string, partial: Partial<CatalogNode> = {}): CatalogNode {
 const hub = node('SQLPROD01/AppDb/StoredProcedures/dbo/Rebuild', { type: 'StoredProcedures' })
 const tables = Array.from({ length: 40 }, (_, i) => node(`SQLPROD01/AppDb/Tables/dbo/T${String(i).padStart(2, '0')}`))
 const views = Array.from({ length: 3 }, (_, i) =>
-  node(`SQLPROD02/SalesDb/Views/sales/V${i}`, { type: 'Views', server: 'SQLPROD02', database: 'SalesDb', schema: 'sales' }),
+  node(`SQLPROD02/SalesDb/Views/sales/V${i}`, {
+    type: 'Views',
+    server: 'SQLPROD02',
+    database: 'SalesDb',
+    schema: 'sales',
+  }),
 )
 const dependencies = [...tables, ...views]
 

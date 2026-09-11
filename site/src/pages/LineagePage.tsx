@@ -39,7 +39,13 @@ export default function LineagePage() {
     const initial = decodeTokensFromUrl(initialFilterParam)
     const grantee = searchParams.get('grantee')?.trim()
     const content = searchParams.get('q')?.trim()
-    if (grantee) initial.push({ id: newTokenId(), attribute: 'grantee', operator: searchParams.get('exact') === '1' ? 'is' : 'contains', values: [grantee] })
+    if (grantee)
+      initial.push({
+        id: newTokenId(),
+        attribute: 'grantee',
+        operator: searchParams.get('exact') === '1' ? 'is' : 'contains',
+        values: [grantee],
+      })
     if (content) initial.push({ id: newTokenId(), attribute: 'ddl', operator: 'contains', values: [content] })
     return initial
   })
@@ -49,16 +55,18 @@ export default function LineagePage() {
   const [groupIntermediate, setGroupIntermediate] = useState(searchParams.get('group') === 'intermediate')
   const allNodes = index?.catalog.nodes ?? []
   const filtered = useFilteredNodes(allNodes, tokens)
-  const hasGranteeFilter = tokens.some(token => token.attribute === 'grantee')
+  const hasGranteeFilter = tokens.some((token) => token.attribute === 'grantee')
   const currentFocus = focusStack[focusStack.length - 1]
-  useEffect(() => { setEdgeEvidence(null) }, [currentFocus])
+  useEffect(() => {
+    setEdgeEvidence(null)
+  }, [currentFocus])
 
   const neighborhoodIds = useMemo(() => {
     if (!index || !currentFocus) return []
     return getDirectionalNeighborhood(index, currentFocus, dependencyHops, dependentHops)
   }, [index, currentFocus, dependencyHops, dependentHops])
 
-  const baseIds = filtered.map(node => node.id)
+  const baseIds = filtered.map((node) => node.id)
 
   // While navigating a specific object, filters narrow *what is around it*
   // rather than re-selecting from the whole catalog. That is what someone
@@ -75,8 +83,8 @@ export default function LineagePage() {
   }, [index, currentFocus, neighborhoodIds, filtered, baseIds.join(',')])
 
   const connectorIds = useMemo(() => {
-    const matchingIds = new Set(filtered.map(node => node.id))
-    return currentFocus ? nodeIds.filter(id => id !== currentFocus && !matchingIds.has(id)) : []
+    const matchingIds = new Set(filtered.map((node) => node.id))
+    return currentFocus ? nodeIds.filter((id) => id !== currentFocus && !matchingIds.has(id)) : []
   }, [currentFocus, nodeIds, filtered])
 
   /** How much of the focused object's neighborhood the current filters are hiding. */
@@ -101,9 +109,12 @@ export default function LineagePage() {
   // Permission rows share the graph's selection, but omit retained connectors
   // and focus nodes that do not satisfy the active filters.
   const visibleIds = new Set(nodeIds)
-  const grantMatches = hasGranteeFilter ? filtered.filter(node => visibleIds.has(node.id))
-    .map(node => ({ node, grants: matchingGrants(node, tokens) })) : []
-  const grantRows: ObjectGrantRow[] = grantMatches.flatMap(({ node, grants }) => grants.map(grant => ({ node, grant })))
+  const grantMatches = hasGranteeFilter
+    ? filtered.filter((node) => visibleIds.has(node.id)).map((node) => ({ node, grants: matchingGrants(node, tokens) }))
+    : []
+  const grantRows: ObjectGrantRow[] = grantMatches.flatMap(({ node, grants }) =>
+    grants.map((grant) => ({ node, grant })),
+  )
   const totalGrants = grantRows.length
 
   function copyShareableLink() {
@@ -123,7 +134,8 @@ export default function LineagePage() {
     // neighborhood can hide every caller and target (for example Type is
     // LinkedServers). Keep content/access investigations and filters explicitly
     // applied while already navigating a neighborhood.
-    if (!currentFocus) setTokens(prev => prev.filter(token => token.attribute === 'grantee' || token.attribute === 'ddl'))
+    if (!currentFocus)
+      setTokens((prev) => prev.filter((token) => token.attribute === 'grantee' || token.attribute === 'ddl'))
     setFocusStack((prev) => (prev[prev.length - 1] === id ? prev : [...prev, id]))
   }
 
@@ -157,67 +169,84 @@ export default function LineagePage() {
       </div>
 
       <section aria-label="Lineage filters">
-        <FilterBar nodes={allNodes} tokens={tokens} onChange={setTokens}
-          placeholder={currentFocus ? 'Filter what surrounds this object... (including grantee or DDL content)' : 'Filter the graph... (server, database, schema, type, name, grantee or DDL content)'} />
-        <p className="muted">Combine object, grantee and DDL content filters. Use Grantee is for an exact user, role or group; Grantee contains for a partial name.</p>
+        <FilterBar
+          nodes={allNodes}
+          tokens={tokens}
+          onChange={setTokens}
+          placeholder={
+            currentFocus
+              ? 'Filter what surrounds this object... (including grantee or DDL content)'
+              : 'Filter the graph... (server, database, schema, type, name, grantee or DDL content)'
+          }
+        />
+        <p className="muted">
+          Combine object, grantee and DDL content filters. Use Grantee is for an exact user, role or group; Grantee
+          contains for a partial name.
+        </p>
       </section>
 
-      {hasGranteeFilter && <section aria-label="Matching permissions">
-          <p className="muted">{totalGrants} grant{totalGrants === 1 ? '' : 's'} across {grantMatches.length} object{grantMatches.length === 1 ? '' : 's'} matching all filters. Recorded permissions include GRANT and DENY; connecting graph objects do not imply access.</p>
+      {hasGranteeFilter && (
+        <section aria-label="Matching permissions">
+          <p className="muted">
+            {totalGrants} grant{totalGrants === 1 ? '' : 's'} across {grantMatches.length} object
+            {grantMatches.length === 1 ? '' : 's'} matching all filters. Recorded permissions include GRANT and DENY;
+            connecting graph objects do not imply access.
+          </p>
           {grantMatches.length > 0 && (
             <>
-            <div className="lineage-header-row" style={{ margin: '0.5rem 0' }}>
-              <span className="muted">One row per object, one CSV row per permission.</span>
-              <CsvExportButton
-                rows={grantRows}
-                columns={objectGrantColumns}
-                filename={csvFileName('syncsql-access', 'filtered')}
-              />
-            </div>
-            <div className="explorer-table-wrap" style={{ marginBottom: '0.75rem' }}>
-              <table className="explorer-table">
-                <thead>
-                  <tr>
-                    <th>Object</th>
-                    <th>Type</th>
-                    <th>Server</th>
-                    <th>Database</th>
-                    <th>Permissions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grantMatches.map(({ node, grants }) => (
-                    <tr key={node.id}>
-                      <td>
-                        <Link to={`/object/${node.id}`}>{node.qualifiedName}</Link>
-                      </td>
-                      <td>
-                        <TypeBadge type={node.type} />
-                      </td>
-                      <td>{node.server}</td>
-                      <td>{node.database}</td>
-                      <td>
-                        <span className="column-tags">
-                          {grants.map((g, i) => (
-                            <span
-                              key={`${g.grantee}-${g.permission}-${g.column ?? ''}-${i}`}
-                              className={g.state === 'DENY' ? 'column-tag column-tag--deny' : 'column-tag'}
-                            >
-                              {g.permission}
-                              {g.column ? `(${g.column})` : ''}
-                              {g.state === 'DENY' ? ' [DENY]' : ''}
-                            </span>
-                          ))}
-                        </span>
-                      </td>
+              <div className="lineage-header-row" style={{ margin: '0.5rem 0' }}>
+                <span className="muted">One row per object, one CSV row per permission.</span>
+                <CsvExportButton
+                  rows={grantRows}
+                  columns={objectGrantColumns}
+                  filename={csvFileName('syncsql-access', 'filtered')}
+                />
+              </div>
+              <div className="explorer-table-wrap" style={{ marginBottom: '0.75rem' }}>
+                <table className="explorer-table">
+                  <thead>
+                    <tr>
+                      <th>Object</th>
+                      <th>Type</th>
+                      <th>Server</th>
+                      <th>Database</th>
+                      <th>Permissions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {grantMatches.map(({ node, grants }) => (
+                      <tr key={node.id}>
+                        <td>
+                          <Link to={`/object/${node.id}`}>{node.qualifiedName}</Link>
+                        </td>
+                        <td>
+                          <TypeBadge type={node.type} />
+                        </td>
+                        <td>{node.server}</td>
+                        <td>{node.database}</td>
+                        <td>
+                          <span className="column-tags">
+                            {grants.map((g, i) => (
+                              <span
+                                key={`${g.grantee}-${g.permission}-${g.column ?? ''}-${i}`}
+                                className={g.state === 'DENY' ? 'column-tag column-tag--deny' : 'column-tag'}
+                              >
+                                {g.permission}
+                                {g.column ? `(${g.column})` : ''}
+                                {g.state === 'DENY' ? ' [DENY]' : ''}
+                              </span>
+                            ))}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
-      </section>}
+        </section>
+      )}
 
       {currentFocus ? (
         <div className="lineage-nav">
@@ -264,93 +293,224 @@ export default function LineagePage() {
         <p className="muted" style={{ margin: '0.5rem 0' }}>
           {nodeIds.length} object(s) shown.{' '}
           {tokens.length === 0 && 'Start typing to narrow this down by server, database, schema or type. '}
-          {nodeIds.length > 0 && 'Click any node to drill into its own dependencies/dependents; double-click to open its full detail page.'}
+          {nodeIds.length > 0 &&
+            'Click any node to drill into its own dependencies/dependents; double-click to open its full detail page.'}
         </p>
       )}
 
-      {connectorIds.length > 0 && <p className="muted lineage-connector-hint">{connectorIds.length} connecting object{connectorIds.length === 1 ? '' : 's'} kept outside the filters to preserve paths to matching objects.</p>}
+      {connectorIds.length > 0 && (
+        <p className="muted lineage-connector-hint">
+          {connectorIds.length} connecting object{connectorIds.length === 1 ? '' : 's'} kept outside the filters to
+          preserve paths to matching objects.
+        </p>
+      )}
 
-      {currentFocus && nodeIds.length === 1 && narrowedFrom > 1 && <p className="muted">
-        Filters hide all surrounding objects.{' '}
-        <button type="button" className="lineage-nav-back" onClick={() => setTokens([])}>Show full neighborhood</button>
-      </p>}
+      {currentFocus && nodeIds.length === 1 && narrowedFrom > 1 && (
+        <p className="muted">
+          Filters hide all surrounding objects.{' '}
+          <button type="button" className="lineage-nav-back" onClick={() => setTokens([])}>
+            Show full neighborhood
+          </button>
+        </p>
+      )}
 
       <div className="investigation-layout">
-      <div className="workspace-content graph-workspace">
-      {nodeIds.length > GRAPH_CAP ? (
-        <SelectionBreakdown
-          nodes={nodeIds.map((id) => index.byId.get(id)).filter((n): n is CatalogNode => Boolean(n))}
-          onNarrow={(attribute, value) => {
-            setTokens([...tokens, { id: newTokenId(), attribute, operator: 'is', values: [value] }])
-          }}
-        />
-      ) : (
-        <>
-        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} onEdgeInspect={setEdgeEvidence} groupIntermediate={groupIntermediate} connectorIds={connectorIds} />
-        <details className="lineage-legend">
-          <summary><span>Graph legend</span><span className="legend-reminder">→ References · dashed = dynamic SQL</span></summary>
-          <ul>
-            {GRAPH_LEGEND_ITEMS.map(item => <li key={item.kind}>
-              <span className={item.kind === 'arrow' ? 'legend-arrow' : item.kind === 'focus' || item.kind === 'group' ? `legend-node legend-node--${item.kind}` : `legend-line legend-line--${item.kind}`} aria-hidden="true">{item.kind === 'arrow' ? '→' : null}</span>{item.label}
-            </li>)}
-          </ul>
-          <p className="muted">{GRAPH_LEGEND_NOTE}</p>
-          <ul aria-label="Object types in this graph">
-            {[...new Set(nodeIds.map(id => index.byId.get(id)?.type).filter((type): type is string => Boolean(type)))].sort().map(type => (
-              <li key={type}><span className="legend-node" style={{ borderColor: colorForType(type) }} aria-hidden="true" />{type}</li>
-            ))}
-          </ul>
-        </details>
-
-        </>
-      )}
-      </div>
-      <div className="lineage-sidebar">
-      {currentFocus && <details className="lineage-view-options" open>
-        <summary>View options</summary>
-        <div className="lineage-view-controls">
-          {([
-            ['Dependencies', dependencyHops, setDependencyHops],
-            ['Dependents', dependentHops, setDependentHops],
-          ] as const).map(([label, value, setValue]) => <div className="lineage-hop-control" key={label}>
-            <label className="lineage-hops" htmlFor={`lineage-${label.toLowerCase()}-hops`}>{label}</label>
-            <select id={`lineage-${label.toLowerCase()}-hops`} aria-label={`${label} hops`} value={value} onChange={event => setValue(Number(event.target.value))}>
-              {HOP_OPTIONS.map(hop => <option key={hop} value={hop}>{hop} hop{hop === 1 ? '' : 's'}</option>)}
-            </select>
-            <button type="button" className="lineage-nav-back" disabled={value >= MAX_HOPS} onClick={() => setValue(value + 1)} aria-label={`Add ${label.toLowerCase()} hop`}>+ Add hop</button>
-          </div>)}
-          <label className="lineage-group-toggle">
-            <input type="checkbox" checked={groupIntermediate} onChange={event => setGroupIntermediate(event.target.checked)} />
-            Group intermediate layers
-          </label>
+        <div className="workspace-content graph-workspace">
+          {nodeIds.length > GRAPH_CAP ? (
+            <SelectionBreakdown
+              nodes={nodeIds.map((id) => index.byId.get(id)).filter((n): n is CatalogNode => Boolean(n))}
+              onNarrow={(attribute, value) => {
+                setTokens([...tokens, { id: newTokenId(), attribute, operator: 'is', values: [value] }])
+              }}
+            />
+          ) : (
+            <>
+              <LineageGraph
+                nodeIds={nodeIds}
+                focusId={currentFocus}
+                height="70vh"
+                onNodeActivate={drillInto}
+                onEdgeInspect={setEdgeEvidence}
+                groupIntermediate={groupIntermediate}
+                connectorIds={connectorIds}
+              />
+              <details className="lineage-legend">
+                <summary>
+                  <span>Graph legend</span>
+                  <span className="legend-reminder">→ References · dashed = dynamic SQL</span>
+                </summary>
+                <ul>
+                  {GRAPH_LEGEND_ITEMS.map((item) => (
+                    <li key={item.kind}>
+                      <span
+                        className={
+                          item.kind === 'arrow'
+                            ? 'legend-arrow'
+                            : item.kind === 'focus' || item.kind === 'group'
+                              ? `legend-node legend-node--${item.kind}`
+                              : `legend-line legend-line--${item.kind}`
+                        }
+                        aria-hidden="true"
+                      >
+                        {item.kind === 'arrow' ? '→' : null}
+                      </span>
+                      {item.label}
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted">{GRAPH_LEGEND_NOTE}</p>
+                <ul aria-label="Object types in this graph">
+                  {[
+                    ...new Set(
+                      nodeIds.map((id) => index.byId.get(id)?.type).filter((type): type is string => Boolean(type)),
+                    ),
+                  ]
+                    .sort()
+                    .map((type) => (
+                      <li key={type}>
+                        <span className="legend-node" style={{ borderColor: colorForType(type) }} aria-hidden="true" />
+                        {type}
+                      </li>
+                    ))}
+                </ul>
+              </details>
+            </>
+          )}
         </div>
-        <p className="muted">Dependencies are objects the focus references; dependents are objects that reference it. Set either direction to 0 to hide it. Grouping combines intermediate objects of the same type and hop, keeping the focus and outer objects visible.</p>
-      </details>}
-      <InspectorPanel>
-        {edgeEvidence && nodeIds.length <= GRAPH_CAP && <section aria-label="Edge evidence">
-          <h3>Edge evidence</h3>
-          <p>{index.byId.get(edgeEvidence.from)?.qualifiedName ?? edgeEvidence.from} → {index.byId.get(edgeEvidence.to)?.qualifiedName ?? edgeEvidence.to}</p>
-          <p className="muted">Known column references detected in DDL; best-effort evidence, not certified column-level lineage.</p>
-          <div className="column-tags">{edgeEvidence.columns.map(column => <span key={column} className="column-tag">{column}</span>)}</div>
-          {edgeEvidence.dynamic && <p className="muted">Recovered from dynamically built SQL.</p>}
-        </section>}
-        {currentFocus && index.byId.has(currentFocus) ? <>
-          <h3 className="inspector-identity">{index.byId.get(currentFocus)!.qualifiedName}</h3>
-          <TypeBadge type={index.byId.get(currentFocus)!.type} />
-          <p className="muted">{index.byId.get(currentFocus)!.server} → {index.byId.get(currentFocus)!.database}</p>
-          <Link to={`/object/${currentFocus}`}>Open object workbench →</Link>
-          <RelatedObjects title="Used by" rootId={currentFocus} ids={index.incoming.get(currentFocus) ?? []} direction="incoming" />
-          <RelatedObjects title="Depends on" rootId={currentFocus} ids={index.outgoing.get(currentFocus) ?? []} direction="outgoing" />
-          {hasGranteeFilter && <><h3>Recorded permissions</h3>
-            <p className="muted">Current object grants, not an effective-access calculation.</p>
-            {index.byId.get(currentFocus)!.grants.length === 0 && <p>No grants recorded.</p>}
-            <ul className="permission-list">{index.byId.get(currentFocus)!.grants.map((grant, i) => <li key={i}>
-              <button type="button" className="breadcrumb-link" onClick={() => { setFocusStack([]); setTokens([...tokens.filter(token => token.attribute !== 'grantee'), { id: newTokenId(), attribute: 'grantee', operator: 'is', values: [grant.grantee] }]) }}>{grant.grantee}</button>
-              <span className={`grant-state grant-state--${grant.state === 'DENY' ? 'deny' : 'grant'}`}>{grant.state}</span> {grant.permission} · {grant.column ?? 'whole object'}
-            </li>)}</ul></>}
-        </> : <p className="empty-state">Drill into a graph node to inspect its identity and relationships. Edge details appear beside the selected relationship in the graph.</p>}
-      </InspectorPanel>
-      </div>
+        <div className="lineage-sidebar">
+          {currentFocus && (
+            <details className="lineage-view-options" open>
+              <summary>View options</summary>
+              <div className="lineage-view-controls">
+                {(
+                  [
+                    ['Dependencies', dependencyHops, setDependencyHops],
+                    ['Dependents', dependentHops, setDependentHops],
+                  ] as const
+                ).map(([label, value, setValue]) => (
+                  <div className="lineage-hop-control" key={label}>
+                    <label className="lineage-hops" htmlFor={`lineage-${label.toLowerCase()}-hops`}>
+                      {label}
+                    </label>
+                    <select
+                      id={`lineage-${label.toLowerCase()}-hops`}
+                      aria-label={`${label} hops`}
+                      value={value}
+                      onChange={(event) => setValue(Number(event.target.value))}
+                    >
+                      {HOP_OPTIONS.map((hop) => (
+                        <option key={hop} value={hop}>
+                          {hop} hop{hop === 1 ? '' : 's'}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="lineage-nav-back"
+                      disabled={value >= MAX_HOPS}
+                      onClick={() => setValue(value + 1)}
+                      aria-label={`Add ${label.toLowerCase()} hop`}
+                    >
+                      + Add hop
+                    </button>
+                  </div>
+                ))}
+                <label className="lineage-group-toggle">
+                  <input
+                    type="checkbox"
+                    checked={groupIntermediate}
+                    onChange={(event) => setGroupIntermediate(event.target.checked)}
+                  />
+                  Group intermediate layers
+                </label>
+              </div>
+              <p className="muted">
+                Dependencies are objects the focus references; dependents are objects that reference it. Set either
+                direction to 0 to hide it. Grouping combines intermediate objects of the same type and hop, keeping the
+                focus and outer objects visible.
+              </p>
+            </details>
+          )}
+          <InspectorPanel>
+            {edgeEvidence && nodeIds.length <= GRAPH_CAP && (
+              <section aria-label="Edge evidence">
+                <h3>Edge evidence</h3>
+                <p>
+                  {index.byId.get(edgeEvidence.from)?.qualifiedName ?? edgeEvidence.from} →{' '}
+                  {index.byId.get(edgeEvidence.to)?.qualifiedName ?? edgeEvidence.to}
+                </p>
+                <p className="muted">
+                  Known column references detected in DDL; best-effort evidence, not certified column-level lineage.
+                </p>
+                <div className="column-tags">
+                  {edgeEvidence.columns.map((column) => (
+                    <span key={column} className="column-tag">
+                      {column}
+                    </span>
+                  ))}
+                </div>
+                {edgeEvidence.dynamic && <p className="muted">Recovered from dynamically built SQL.</p>}
+              </section>
+            )}
+            {currentFocus && index.byId.has(currentFocus) ? (
+              <>
+                <h3 className="inspector-identity">{index.byId.get(currentFocus)!.qualifiedName}</h3>
+                <TypeBadge type={index.byId.get(currentFocus)!.type} />
+                <p className="muted">
+                  {index.byId.get(currentFocus)!.server} → {index.byId.get(currentFocus)!.database}
+                </p>
+                <Link to={`/object/${currentFocus}`}>Open object workbench →</Link>
+                <RelatedObjects
+                  title="Used by"
+                  rootId={currentFocus}
+                  ids={index.incoming.get(currentFocus) ?? []}
+                  direction="incoming"
+                />
+                <RelatedObjects
+                  title="Depends on"
+                  rootId={currentFocus}
+                  ids={index.outgoing.get(currentFocus) ?? []}
+                  direction="outgoing"
+                />
+                {hasGranteeFilter && (
+                  <>
+                    <h3>Recorded permissions</h3>
+                    <p className="muted">Current object grants, not an effective-access calculation.</p>
+                    {index.byId.get(currentFocus)!.grants.length === 0 && <p>No grants recorded.</p>}
+                    <ul className="permission-list">
+                      {index.byId.get(currentFocus)!.grants.map((grant, i) => (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            className="breadcrumb-link"
+                            onClick={() => {
+                              setFocusStack([])
+                              setTokens([
+                                ...tokens.filter((token) => token.attribute !== 'grantee'),
+                                { id: newTokenId(), attribute: 'grantee', operator: 'is', values: [grant.grantee] },
+                              ])
+                            }}
+                          >
+                            {grant.grantee}
+                          </button>
+                          <span className={`grant-state grant-state--${grant.state === 'DENY' ? 'deny' : 'grant'}`}>
+                            {grant.state}
+                          </span>{' '}
+                          {grant.permission} · {grant.column ?? 'whole object'}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
+            ) : (
+              <p className="empty-state">
+                Drill into a graph node to inspect its identity and relationships. Edge details appear beside the
+                selected relationship in the graph.
+              </p>
+            )}
+          </InspectorPanel>
+        </div>
       </div>
     </div>
   )
@@ -398,7 +558,11 @@ function SelectionBreakdown({
                 {shown.map((group) =>
                   onNarrow ? (
                     <li key={group.key}>
-                      <button type="button" className="selection-breakdown-row" onClick={() => onNarrow(attribute, group.key)}>
+                      <button
+                        type="button"
+                        className="selection-breakdown-row"
+                        onClick={() => onNarrow(attribute, group.key)}
+                      >
                         <span className="selection-breakdown-name">{group.key}</span>
                         <span className="selection-breakdown-count">{group.nodes.length}</span>
                       </button>

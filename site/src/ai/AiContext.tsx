@@ -46,7 +46,7 @@ export function AiProvider({ children }: { children: ReactNode }) {
     fetch(manifestUrl, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Capability manifest returned ${response.status}.`)
-        const value = await response.json() as unknown
+        const value = (await response.json()) as unknown
         setDeploymentCapability(parseCapabilityManifest(value).filterGenerator)
       })
       .catch((manifestError: unknown) => {
@@ -66,34 +66,37 @@ export function AiProvider({ children }: { children: ReactNode }) {
   const available = Boolean(deploymentCapability?.available) && sessionReason === null
   const reason = sessionReason ?? deploymentCapability?.reason ?? null
 
-  const generateFilterPlan = useCallback(async (query: string, nodes: CatalogNode[], signal?: AbortSignal) => {
-    if (!deploymentCapability?.available || sessionReason) throw new Error('AI is unavailable in this deployment.')
-    try {
-      setError(null)
-      setRuntimeStatus('loading')
-      const adapter = adapterRef.current ?? new WorkerEmbeddingAdapter()
-      adapterRef.current = adapter
-      const modelBaseUrl = new URL('models/', document.baseURI).href
-      await adapter.load({ modelBaseUrl, signal, onProgress: setProgress })
-      setRuntimeStatus('running')
-      const plan = await plannerRef.current.generate(query, nodes, adapter, signal)
-      setRuntimeStatus('idle')
-      return plan
-    } catch (generationError) {
-      if (generationError instanceof DOMException && generationError.name === 'AbortError') {
-        adapterRef.current?.dispose()
-        adapterRef.current = null
+  const generateFilterPlan = useCallback(
+    async (query: string, nodes: CatalogNode[], signal?: AbortSignal) => {
+      if (!deploymentCapability?.available || sessionReason) throw new Error('AI is unavailable in this deployment.')
+      try {
+        setError(null)
+        setRuntimeStatus('loading')
+        const adapter = adapterRef.current ?? new WorkerEmbeddingAdapter()
+        adapterRef.current = adapter
+        const modelBaseUrl = new URL('models/', document.baseURI).href
+        await adapter.load({ modelBaseUrl, signal, onProgress: setProgress })
+        setRuntimeStatus('running')
+        const plan = await plannerRef.current.generate(query, nodes, adapter, signal)
         setRuntimeStatus('idle')
-        setProgress(null)
+        return plan
+      } catch (generationError) {
+        if (generationError instanceof DOMException && generationError.name === 'AbortError') {
+          adapterRef.current?.dispose()
+          adapterRef.current = null
+          setRuntimeStatus('idle')
+          setProgress(null)
+          throw generationError
+        }
+        const message = generationError instanceof Error ? generationError.message : String(generationError)
+        setError(message)
+        setRuntimeStatus('error')
+        setSessionReason('runtime-error')
         throw generationError
       }
-      const message = generationError instanceof Error ? generationError.message : String(generationError)
-      setError(message)
-      setRuntimeStatus('error')
-      setSessionReason('runtime-error')
-      throw generationError
-    }
-  }, [deploymentCapability, sessionReason])
+    },
+    [deploymentCapability, sessionReason],
+  )
 
   const retry = useCallback(() => {
     adapterRef.current?.dispose()
@@ -104,16 +107,19 @@ export function AiProvider({ children }: { children: ReactNode }) {
     setError(null)
   }, [])
 
-  const value = useMemo<AiContextValue>(() => ({
-    checking,
-    available,
-    reason,
-    runtimeStatus,
-    progress,
-    error,
-    generateFilterPlan,
-    retry,
-  }), [available, checking, error, generateFilterPlan, progress, reason, retry, runtimeStatus])
+  const value = useMemo<AiContextValue>(
+    () => ({
+      checking,
+      available,
+      reason,
+      runtimeStatus,
+      progress,
+      error,
+      generateFilterPlan,
+      retry,
+    }),
+    [available, checking, error, generateFilterPlan, progress, reason, retry, runtimeStatus],
+  )
 
   return <AiContext.Provider value={value}>{children}</AiContext.Provider>
 }
@@ -139,10 +145,12 @@ function unavailableManifest(): AiCapabilityManifest {
 }
 
 function isAvailabilityReason(value: unknown): value is AiAvailabilityReason {
-  return value === 'model-missing'
-    || value === 'lfs-unresolved'
-    || value === 'checksum-mismatch'
-    || value === 'packaging-failed'
-    || value === 'manifest-unavailable'
-    || value === 'runtime-error'
+  return (
+    value === 'model-missing' ||
+    value === 'lfs-unresolved' ||
+    value === 'checksum-mismatch' ||
+    value === 'packaging-failed' ||
+    value === 'manifest-unavailable' ||
+    value === 'runtime-error'
+  )
 }

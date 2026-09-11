@@ -17,14 +17,23 @@ const adapter: EmbeddingAdapter = {
 
 describe('EmbeddingFilterPlanner', () => {
   const columnNodes = [{ ...nodes[0], columns: [{ name: 'Id', description: null, dataType: 'int' }] }]
-  it.each(['Show all references to column id from Orders', 'Find references to column Id in dbo.Orders', 'references to column [Id] from [SQLPROD01].[AppDb].[dbo].[Orders]'])('resolves recorded column-reference intent: %s', async (query) => {
+  it.each([
+    'Show all references to column id from Orders',
+    'Find references to column Id in dbo.Orders',
+    'references to column [Id] from [SQLPROD01].[AppDb].[dbo].[Orders]',
+  ])('resolves recorded column-reference intent: %s', async (query) => {
     const plan = await new EmbeddingFilterPlanner().generate(query, columnNodes, adapter)
     expect(plan.columnReference).toEqual({ objectId: nodes[0].id, column: 'Id' })
     expect(plan.contentQuery).toBe('')
     expect(plan.tokens).toEqual([])
     expect(plan.warnings.join(' ')).toContain('best-effort')
   })
-  it.each(['Show all references to column Missing from Orders', 'Show all references to column Id from Unknown', 'Show all references to column Id from Orders except procedures', 'Show all references to column Id from Orders and tables'])('rejects unresolved or compound column requests: %s', async (query) => {
+  it.each([
+    'Show all references to column Missing from Orders',
+    'Show all references to column Id from Unknown',
+    'Show all references to column Id from Orders except procedures',
+    'Show all references to column Id from Orders and tables',
+  ])('rejects unresolved or compound column requests: %s', async (query) => {
     const plan = await new EmbeddingFilterPlanner().generate(query, columnNodes, adapter)
     expect(plan.columnReference).toBeUndefined()
     expect(plan.contentQuery).toBe('')
@@ -32,12 +41,20 @@ describe('EmbeddingFilterPlanner', () => {
     expect(plan.unsupportedFragments).toEqual([query])
   })
   it('requires qualification for duplicate object names, even when only one has the column', async () => {
-    const plan = await new EmbeddingFilterPlanner().generate('Show all references to column Id from Orders', [...columnNodes, { ...nodes[0], id: 'other', database: 'OtherDb' }], adapter)
+    const plan = await new EmbeddingFilterPlanner().generate(
+      'Show all references to column Id from Orders',
+      [...columnNodes, { ...nodes[0], id: 'other', database: 'OtherDb' }],
+      adapter,
+    )
     expect(plan.columnReference).toBeUndefined()
     expect(plan.warnings.join(' ')).toContain('Qualify')
   })
   it('keeps explicit quoted DDL searches literal', async () => {
-    const plan = await new EmbeddingFilterPlanner().generate('DDL contains "references to column Id from Orders"', columnNodes, adapter)
+    const plan = await new EmbeddingFilterPlanner().generate(
+      'DDL contains "references to column Id from Orders"',
+      columnNodes,
+      adapter,
+    )
     expect(plan.columnReference).toBeUndefined()
     expect(plan.contentQuery).toBe('references to column Id from Orders')
   })
@@ -70,9 +87,7 @@ describe('EmbeddingFilterPlanner', () => {
 
   it('maps a generic procedure alias to every applicable catalog type', async () => {
     const plan = await new EmbeddingFilterPlanner().generate('Show procedures', nodes, adapter)
-    expect(plan.tokens).toEqual([
-      { attribute: 'type', operator: 'is-in', values: ['StoredProcedures', 'Procedures'] },
-    ])
+    expect(plan.tokens).toEqual([{ attribute: 'type', operator: 'is-in', values: ['StoredProcedures', 'Procedures'] }])
   })
 
   it('does not invent values for an unsupported request', async () => {

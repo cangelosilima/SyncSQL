@@ -20,10 +20,22 @@ export default function Explorer() {
   const [searchParams, setSearchParams] = useSearchParams()
   const encodedTokens = searchParams.get('filters')
   const contentQuery = searchParams.get('q') ?? ''
-  const tokens = useMemo<FilterToken[]>(() => [
-    ...decodeTokensFromUrl(encodedTokens),
-    ...(contentQuery.trim() ? [{ id: 'legacy-ddl-query', attribute: 'ddl' as const, operator: 'contains' as const, values: [contentQuery.trim()] }] : []),
-  ], [encodedTokens, contentQuery])
+  const tokens = useMemo<FilterToken[]>(
+    () => [
+      ...decodeTokensFromUrl(encodedTokens),
+      ...(contentQuery.trim()
+        ? [
+            {
+              id: 'legacy-ddl-query',
+              attribute: 'ddl' as const,
+              operator: 'contains' as const,
+              values: [contentQuery.trim()],
+            },
+          ]
+        : []),
+    ],
+    [encodedTokens, contentQuery],
+  )
   const [sortKey, setSortKey] = useState<SortKey>('qualifiedName')
   const [sortDir, setSortDir] = useState<1 | -1>(1)
 
@@ -81,8 +93,15 @@ export default function Explorer() {
         {filtered.length} of {nodes.length} object(s) match
         {tokens.length > 0 ? ' the current filter' : ''}.
       </p>
-      <FilterBar nodes={nodes} tokens={tokens} onChange={setTokens} placeholder="Search objects and DDL, or choose a filter..." />
-      <p className="muted">Choose an attribute to narrow your search, or type text and press Enter to search object details and DDL.</p>
+      <FilterBar
+        nodes={nodes}
+        tokens={tokens}
+        onChange={setTokens}
+        placeholder="Search objects and DDL, or choose a filter..."
+      />
+      <p className="muted">
+        Choose an attribute to narrow your search, or type text and press Enter to search object details and DDL.
+      </p>
 
       {sorted.length > ROW_CAP && (
         <p className="lineage-warning" style={{ marginTop: '0.75rem' }}>
@@ -94,14 +113,32 @@ export default function Explorer() {
         <table className="explorer-table">
           <thead>
             <tr>
-              <SortableHeader label="Object" sortKey="qualifiedName" active={sortKey} dir={sortDir} onClick={toggleSort} />
+              <SortableHeader
+                label="Object"
+                sortKey="qualifiedName"
+                active={sortKey}
+                dir={sortDir}
+                onClick={toggleSort}
+              />
               <SortableHeader label="Type" sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort} />
               <SortableHeader label="Server" sortKey="server" active={sortKey} dir={sortDir} onClick={toggleSort} />
               <SortableHeader label="Database" sortKey="database" active={sortKey} dir={sortDir} onClick={toggleSort} />
               <SortableHeader label="Schema" sortKey="schema" active={sortKey} dir={sortDir} onClick={toggleSort} />
               <th>Description</th>
-              <SortableHeader label="Changes" sortKey="changeCount" active={sortKey} dir={sortDir} onClick={toggleSort} />
-              <SortableHeader label="Last changed" sortKey="lastChangedAt" active={sortKey} dir={sortDir} onClick={toggleSort} />
+              <SortableHeader
+                label="Changes"
+                sortKey="changeCount"
+                active={sortKey}
+                dir={sortDir}
+                onClick={toggleSort}
+              />
+              <SortableHeader
+                label="Last changed"
+                sortKey="lastChangedAt"
+                active={sortKey}
+                dir={sortDir}
+                onClick={toggleSort}
+              />
             </tr>
           </thead>
           <tbody>
@@ -118,12 +155,22 @@ export default function Explorer() {
                 <td>{node.schema ?? <span className="muted">-</span>}</td>
                 <td className="explorer-description">{node.description ?? <span className="muted">-</span>}</td>
                 <td>{node.changeCount || <span className="muted">0</span>}</td>
-                <td>{node.lastChangedAt ? new Date(node.lastChangedAt).toLocaleDateString() : <span className="muted">-</span>}</td>
+                <td>
+                  {node.lastChangedAt ? (
+                    new Date(node.lastChangedAt).toLocaleDateString()
+                  ) : (
+                    <span className="muted">-</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {visible.length === 0 && <p className="sidebar-empty" style={{ padding: '1rem' }}>No objects match this filter.</p>}
+        {visible.length === 0 && (
+          <p className="sidebar-empty" style={{ padding: '1rem' }}>
+            No objects match this filter.
+          </p>
+        )}
       </div>
     </div>
   )

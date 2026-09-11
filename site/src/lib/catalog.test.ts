@@ -97,7 +97,7 @@ describe('qualifiedRefName', () => {
 })
 
 describe('isLinkNode', () => {
-  it('recognizes both engines\' link objects', () => {
+  it("recognizes both engines' link objects", () => {
     expect(isLinkNode(link)).toBe(true)
     expect(isLinkNode({ ...link, type: 'DatabaseLinks' })).toBe(true)
     expect(isLinkNode(proc)).toBe(false)

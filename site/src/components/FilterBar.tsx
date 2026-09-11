@@ -179,7 +179,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
 
   const stageHint =
     stage === 'attribute'
-      ? placeholder ?? 'Filter by attribute, or type to search...'
+      ? (placeholder ?? 'Filter by attribute, or type to search...')
       : stage === 'operator'
         ? `${attrDef?.label}...`
         : isMultiValue && pendingValues.length > 0

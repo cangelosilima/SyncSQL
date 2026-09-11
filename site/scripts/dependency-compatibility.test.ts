@@ -14,9 +14,17 @@ describe('security override compatibility', () => {
     sheet.addRows([[1], [2], [3]])
     sheet.addConditionalFormatting({
       ref: 'A1:A3',
-      rules: [{ type: 'iconSet', iconSet: '3Stars', cfvo: [
-        { type: 'percent', value: 0 }, { type: 'percent', value: 33 }, { type: 'percent', value: 67 },
-      ] }],
+      rules: [
+        {
+          type: 'iconSet',
+          iconSet: '3Stars',
+          cfvo: [
+            { type: 'percent', value: 0 },
+            { type: 'percent', value: 33 },
+            { type: 'percent', value: 67 },
+          ],
+        },
+      ],
     })
     const bytes = await workbook.xlsx.writeBuffer()
     const reloaded = new ExcelJS.Workbook()

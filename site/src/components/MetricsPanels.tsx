@@ -34,13 +34,13 @@ export default function MetricsPanels({ metrics }: { metrics: CatalogMetricSnaps
 
   const indexSeriesFor = (name: string) => metrics.map((snap) => snap.indexes.find((i) => i.name === name) ?? null)
   const activeIndexSnaps = activeIndexName ? indexSeriesFor(activeIndexName) : []
-  const isMssqlIndex = activeIndexSnaps.some((s) => s && s.fragmentationPct !== undefined && s.fragmentationPct !== null)
+  const isMssqlIndex = activeIndexSnaps.some(
+    (s) => s && s.fragmentationPct !== undefined && s.fragmentationPct !== null,
+  )
   const isOracleIndex = activeIndexSnaps.some((s) => s && s.rowCount !== undefined && s.rowCount !== null)
 
   const totalPendingMods = metrics.map((snap) =>
-    snap.statistics.length === 0
-      ? null
-      : snap.statistics.reduce((sum, s) => sum + (s.modificationCounter ?? 0), 0),
+    snap.statistics.length === 0 ? null : snap.statistics.reduce((sum, s) => sum + (s.modificationCounter ?? 0), 0),
   )
 
   return (
@@ -96,7 +96,13 @@ export default function MetricsPanels({ metrics }: { metrics: CatalogMetricSnaps
             <>
               <TrendChart
                 labels={labels}
-                series={[{ name: 'Fragmentation %', color: '#ef4444', values: activeIndexSnaps.map((s) => s?.fragmentationPct ?? null) }]}
+                series={[
+                  {
+                    name: 'Fragmentation %',
+                    color: '#ef4444',
+                    values: activeIndexSnaps.map((s) => s?.fragmentationPct ?? null),
+                  },
+                ]}
                 formatValue={(v) => `${v.toFixed(1)}%`}
               />
               <TrendChart
@@ -137,30 +143,32 @@ export default function MetricsPanels({ metrics }: { metrics: CatalogMetricSnaps
             formatValue={formatCount}
           />
           <div className="metrics-table-scroll" role="region" aria-label="Optimizer statistics table" tabIndex={0}>
-          <table className="columns-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Rows</th>
-                <th>Sampled</th>
-                <th>Steps</th>
-                <th>Modified</th>
-                <th>Last updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {latest.statistics.map((s) => (
-                <tr key={s.name}>
-                  <td>{s.name}</td>
-                  <td>{formatCount(s.rows)}</td>
-                  <td>{formatCount(s.rowsSampled)}</td>
-                  <td>{s.steps ?? <span className="muted">-</span>}</td>
-                  <td>{formatCount(s.modificationCounter)}</td>
-                  <td>{s.lastUpdated ? new Date(s.lastUpdated).toLocaleString() : <span className="muted">-</span>}</td>
+            <table className="columns-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Rows</th>
+                  <th>Sampled</th>
+                  <th>Steps</th>
+                  <th>Modified</th>
+                  <th>Last updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {latest.statistics.map((s) => (
+                  <tr key={s.name}>
+                    <td>{s.name}</td>
+                    <td>{formatCount(s.rows)}</td>
+                    <td>{formatCount(s.rowsSampled)}</td>
+                    <td>{s.steps ?? <span className="muted">-</span>}</td>
+                    <td>{formatCount(s.modificationCounter)}</td>
+                    <td>
+                      {s.lastUpdated ? new Date(s.lastUpdated).toLocaleString() : <span className="muted">-</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

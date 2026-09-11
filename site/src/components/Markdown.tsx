@@ -26,10 +26,16 @@ function Block({ block }: { block: MarkdownBlock }) {
       return <h3>{content}</h3>
     }
     case 'paragraph':
-      return <p><Inline nodes={block.content} /></p>
+      return (
+        <p>
+          <Inline nodes={block.content} />
+        </p>
+      )
     case 'list': {
       const items = block.items.map((item, i) => (
-        <li key={i}><Inline nodes={item} /></li>
+        <li key={i}>
+          <Inline nodes={item} />
+        </li>
       ))
       return block.ordered ? <ol>{items}</ol> : <ul>{items}</ul>
     }

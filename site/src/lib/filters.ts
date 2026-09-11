@@ -63,7 +63,7 @@ export function getFieldValue(node: CatalogNode, attribute: FilterAttribute): st
     case 'ddl':
       return nodeContentText(node)
     case 'grantee':
-      return node.grants.map(grant => grant.grantee).join(', ')
+      return node.grants.map((grant) => grant.grantee).join(', ')
   }
 }
 
@@ -73,12 +73,18 @@ export function getFieldValue(node: CatalogNode, attribute: FilterAttribute): st
  * comfortably more candidates than the cap so a huge node list doesn't get
  * fully walked just to populate a suggestion dropdown.
  */
-export function getSuggestedValues(nodes: CatalogNode[], attribute: FilterAttribute, query: string, limit = 50): string[] {
+export function getSuggestedValues(
+  nodes: CatalogNode[],
+  attribute: FilterAttribute,
+  query: string,
+  limit = 50,
+): string[] {
   const needle = query.trim().toLowerCase()
   const set = new Set<string>()
   const scanCap = limit * 20
   for (const node of nodes) {
-    const values = attribute === 'grantee' ? node.grants.map(grant => grant.grantee) : [getFieldValue(node, attribute)]
+    const values =
+      attribute === 'grantee' ? node.grants.map((grant) => grant.grantee) : [getFieldValue(node, attribute)]
     for (const value of values) {
       if (value && (!needle || value.toLowerCase().includes(needle))) set.add(value)
       if (set.size >= scanCap) break
@@ -128,16 +134,19 @@ function matchesValue(value: string, token: FilterToken): boolean {
 
 export function applyFilters(nodes: CatalogNode[], tokens: FilterToken[]): CatalogNode[] {
   if (tokens.length === 0) return nodes
-  const objectTokens = tokens.filter(token => token.attribute !== 'grantee')
-  const hasGrantee = tokens.some(token => token.attribute === 'grantee')
-  return nodes.filter(node => objectTokens.every(token => matchesToken(node, token))
-    && (!hasGrantee || matchingGrants(node, tokens).length > 0))
+  const objectTokens = tokens.filter((token) => token.attribute !== 'grantee')
+  const hasGrantee = tokens.some((token) => token.attribute === 'grantee')
+  return nodes.filter(
+    (node) =>
+      objectTokens.every((token) => matchesToken(node, token)) &&
+      (!hasGrantee || matchingGrants(node, tokens).length > 0),
+  )
 }
 
 /** All grantee conditions must match the same recorded permission. */
 export function matchingGrants(node: CatalogNode, tokens: FilterToken[]) {
-  const grantees = tokens.filter(token => token.attribute === 'grantee')
-  return node.grants.filter(grant => grantees.every(token => matchesValue(grant.grantee, token)))
+  const grantees = tokens.filter((token) => token.attribute === 'grantee')
+  return node.grants.filter((grant) => grantees.every((token) => matchesValue(grant.grantee, token)))
 }
 
 export function describeToken(token: FilterToken): string {

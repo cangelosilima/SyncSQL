@@ -30,7 +30,6 @@ vi.mock('./ai/AiContext', () => ({
   useAi: () => state.ai,
 }))
 
-
 describe('AI navigation and direct routing', () => {
   beforeEach(() => {
     state.ai.checking = false
@@ -39,7 +38,11 @@ describe('AI navigation and direct routing', () => {
   })
 
   it('renders a visible, non-clickable AI navigation item when the model is unavailable', () => {
-    render(<MemoryRouter initialEntries={['/ai']}><App /></MemoryRouter>)
+    render(
+      <MemoryRouter initialEntries={['/ai']}>
+        <App />
+      </MemoryRouter>,
+    )
     const item = screen.getByText('AI', { selector: 'span.nav-link-disabled' })
     expect(item).toHaveAttribute('aria-disabled', 'true')
     expect(item).toHaveAttribute('title', 'AI model not included in this deployment')
@@ -47,7 +50,11 @@ describe('AI navigation and direct routing', () => {
   })
 
   it('shows the unavailable page for a direct AI route', () => {
-    render(<MemoryRouter initialEntries={['/ai']}><App /></MemoryRouter>)
+    render(
+      <MemoryRouter initialEntries={['/ai']}>
+        <App />
+      </MemoryRouter>,
+    )
     expect(screen.getByRole('heading', { name: 'AI filter generation is unavailable' })).toBeInTheDocument()
     expect(screen.getByText('The local model was not included in this site deployment.')).toBeInTheDocument()
   })
@@ -55,7 +62,11 @@ describe('AI navigation and direct routing', () => {
   it('enables the AI navigation link when the capability is available', () => {
     state.ai.available = true
     state.ai.reason = null
-    render(<MemoryRouter initialEntries={['/ai']}><App /></MemoryRouter>)
+    render(
+      <MemoryRouter initialEntries={['/ai']}>
+        <App />
+      </MemoryRouter>,
+    )
     expect(screen.getByRole('link', { name: 'AI' })).toHaveAttribute('href', '/ai')
   })
 })

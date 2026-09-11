@@ -7,4 +7,5 @@ export const GRAPH_LEGEND_ITEMS = [
   { kind: 'group', label: 'Dashed node: grouped objects' },
 ] as const
 
-export const GRAPH_LEGEND_NOTE = 'Node border color indicates object type. Column references are best-effort evidence detected from SQL, not complete column lineage.'
+export const GRAPH_LEGEND_NOTE =
+  'Node border color indicates object type. Column references are best-effort evidence detected from SQL, not complete column lineage.'

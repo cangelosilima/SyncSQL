@@ -9,7 +9,12 @@ export function formatSql(code: string, config: SqlFormatConfig = sqlFormatConfi
   const oracle = /\bCREATE\s+OR\s+REPLACE\b|\bVARCHAR2\b|\b(?:N?Q)'/i.test(code)
   for (const dialect of oracle ? [plsql, transactsql] : [transactsql, plsql]) {
     try {
-      const formatted = formatDialect(code, { dialect, tabWidth: config.tabWidth, keywordCase: config.keywordCase, linesBetweenQueries: config.linesBetweenQueries })
+      const formatted = formatDialect(code, {
+        dialect,
+        tabWidth: config.tabWidth,
+        keywordCase: config.keywordCase,
+        linesBetweenQueries: config.linesBetweenQueries,
+      })
       return {
         code: config.alignColumns ? alignSqlColumns(formatted, config) : formatted,
         failed: false,

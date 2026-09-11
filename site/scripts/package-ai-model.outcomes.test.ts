@@ -5,11 +5,24 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const required = ['config.json', 'LICENSE.txt', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer_config.json', 'vocab.txt', 'onnx/model_quantized.onnx']
+const required = [
+  'config.json',
+  'LICENSE.txt',
+  'special_tokens_map.json',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'vocab.txt',
+  'onnx/model_quantized.onnx',
+]
 let root: string
 let source: string
 let output: string
-let manifest: { schemaVersion: number; model: string; revision: string; files: { path: string; size: number; sha256: string }[] }
+let manifest: {
+  schemaVersion: number
+  model: string
+  revision: string
+  files: { path: string; size: number; sha256: string }[]
+}
 const originalArgv = process.argv
 const originalExitCode = process.exitCode
 
@@ -27,7 +40,8 @@ beforeEach(async () => {
       return { path: file, size: Buffer.byteLength(bytes), sha256: createHash('sha256').update(bytes).digest('hex') }
     }),
   }
-  for (const file of required) await writeFile(path.join(source, file), file.endsWith('.onnx') ? 'x'.repeat(2048) : '{}\n')
+  for (const file of required)
+    await writeFile(path.join(source, file), file.endsWith('.onnx') ? 'x'.repeat(2048) : '{}\n')
   await writeFile(path.join(source, 'ATTRIBUTION.md'), 'fixture attribution')
   vi.stubEnv('AI_MODEL_SOURCE_ROOT', source)
   vi.stubEnv('AI_MODEL_OUTPUT_ROOT', output)
@@ -64,7 +78,9 @@ describe('model verification and packaging outcomes', () => {
     await run()
     expect(await capability()).toEqual({ available: true, model: manifest.model, version: 1 })
     for (const file of [...required, 'manifest.json', 'ATTRIBUTION.md']) {
-      expect(await readFile(path.join(output, 'models', manifest.model, file))).toEqual(await readFile(path.join(source, file)))
+      expect(await readFile(path.join(output, 'models', manifest.model, file))).toEqual(
+        await readFile(path.join(source, file)),
+      )
     }
     expect(process.exitCode).toBe(0)
   })
@@ -82,14 +98,15 @@ describe('model verification and packaging outcomes', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('missing or invalid'))
   })
 
-  it.each([
-    { schemaVersion: 2 }, { model: 'other' }, { revision: 123 }, { revision: 'invalid' }, { files: null },
-  ])('rejects unsupported manifest shape %j', async (change) => {
-    Object.assign(manifest, change)
-    await run()
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('unsupported shape'))
-    expect((await capability()).reason).toBe('model-missing')
-  })
+  it.each([{ schemaVersion: 2 }, { model: 'other' }, { revision: 123 }, { revision: 'invalid' }, { files: null }])(
+    'rejects unsupported manifest shape %j',
+    async (change) => {
+      Object.assign(manifest, change)
+      await run()
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('unsupported shape'))
+      expect((await capability()).reason).toBe('model-missing')
+    },
+  )
 
   it.each(['duplicate', 'missing'])('rejects %s required entries', async (kind) => {
     if (kind === 'duplicate') manifest.files.push(manifest.files[0])
@@ -98,11 +115,18 @@ describe('model verification and packaging outcomes', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('exactly once'))
   })
 
-  it.each([null, { path: 3 }, { size: 1.5 }, { size: -1 }, { sha256: 1 }, { sha256: 'invalid' }])('rejects malformed extra entries %j', async (change) => {
-    manifest.files.push(change === null ? null! : { ...manifest.files[0], path: 'extra', ...change } as typeof manifest.files[number])
-    await run()
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('invalid file entry'))
-  })
+  it.each([null, { path: 3 }, { size: 1.5 }, { size: -1 }, { sha256: 1 }, { sha256: 'invalid' }])(
+    'rejects malformed extra entries %j',
+    async (change) => {
+      manifest.files.push(
+        change === null
+          ? null!
+          : ({ ...manifest.files[0], path: 'extra', ...change } as (typeof manifest.files)[number]),
+      )
+      await run()
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('invalid file entry'))
+    },
+  )
 
   it.each(['', '../outside', 'nested/../../outside'])('rejects unsafe path %j', async (file) => {
     manifest.files.push({ ...manifest.files[0], path: file })
@@ -116,7 +140,9 @@ describe('model verification and packaging outcomes', () => {
     if (kind === 'directory') await mkdir(path.join(source, 'config.json'))
     await run()
     expect((await capability()).reason).toBe('model-missing')
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(kind === 'missing' ? 'config.json is missing' : 'config.json is not a file'))
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining(kind === 'missing' ? 'config.json is missing' : 'config.json is not a file'),
+    )
   })
 
   it('detects unresolved LFS before checking its checksum', async () => {
@@ -144,7 +170,7 @@ describe('model verification and packaging outcomes', () => {
     vi.stubEnv('AI_MODEL_OUTPUT_ROOT', undefined)
     const read = vi.fn().mockRejectedValue(new Error('missing model'))
     vi.doMock('node:fs/promises', async () => ({
-      ...await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises'),
+      ...(await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')),
       readFile: read,
     }))
     await run(['--verify-only'], false)
@@ -156,7 +182,9 @@ describe('model verification and packaging outcomes', () => {
     await rm(path.join(source, 'ATTRIBUTION.md'))
     await run(strict ? ['--strict'] : [])
     expect((await capability()).reason).toBe('packaging-failed')
-    await expect(readFile(path.join(output, 'models', manifest.model, 'config.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(path.join(output, 'models', manifest.model, 'config.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
     expect(process.exitCode).toBe(strict ? 1 : 0)
   })
 
@@ -167,6 +195,8 @@ describe('model verification and packaging outcomes', () => {
     })
     await run(['--strict'])
     expect(process.exitCode).toBe(1)
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Capability manifest could not be written: disk full'))
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Capability manifest could not be written: disk full'),
+    )
   })
 })

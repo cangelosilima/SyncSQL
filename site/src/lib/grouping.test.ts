@@ -99,7 +99,9 @@ describe('grouping', () => {
 describe('bundleNeighborhood', () => {
   const hub = node('SQLPROD01/AppDb/Views/dbo/Hub', { type: 'Views' })
   const tables = Array.from({ length: 20 }, (_, i) => node(`SQLPROD01/AppDb/Tables/dbo/T${String(i).padStart(2, '0')}`))
-  const procs = Array.from({ length: 2 }, (_, i) => node(`SQLPROD01/AppDb/StoredProcedures/dbo/P${i}`, { type: 'StoredProcedures' }))
+  const procs = Array.from({ length: 2 }, (_, i) =>
+    node(`SQLPROD01/AppDb/StoredProcedures/dbo/P${i}`, { type: 'StoredProcedures' }),
+  )
   // The hub reads every table; the two procedures read the hub.
   const edges: CatalogEdge[] = [
     ...tables.map((t) => ({ from: hub.id, to: t.id, columns: [] })),

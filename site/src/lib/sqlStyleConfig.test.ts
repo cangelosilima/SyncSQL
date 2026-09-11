@@ -10,7 +10,11 @@ describe('shared SQL style configuration', () => {
 
   it('applies indentation, keyword case, query spacing and column spacing', () => {
     const result = formatSql('create table t (a int not null, longer varchar(20) null); select a from t;', {
-      ...sqlFormatConfig, tabWidth: 4, columnSpacing: 3, keywordCase: 'upper', linesBetweenQueries: 3,
+      ...sqlFormatConfig,
+      tabWidth: 4,
+      columnSpacing: 3,
+      keywordCase: 'upper',
+      linesBetweenQueries: 3,
     })
     expect(result.failed).toBe(false)
     expect(result.code).toContain('CREATE TABLE t (\n    a        int           NOT NULL,')
