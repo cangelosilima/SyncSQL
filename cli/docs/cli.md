@@ -171,16 +171,29 @@ syncsql catalog build --objects-root ./staging --output ./catalog.json
 Lineage edges are inferred with a real parser per engine - `Microsoft.SqlServer.TransactSql.ScriptDom`
 for MSSQL objects, a vendored ANTLR PL/SQL grammar for Oracle objects -
 not text/regex matching, so string literals, comments, and quoted
-identifiers are never mistaken for object references.
+identifiers are never mistaken for object references. That also covers the
+two MSSQL object families whose data flow is asynchronous: a replication
+publication's `sp_addarticle` declarations become edges to the tables it
+publishes, and Service Broker `SEND`/`RECEIVE`/`BEGIN DIALOG`/queue
+activation become edges to the message type, queue, contract or procedure
+they name. A `BEGIN DIALOG` targeting another instance's Broker GUID (or a
+variable) is left unresolved rather than bound to a same-named local
+service.
 
-Every reference that resolves nowhere in scope (same server+database, or
-bare on the same server) - typically because the target was renamed or
-dropped and this object's DDL was never updated - is collected as an
-**orphaned reference** and written to `catalog.json`'s `orphanedReferences`
-array (`from`/`schema`/`name`) instead of silently dropped, with a summary
-count logged as a warning. A reference that's merely *ambiguous* (more than
-one same-named object in scope) is not flagged this way - see
-`NodeIndex.Resolve` in `SyncSql.Catalog` for the distinction.
+Every reference that resolves nowhere the lookup reaches - the object's own
+database, the other databases on its server, then the servers one linked
+server / database link away - is collected as an **orphaned reference** and
+written to `catalog.json`'s `orphanedReferences` array
+(`from`/`server`/`database`/`schema`/`name`) instead of silently dropped,
+with a summary count logged as a warning. Several cases are deliberately not
+flagged, because none of them means the target is missing: a merely
+*ambiguous* reference (more than one same-named object in scope - see
+`NodeIndex.Resolve` in `SyncSql.Catalog`), a system object the engine
+provides, a temp table / CTE / statement alias the script creates for itself,
+a target outside what is extracted (recorded against the link instead), and a
+reference recovered from dynamically-built SQL. The
+[root README](../../README.md#orphaned-reference-detection) documents the
+full rule.
 
 Exit code `0` on success, `1` if `--objects-root` doesn't exist.
 
@@ -260,12 +273,17 @@ extracted.
   is left blank, so objects go back into the same project.
 - **`defaults`** / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
-  (`Schemas`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
-  `Triggers`, `Synonyms`, `LinkedServers`, `Replication` for MSSQL;
-  `Schemas`, `Tables`, `Views`, `Procedures`, `Functions`, `Packages`,
-  `PackageBodies`, `Triggers`, `Synonyms`, `DatabaseLinks` for Oracle).
+  (`Schemas`, `Types`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
+  `Triggers`, `Synonyms`, `LinkedServers`, `Replication`, and the four
+  Service Broker types `MessageTypes`, `Contracts`, `Queues`, `Services`
+  for MSSQL; `Schemas`, `Types`, `TypeBodies`, `Tables`, `Views`,
+  `Procedures`, `Functions`, `Packages`, `PackageBodies`, `Triggers`,
+  `Synonyms`, `DatabaseLinks` for Oracle).
   A server that specifies a key fully replaces the default for that key
-  - it does not merge with it.
+  - it does not merge with it. The Service Broker types are opt-in and are
+  not in `config/servers.example.json`; naming any one of them makes the
+  extractor read the database's Broker catalog for that type, skipping the
+  engine-provided definitions.
 - **`serverSelection`**: regex filter over which of the listed servers
   actually run in a given invocation (`sync --server-include`/`--server-exclude`
   override this per run).

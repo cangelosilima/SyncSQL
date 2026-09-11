@@ -33,6 +33,13 @@ The extracted DDL. Any appended sections the extractor writes - Foreign
 Keys, Check Constraints, Indexes - are rendered as their own collapsible
 panels rather than buried in the script.
 
+**Original** shows the definition exactly as captured. **Formatted**
+re-indents it in the browser using the repository's shared SQL style, for
+reading a definition that arrived as one long line. It is a display choice
+only: exports, diffs and the catalog keep the captured text, and a definition
+that cannot be parsed stays original with a note. The toggle applies to the
+appended sections too.
+
 Code blocks use the Midnight palette for consistent SQL syntax highlighting.
 
 ## Metrics
@@ -46,7 +53,8 @@ show up as a DDL diff on every single run.
 
 Who holds GRANT or DENY on this object, down to the column where a grant is
 scoped that way. To go the other direction - from a principal to everything
-they can reach - use the Lineage explorer's **Access** tab.
+they can reach - add a **Grantee** chip in the Lineage explorer, which lists
+every matching permission beside the graph.
 
 ## Change history
 
