@@ -2,17 +2,14 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
-import { ThemeProvider } from './lib/ThemeContext'
 import './styles.css'
 import './primitives.css'
 import './workbench.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
-      <HashRouter>
-        <App />
-      </HashRouter>
-    </ThemeProvider>
+    <HashRouter>
+      <App />
+    </HashRouter>
   </StrictMode>,
 )

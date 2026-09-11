@@ -12,6 +12,10 @@ vi.mock('../lib/CatalogContext', () => ({
       makeNode({ id: 'outgoing', type: 'DatabaseLinks' }),
     ]),
     edges: [makeEdge('caller', 'incoming'), makeEdge('incoming', 'focus'), makeEdge('focus', 'outgoing'), makeEdge('outgoing', 'target')],
+    linkedServerReferences: [
+      { linkedServer: 'incoming', from: 'caller', to: 'focus', schema: null, name: 'focus' },
+      { linkedServer: 'outgoing', from: 'focus', to: 'target', schema: null, name: 'target' },
+    ],
   })) }),
 }))
 vi.mock('../components/LineageGraph', () => ({

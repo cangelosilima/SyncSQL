@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LineagePage from './LineagePage'
 import { buildIndex } from '../lib/catalog'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
+import snapshot from '../../public/data/catalog.json'
+import type { Catalog } from '../types'
+import { encodeTokensForUrl } from '../lib/filters'
 
 /**
  * A table with three neighbours of two different types - the shape the reported
@@ -30,8 +33,11 @@ vi.mock('../lib/CatalogContext', () => ({
 // not provide. The assertions here are about which node ids the page selects,
 // so the graph is stubbed down to a list of the names it was handed.
 vi.mock('../components/LineageGraph', () => ({
-  default: ({ nodeIds, groupIntermediate }: { nodeIds: string[]; groupIntermediate?: boolean }) => (
-    <div data-testid="graph" data-grouped={String(groupIntermediate)}>{nodeIds.join(',')}</div>
+  default: ({ nodeIds, groupIntermediate, onNodeActivate }: { nodeIds: string[]; groupIntermediate?: boolean; onNodeActivate: (id: string) => void }) => (
+    <>
+      <div data-testid="graph" data-grouped={String(groupIntermediate)}>{nodeIds.join(',')}</div>
+      {nodeIds.map(id => <button key={id} onClick={() => onNodeActivate(id)}>Focus {id}</button>)}
+    </>
   ),
 }))
 
@@ -71,6 +77,70 @@ async function addTypeFilter(user: ReturnType<typeof userEvent.setup>, container
 
 describe('LineagePage', () => {
   beforeEach(() => { catalog = baseCatalog })
+  it.each(['LinkedServers', 'DatabaseLinks'])('opens a %s search result with its callers and targets', async type => {
+    catalog = snapshot as unknown as Catalog
+    const user = userEvent.setup()
+    const filter = encodeURIComponent(encodeTokensForUrl([{ attribute: 'type', operator: 'is', values: [type] }]))
+    renderAt(`/lineage?filter=${filter}`)
+    const link = catalog.nodes.find(node => node.type === type)!
+    expect(graphIds().every(id => catalog.nodes.find(node => node.id === id)!.type === type)).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: `Focus ${link.id}` }))
+    const adjacent = catalog.edges.filter(edge => edge.from === link.id || edge.to === link.id)
+      .map(edge => edge.from === link.id ? edge.to : edge.from)
+    expect(adjacent.length).toBeGreaterThan(0)
+    expect(graphIds()).toEqual(expect.arrayContaining([link.id, ...adjacent]))
+    expect(screen.queryByText(`Type is ${type}`)).not.toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).not.toContain('filter=')
+  })
+
+  it('lets a restored filtered focus reveal its hidden neighborhood', async () => {
+    catalog = snapshot as unknown as Catalog
+    const user = userEvent.setup()
+    const link = 'ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE'
+    const filter = encodeURIComponent(encodeTokensForUrl([{ attribute: 'type', operator: 'is', values: ['LinkedServers'] }]))
+    renderAt(`/lineage?focus=${encodeURIComponent(link)}&filter=${filter}&dependencies=3&dependents=2`)
+    expect(graphIds()).toEqual([link])
+    expect(screen.getByText('Type is LinkedServers')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show full neighborhood' }))
+    expect(graphIds()).toContain('ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_ONE')
+    expect(graphIds()).toContain('HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS')
+    expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('3')
+    expect(screen.getByRole('combobox', { name: 'Dependents hops' })).toHaveValue('2')
+    expect(screen.getByTestId('location').textContent).not.toContain('filter=')
+  })
+
+  it('keeps neighborhood filters when navigating between focused objects', async () => {
+    const user = userEvent.setup()
+    const { container } = renderAt('/lineage?focus=Order')
+    await addTypeFilter(user, container, 'StoredProcedures')
+    await user.click(screen.getByRole('button', { name: 'Focus read' }))
+    expect(screen.getByText('Type is StoredProcedures')).toBeInTheDocument()
+    expect(graphIds()).toEqual(['read'])
+  })
+  it('adds dependent hops along the focused benchmark object flow through shared links', async () => {
+    catalog = snapshot as unknown as Catalog
+    const user = userEvent.setup()
+    const root = 'ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS'
+    renderAt(`/lineage?focus=${encodeURIComponent(root)}&hops=0`)
+    expect(graphIds()).toEqual([root])
+
+    for (let hop = 1; hop <= 3; hop++) {
+      await user.click(screen.getByRole('button', { name: 'Add dependents hop' }))
+      const names = graphIds().map(id => catalog.nodes.find(node => node.id === id)!.qualifiedName)
+      expect(names).toContain('PROCUREMENT.P_ONE')
+      expect(names).toContain('PROCUREMENT.P_TWO')
+      expect(names).not.toContain('ORDER_ENTRY.P_CIRCLE')
+      expect(names).not.toContain('PROCUREMENT.P_CIRCLE')
+      expect(names).not.toContain('PROCUREMENT.P_STOCK')
+      expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('0')
+      expect(screen.getByTestId('location')).toHaveTextContent(`dependents=${hop}`)
+    }
+    expect(graphIds()).toContain('ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_READ')
+    await user.click(screen.getByRole('checkbox', { name: 'Group intermediate layers' }))
+    expect(screen.getByTestId('graph')).toHaveAttribute('data-grouped', 'true')
+    expect(graphIds()).not.toContain('ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CIRCLE')
+  })
   it('shows the focused object and its neighbours when arriving with ?focus=', () => {
     renderAt('/lineage?focus=Order')
 

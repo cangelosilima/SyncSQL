@@ -30,9 +30,6 @@ vi.mock('./ai/AiContext', () => ({
   useAi: () => state.ai,
 }))
 
-vi.mock('./lib/ThemeContext', () => ({
-  useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }),
-}))
 
 describe('AI navigation and direct routing', () => {
   beforeEach(() => {
