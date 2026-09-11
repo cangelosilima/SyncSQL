@@ -359,16 +359,11 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true, Guid? serviceBr
 
     /// <summary>True when calling this procedure means "run the string I am passing you".</summary>
     private static bool ExecutesItsArgument(SchemaObjectName name) =>
-        name.BaseIdentifier?.Value is { } procedure && SqlExecutingProcedures.Contains(procedure, StringComparer.OrdinalIgnoreCase);
+        SqlExecutingProcedures.Contains(name.BaseIdentifier.Value, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Scans the arguments of an EXEC, which is where <c>sp_executesql</c> keeps the statement it runs.</summary>
     private void ScanParameters(ExecutableEntity entity, string? linkedServer)
     {
-        if (entity.Parameters is null)
-        {
-            return;
-        }
-
         foreach (ExecuteParameter parameter in entity.Parameters)
         {
             ScanDynamic(BuildLiteralText(parameter.ParameterValue), linkedServer);
@@ -424,9 +419,9 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true, Guid? serviceBr
         }
     }
 
-    private static string? BuildLiteralText(IList<ValueExpression>? expressions)
+    private static string? BuildLiteralText(IList<ValueExpression> expressions)
     {
-        if (expressions is null || expressions.Count == 0)
+        if (expressions.Count == 0)
         {
             return null;
         }

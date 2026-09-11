@@ -15,8 +15,20 @@ namespace SyncSql.Lineage.Oracle;
 /// one), including Oracle's q'...' alternative quoting, which the old regex-based approach had no way
 /// to recognize at all.
 /// </summary>
-public sealed class OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger) : ILineageAnalyzer
+public sealed class OracleLineageAnalyzer : ILineageAnalyzer
 {
+    private readonly ILogger<OracleLineageAnalyzer> _logger;
+    private readonly Func<PlSqlParser, PlSqlParser.Sql_scriptContext> _parse;
+
+    public OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
+        : this(logger, parser => parser.sql_script()) { }
+
+    internal OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger, Func<PlSqlParser, PlSqlParser.Sql_scriptContext> parse)
+    {
+        _logger = logger;
+        _parse = parse;
+    }
+
     public DatabaseEngine Engine => DatabaseEngine.Oracle;
 
     /// <summary>
@@ -51,11 +63,11 @@ public sealed class OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
             parser.RemoveErrorListeners();
             parser.AddErrorListener(errorListener);
 
-            PlSqlParser.Sql_scriptContext tree = parser.sql_script();
+            PlSqlParser.Sql_scriptContext tree = _parse(parser);
 
             if (errorListener.Errors.Count > 0)
             {
-                logger.LogWarning("PL/SQL parse produced {Count} error(s) (continuing with the partial tree): {Message}", errorListener.Errors.Count, errorListener.Errors[0]);
+                _logger.LogWarning("PL/SQL parse produced {Count} error(s) (continuing with the partial tree): {Message}", errorListener.Errors.Count, errorListener.Errors[0]);
             }
 
             PlSqlLineageVisitor visitor = new(options.DynamicSql ? sql =>
@@ -73,7 +85,7 @@ public sealed class OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            logger.LogWarning("PL/SQL parsing failed (skipping lineage for this object): {Message}", ex.Message);
+            _logger.LogWarning("PL/SQL parsing failed (skipping lineage for this object): {Message}", ex.Message);
             return LineageAnalysisResult.Empty;
         }
     }

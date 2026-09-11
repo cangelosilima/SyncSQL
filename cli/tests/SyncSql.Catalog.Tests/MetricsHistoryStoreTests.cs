@@ -110,6 +110,33 @@ public sealed class MetricsHistoryStoreTests : IDisposable
         Assert.Empty(history);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData(" ")]
+    [InlineData("{ broken")]
+    public async Task UpdateAsync_UnusableHistoryStartsFresh(string raw)
+    {
+        Directory.CreateDirectory(HistoryRoot);
+        await File.WriteAllTextAsync(Path.Combine(HistoryRoot, "table.json"), raw);
+        Assert.Empty(await _store.LoadHistoryAsync(HistoryRoot, "table", CancellationToken.None));
+        WriteSnapshot("table", Snapshot(DateTimeOffset.UnixEpoch));
+        Assert.Equal(1, await _store.UpdateAsync(new MetricsHistoryUpdateRequest { SnapshotRoot = SnapshotRoot, HistoryRoot = HistoryRoot }, CancellationToken.None));
+        Assert.Equal(DateTimeOffset.UnixEpoch, Assert.Single(await _store.LoadHistoryAsync(HistoryRoot, "table", CancellationToken.None)).CapturedAt);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{ broken")]
+    public async Task UpdateAsync_InvalidSnapshotPreservesHistory(string raw)
+    {
+        WriteSnapshot("table", Snapshot(DateTimeOffset.UnixEpoch));
+        var request = new MetricsHistoryUpdateRequest { SnapshotRoot = SnapshotRoot, HistoryRoot = HistoryRoot };
+        await _store.UpdateAsync(request, CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(SnapshotRoot, "table.json"), raw);
+        Assert.Equal(0, await _store.UpdateAsync(request, CancellationToken.None));
+        Assert.Equal(DateTimeOffset.UnixEpoch, Assert.Single(await _store.LoadHistoryAsync(HistoryRoot, "table", CancellationToken.None)).CapturedAt);
+    }
+
     public void Dispose()
     {
         try

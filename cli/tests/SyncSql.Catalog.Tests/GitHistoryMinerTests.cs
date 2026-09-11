@@ -32,6 +32,17 @@ public sealed class GitHistoryMinerTests : IDisposable
     private readonly IProcessRunner _processRunner = Substitute.For<IProcessRunner>();
     private readonly GitHistoryMiner _miner;
 
+    [Fact]
+    public async Task MineAsync_CommitWithoutSubjectKeepsEmptyMessage()
+    {
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".git"));
+        const string id = "SQL/db/Tables/dbo/t";
+        _processRunner.RunAsync("git", Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, $"@@COMMIT@@abc@@COMMIT@@2026-01-01T00:00:00Z\nobjects/{id}.sql\n", ""));
+        var result = await _miner.MineAsync(new GitHistoryMiningRequest { RepoRoot = _repoRoot, PathPrefix = "objects", KnownObjectIds = new HashSet<string> { id }, MaxHistoryContentCalls = 0 }, CancellationToken.None);
+        Assert.Equal("", Assert.Single(result.RecentChanges).Message);
+    }
+
     public GitHistoryMinerTests()
     {
         _miner = new GitHistoryMiner(_processRunner, NullLogger<GitHistoryMiner>.Instance);

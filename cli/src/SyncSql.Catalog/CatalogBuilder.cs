@@ -347,7 +347,7 @@ public sealed class CatalogBuilder(
                     continue;
                 }
 
-                if (resolution is not { Kind: ReferenceResolutionKind.Resolved, NodeId: { } targetId } || targetId == node.Id)
+                if (resolution is not { Kind: ReferenceResolutionKind.Resolved, NodeId: { } targetId })
                 {
                     continue;
                 }

@@ -85,7 +85,8 @@ internal static class DynamicSqlScanner
     /// <param name="depth">Current literal nesting depth; the initial call passes 0.</param>
     /// <param name="budget">Shared per-object budget.</param>
     /// <param name="into">Collected references.</param>
-    public static void Scan(string? sql, string? linkedServer, int depth, Budget budget, List<ObjectRef> into)
+    public static void Scan(string? sql, string? linkedServer, int depth, Budget budget, List<ObjectRef> into,
+        Func<string, IList<TSqlParserToken>>? tokenize = null)
     {
         if (string.IsNullOrWhiteSpace(sql) || sql.Length < MinInterestingLength || depth > MaxDepth)
         {
@@ -102,8 +103,7 @@ internal static class DynamicSqlScanner
         IList<TSqlParserToken> tokens;
         try
         {
-            using StringReader reader = new(sql);
-            tokens = TSqlParserFactory.GetParser().GetTokenStream(reader, out _);
+            tokens = (tokenize ?? Tokenize)(sql);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -115,7 +115,13 @@ internal static class DynamicSqlScanner
         ScanTokens(tokens, linkedServer, depth, budget, into);
     }
 
-    private static void ScanTokens(IList<TSqlParserToken> tokens, string? inheritedServer, int depth, Budget budget, List<ObjectRef> into)
+    private static IList<TSqlParserToken> Tokenize(string sql)
+    {
+        using StringReader reader = new(sql);
+        return TSqlParserFactory.GetParser().GetTokenStream(reader, out _);
+    }
+
+    internal static void ScanTokens(IList<TSqlParserToken> tokens, string? inheritedServer, int depth, Budget budget, List<ObjectRef> into)
     {
         // The linked server an enclosing OPENQUERY(...) argument list establishes, and the parenthesis
         // depth it was opened at, so it stops applying at the matching close.
@@ -267,7 +273,7 @@ internal static class DynamicSqlScanner
     }
 
     /// <summary>Maps the 2- to 4-part name just read onto an <see cref="ObjectRef"/>, tagged as dynamic.</summary>
-    private static ObjectRef? ToObjectRef(List<string> parts, string? linkedServer)
+    internal static ObjectRef? ToObjectRef(List<string> parts, string? linkedServer)
     {
         // More than four parts is not a T-SQL name; the trailing four are the ones that mean anything.
         List<string> tail = parts.Count > 4 ? parts.GetRange(parts.Count - 4, 4) : parts;
@@ -294,27 +300,27 @@ internal static class DynamicSqlScanner
     }
 
     /// <summary>Reads the linked-server argument out of <c>OPENQUERY(&lt;server&gt;, ...)</c>.</summary>
-    private static bool TryReadOpenQueryServer(IList<TSqlParserToken> tokens, int openQueryIndex, out string? server)
+    internal static bool TryReadOpenQueryServer(IList<TSqlParserToken> tokens, int openQueryIndex, out string? server)
     {
         server = null;
         int index = NextMeaningful(tokens, openQueryIndex + 1);
-        if (index < 0 || Classify(tokens[index].Text ?? "") != TokenKind.OpenParen)
+        if (index < 0 || Classify(tokens[index].Text) != TokenKind.OpenParen)
         {
             return false;
         }
 
         index = NextMeaningful(tokens, index + 1);
-        if (index < 0 || Classify(tokens[index].Text ?? "") != TokenKind.Word)
+        if (index < 0 || Classify(tokens[index].Text) != TokenKind.Word)
         {
             return false;
         }
 
-        server = Unquote(tokens[index].Text ?? "");
+        server = Unquote(tokens[index].Text);
         return !string.IsNullOrWhiteSpace(server);
     }
 
     /// <summary>True when the token before <paramref name="index"/> (ignoring trivia) is a dot.</summary>
-    private static bool FollowsDot(IList<TSqlParserToken> tokens, int index)
+    internal static bool FollowsDot(IList<TSqlParserToken> tokens, int index)
     {
         for (int i = index - 1; i >= 0; i--)
         {
@@ -352,7 +358,7 @@ internal static class DynamicSqlScanner
     private static bool LooksLikeSql(string sql) =>
         SqlKeywordsWorthScanningFor.Any(keyword => sql.Contains(keyword, StringComparison.OrdinalIgnoreCase));
 
-    private enum TokenKind
+    internal enum TokenKind
     {
         Trivia,
         Word,
@@ -369,7 +375,7 @@ internal static class DynamicSqlScanner
     /// the first character of the resulting text is then unambiguous in T-SQL. Reading it this way keeps
     /// this file independent of the (large, version-dependent) token-type enum.
     /// </summary>
-    private static TokenKind Classify(string text)
+    internal static TokenKind Classify(string text)
     {
         if (text.Length == 0 || string.IsNullOrWhiteSpace(text))
         {
@@ -393,7 +399,7 @@ internal static class DynamicSqlScanner
     }
 
     /// <summary>Strips <c>[]</c>/<c>""</c> delimiters so a quoted identifier compares equal to a plain one.</summary>
-    private static string Unquote(string text)
+    internal static string Unquote(string text)
     {
         if (text.Length >= 2)
         {

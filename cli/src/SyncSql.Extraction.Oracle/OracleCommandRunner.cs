@@ -1,4 +1,5 @@
-﻿using Oracle.ManagedDataAccess.Client;
+﻿using System.Data.Common;
+using Oracle.ManagedDataAccess.Client;
 
 namespace SyncSql.Extraction.Oracle;
 
@@ -12,8 +13,8 @@ internal static class OracleCommandRunner
 {
     /// <summary>Privileged fleet extraction sees all owners; ordinary schema credentials retain their visible scope.</summary>
     public static async Task<List<T>> QueryDictionaryAsync<T>(
-        OracleConnection connection, string allOwnersSql, string visibleSql,
-        Func<OracleDataReader, T> map, CancellationToken cancellationToken,
+        DbConnection connection, string allOwnersSql, string visibleSql,
+        Func<DbDataReader, T> map, CancellationToken cancellationToken,
         params (string Name, object Value)[] parameters)
     {
         try
@@ -27,15 +28,15 @@ internal static class OracleCommandRunner
     }
 
     public static async Task<List<T>> QueryAsync<T>(
-        OracleConnection connection,
+        DbConnection connection,
         string sql,
-        Func<OracleDataReader, T> map,
+        Func<DbDataReader, T> map,
         CancellationToken cancellationToken,
         params (string Name, object Value)[] parameters)
     {
-        await using OracleCommand command = CreateCommand(connection, sql, parameters);
+        await using DbCommand command = CreateCommand(connection, sql, parameters);
         List<T> results = [];
-        await using OracleDataReader reader = (OracleDataReader)await command.ExecuteReaderAsync(cancellationToken);
+        await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             results.Add(map(reader));
@@ -45,28 +46,31 @@ internal static class OracleCommandRunner
     }
 
     public static async Task<string?> ExecuteScalarStringAsync(
-        OracleConnection connection, string sql, CancellationToken cancellationToken, params (string Name, object Value)[] parameters)
+        DbConnection connection, string sql, CancellationToken cancellationToken, params (string Name, object Value)[] parameters)
     {
-        await using OracleCommand command = CreateCommand(connection, sql, parameters);
+        await using DbCommand command = CreateCommand(connection, sql, parameters);
         object? result = await command.ExecuteScalarAsync(cancellationToken);
         return result as string;
     }
 
     public static async Task ExecuteNonQueryAsync(
-        OracleConnection connection, string sql, CancellationToken cancellationToken, params (string Name, object Value)[] parameters)
+        DbConnection connection, string sql, CancellationToken cancellationToken, params (string Name, object Value)[] parameters)
     {
-        await using OracleCommand command = CreateCommand(connection, sql, parameters);
+        await using DbCommand command = CreateCommand(connection, sql, parameters);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static OracleCommand CreateCommand(OracleConnection connection, string sql, (string Name, object Value)[] parameters)
+    internal static DbCommand CreateCommand(DbConnection connection, string sql, (string Name, object Value)[] parameters)
     {
-        OracleCommand command = connection.CreateCommand();
+        DbCommand command = connection.CreateCommand();
         command.CommandText = sql;
-        command.BindByName = true;
+        if (command is OracleCommand oracleCommand) { oracleCommand.BindByName = true; }
         foreach ((string name, object value) in parameters)
         {
-            command.Parameters.Add(name, value);
+            DbParameter parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
         }
 
         return command;

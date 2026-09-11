@@ -95,9 +95,9 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
         return VisitChildren(context);
     }
 
-    private static ObjectRef? FromRoutineName(PlSqlParser.Routine_nameContext? context)
+    private static ObjectRef? FromRoutineName(PlSqlParser.Routine_nameContext context)
     {
-        if (context?.identifier() is null)
+        if (context.identifier() is null)
         {
             return null;
         }

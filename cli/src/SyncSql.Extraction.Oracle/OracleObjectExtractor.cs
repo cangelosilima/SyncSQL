@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Data.Common;
+using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;
@@ -15,8 +16,23 @@ namespace SyncSql.Extraction.Oracle;
 /// SyncSql.Oracle.psm1's Export-SyncSqlOracleServer. Oracle has no "database" concept equivalent to
 /// MSSQL's, so the configured service name is used as the DatabaseName path segment.
 /// </summary>
-public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger, TimeProvider timeProvider) : IDatabaseObjectExtractor
+public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
 {
+    private readonly ILogger<OracleObjectExtractor> _logger;
+    private readonly TimeProvider _timeProvider;
+    private readonly Func<ServerConfig, DatabaseCredentials, DbConnection> _createConnection;
+
+    public OracleObjectExtractor(ILogger<OracleObjectExtractor> logger, TimeProvider timeProvider)
+        : this(logger, timeProvider, OracleConnectionFactory.Create) { }
+
+    internal OracleObjectExtractor(ILogger<OracleObjectExtractor> logger, TimeProvider timeProvider,
+        Func<ServerConfig, DatabaseCredentials, DbConnection> createConnection)
+    {
+        _logger = logger;
+        _timeProvider = timeProvider;
+        _createConnection = createConnection;
+    }
+
     public DatabaseEngine Engine => DatabaseEngine.Oracle;
 
     public async Task<ExtractionOutcome> ExtractAsync(ServerConfig server, EffectiveFilters filters, ExtractionOptions options, CancellationToken cancellationToken)
@@ -24,7 +40,9 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         string serviceName = server.ServiceName
             ?? throw new InvalidOperationException($"Oracle server '{server.Name}' is missing required key 'serviceName'.");
 
-        await using OracleConnection connection = await OracleConnectionFactory.OpenAsync(server, options.Credentials, cancellationToken);
+        await using DbConnection connection = _createConnection(server, options.Credentials);
+        await connection.OpenAsync(cancellationToken);
+        await OracleConnectionFactory.InitializeAsync(connection, cancellationToken);
 
         List<ExtractedObject> objects = [];
         Dictionary<string, MetricsSnapshot> metrics = [];
@@ -55,9 +73,10 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
 
             foreach (string owner in allowedOwners)
             {
-                if (!grantsByOwner.ContainsKey(owner))
+                if (!grantsByOwner.TryGetValue(owner, out Dictionary<string, List<GrantEntry>>? ownerGrants))
                 {
-                    grantsByOwner[owner] = await TryLoadAsync(() => LoadGrantsAsync(connection, owner, cancellationToken), server.Name, owner, "ALL_TAB_PRIVS/ALL_COL_PRIVS");
+                    ownerGrants = await TryLoadAsync(() => LoadGrantsAsync(connection, owner, cancellationToken), server.Name, owner, "ALL_TAB_PRIVS/ALL_COL_PRIVS");
+                    grantsByOwner[owner] = ownerGrants;
                 }
                 if (oracleType is "TABLE" or "VIEW" && !columnListByOwner.ContainsKey(owner))
                 {
@@ -88,16 +107,16 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
                     }
                     catch (OracleException ex)
                     {
-                        logger.LogWarning("[{Server}/{ServiceName}] Failed to extract DDL for {Owner}.{ObjectName} ({ConfigType}): {Message}",
+                        _logger.LogWarning("[{Server}/{ServiceName}] Failed to extract DDL for {Owner}.{ObjectName} ({ConfigType}): {Message}",
                             server.Name, serviceName, owner, objectName, configType, ex.Message);
                         continue;
                     }
 
                     string key = $"{owner}.{objectName}";
                     IReadOnlyList<ExtractedColumn> columns = oracleType is "TABLE" or "VIEW"
-                        ? columnListByOwner.GetValueOrDefault(owner)?.GetValueOrDefault(key) ?? []
+                        ? columnListByOwner[owner].GetValueOrDefault(key) ?? []
                         : [];
-                    IReadOnlyList<GrantEntry> objectGrants = grantsByOwner.GetValueOrDefault(owner)?.GetValueOrDefault(key) ?? [];
+                    IReadOnlyList<GrantEntry> objectGrants = ownerGrants.GetValueOrDefault(key) ?? [];
 
                     objects.Add(new ExtractedObject
                     {
@@ -128,12 +147,12 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
             await ExtractDatabaseLinksAsync(connection, server, serviceName, filters, objects, cancellationToken);
         }
 
-        logger.LogInformation("[{Server}] Wrote {Count} object(s)", server.Name, objects.Count);
+        _logger.LogInformation("[{Server}] Wrote {Count} object(s)", server.Name, objects.Count);
         return new ExtractionOutcome { Objects = objects, MetricsSnapshots = metrics };
     }
 
     private static async Task ExtractSchemasAsync(
-        OracleConnection connection, ServerConfig server, string serviceName, IReadOnlyList<string> allowedOwners,
+        DbConnection connection, ServerConfig server, string serviceName, IReadOnlyList<string> allowedOwners,
         List<ExtractedObject> objects, CancellationToken cancellationToken)
     {
         foreach (string owner in allowedOwners)
@@ -165,7 +184,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
     }
 
     private static async Task ExtractDatabaseLinksAsync(
-        OracleConnection connection, ServerConfig server, string serviceName, EffectiveFilters filters,
+        DbConnection connection, ServerConfig server, string serviceName, EffectiveFilters filters,
         List<ExtractedObject> objects, CancellationToken cancellationToken)
     {
         // ALL_DB_LINKS cannot expose another owner's private links.
@@ -204,7 +223,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         }
     }
 
-    private static async Task<Dictionary<string, List<GrantEntry>>> LoadGrantsAsync(OracleConnection connection, string owner, CancellationToken cancellationToken)
+    private static async Task<Dictionary<string, List<GrantEntry>>> LoadGrantsAsync(DbConnection connection, string owner, CancellationToken cancellationToken)
     {
         Dictionary<string, List<GrantEntry>> index = new(StringComparer.OrdinalIgnoreCase);
 
@@ -239,7 +258,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         }
     }
 
-    private static async Task<Dictionary<string, List<ExtractedColumn>>> LoadColumnListAsync(OracleConnection connection, string owner, CancellationToken cancellationToken)
+    private static async Task<Dictionary<string, List<ExtractedColumn>>> LoadColumnListAsync(DbConnection connection, string owner, CancellationToken cancellationToken)
     {
         Dictionary<string, List<ExtractedColumn>> index = new(StringComparer.OrdinalIgnoreCase);
         List<(string TableName, string ColumnName, string DataType)> rows = await OracleCommandRunner.QueryAsync(
@@ -261,9 +280,9 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         return index;
     }
 
-    private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(OracleConnection connection, string owner, string serverName, CancellationToken cancellationToken)
+    private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(DbConnection connection, string owner, string serverName, CancellationToken cancellationToken)
     {
-        DateTimeOffset capturedAt = timeProvider.GetUtcNow();
+        DateTimeOffset capturedAt = _timeProvider.GetUtcNow();
         Dictionary<string, MetricsSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
 
         try
@@ -301,7 +320,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         }
         catch (OracleException ex)
         {
-            logger.LogWarning("[{Server}/{Owner}] ALL_TAB_STATISTICS extraction failed (continuing without it): {Message}", serverName, owner, ex.Message);
+            _logger.LogWarning("[{Server}/{Owner}] ALL_TAB_STATISTICS extraction failed (continuing without it): {Message}", serverName, owner, ex.Message);
         }
 
         try
@@ -328,7 +347,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         }
         catch (OracleException ex)
         {
-            logger.LogWarning("[{Server}/{Owner}] ALL_TAB_MODIFICATIONS extraction failed (continuing without it): {Message}", serverName, owner, ex.Message);
+            _logger.LogWarning("[{Server}/{Owner}] ALL_TAB_MODIFICATIONS extraction failed (continuing without it): {Message}", serverName, owner, ex.Message);
         }
 
         try
@@ -373,7 +392,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         }
         catch (OracleException ex)
         {
-            logger.LogWarning("[{Server}/{Owner}] ALL_IND_STATISTICS extraction failed (continuing without it): {Message}", serverName, owner, ex.Message);
+            _logger.LogWarning("[{Server}/{Owner}] ALL_IND_STATISTICS extraction failed (continuing without it): {Message}", serverName, owner, ex.Message);
         }
 
         return snapshots;
@@ -387,7 +406,7 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         }
         catch (OracleException ex)
         {
-            logger.LogWarning("[{Server}/{Owner}] {Section} extraction failed (continuing without it): {Message}", serverName, owner, sectionName, ex.Message);
+            _logger.LogWarning("[{Server}/{Owner}] {Section} extraction failed (continuing without it): {Message}", serverName, owner, sectionName, ex.Message);
             return new T();
         }
     }

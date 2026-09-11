@@ -6,7 +6,7 @@ namespace SyncSql.Extraction.MsSql;
 
 internal static class MsSqlConnectionFactory
 {
-    public static async Task<SqlConnection> OpenAsync(ServerConfig server, string database, DatabaseCredentials credentials, CancellationToken cancellationToken)
+    public static SqlConnection Create(ServerConfig server, string database, DatabaseCredentials credentials)
     {
         // A named instance addresses itself ("HOST\INSTANCE"), and the SQL Browser picks the port -
         // appending the default 1433 to one would point at whatever else happens to listen there. An
@@ -27,7 +27,6 @@ internal static class MsSqlConnectionFactory
         };
 
         SqlConnection connection = new(builder.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
         return connection;
     }
 }

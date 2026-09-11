@@ -73,6 +73,20 @@ public sealed class SystemProcessRunnerTests : IDisposable
         Assert.NotEqual(0, result.ExitCode);
     }
 
+    [Fact]
+    public async Task RunAsync_PassesWorkingDirectoryAndEnvironmentToChild()
+    {
+        string executable = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh";
+        string[] arguments = OperatingSystem.IsWindows()
+            ? ["/c", "echo %SYNCSQL_CHILD_TEST% & cd"]
+            : ["-c", "echo \"$SYNCSQL_CHILD_TEST\"; pwd"];
+        ProcessResult result = await _runner.RunAsync(executable, arguments, _root,
+            new Dictionary<string, string> { ["SYNCSQL_CHILD_TEST"] = "child-value" });
+        Assert.True(result.Succeeded, result.StandardError);
+        Assert.Equal("child-value", result.StandardOutput.Split('\n')[0].Trim());
+        Assert.Contains(_root, result.StandardOutput, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         try

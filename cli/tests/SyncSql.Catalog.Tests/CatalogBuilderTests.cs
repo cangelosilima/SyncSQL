@@ -98,6 +98,55 @@ public sealed class CatalogBuilderTests : IDisposable
         _lineageAnalyzerResolver.Resolve(DatabaseEngine.MsSql).Returns(_mssqlAnalyzer);
     }
 
+    [Fact]
+    public async Task BuildAsync_SkipsMalformedPathsAndEmptyDdl()
+    {
+        File.WriteAllText(Path.Combine(_objectsRoot, "unexpected.sql"), "SELECT 1;");
+        string deep = Path.Combine(_objectsRoot, "a/b/c/d/e/f.sql");
+        Directory.CreateDirectory(Path.GetDirectoryName(deep)!);
+        File.WriteAllText(deep, "SELECT 1;");
+        WriteObjectFile("SQL", "db", "Views", "dbo", "empty", "");
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        Assert.Equal("empty", Assert.Single(catalog.Nodes).Name);
+        _mssqlAnalyzer.DidNotReceiveWithAnyArgs().Analyze(default!, default);
+    }
+
+    [Fact]
+    public async Task BuildAsync_LinkedReferencesPreferStaticAndSortAcrossLinks()
+    {
+        WriteObjectFile("SQL", "_ServerLevel", "LinkedServers", null, "linkA", LinkedServerDdl("linkA", "remoteA", "db"));
+        WriteObjectFile("SQL", "_ServerLevel", "LinkedServers", null, "linkB", LinkedServerDdl("linkB", "remoteB", "db"));
+        WriteObjectFile("SQL", "db", "Views", "dbo", "caller", "SELECT marker");
+        WriteObjectFile("SQL", "db", "Views", "dbo", "caller2", "SELECT marker");
+        _mssqlAnalyzer.Analyze("SELECT marker", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [
+                new ObjectRef("dbo", "table") { Server = "linkB", Origin = ReferenceOrigin.Dynamic },
+                new ObjectRef("dbo", "table") { Server = "linkA", Origin = ReferenceOrigin.Dynamic },
+                new ObjectRef("dbo", "table") { Server = "linkA" },
+                new ObjectRef("dbo", "table") { Server = "linkA" },
+                new ObjectRef("dbo", "caller"), new ObjectRef("dbo", "zmissing"), new ObjectRef("dbo", "amissing"),
+            ],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        Assert.Equal(4, catalog.LinkedServerReferences.Count);
+        Assert.All(catalog.LinkedServerReferences.Take(2), r => Assert.False(r.Dynamic));
+        Assert.All(catalog.LinkedServerReferences.Skip(2), r => Assert.True(r.Dynamic));
+        Assert.DoesNotContain(catalog.Edges, e => e.From == e.To);
+    }
+
+    [Fact]
+    public async Task BuildAsync_IncludesForeignKeySectionsInLineageInput()
+    {
+        WriteObjectFile("SQL", "db", "Tables", "dbo", "child", "CREATE TABLE dbo.child (id int);");
+        string path = Path.Combine(_objectsRoot, ExtractedObjectFile.RelativePath("SQL", "db", "dbo", "Tables", "child"));
+        File.AppendAllText(path, "\n-- === Foreign Keys ===\nALTER TABLE dbo.child ADD FOREIGN KEY (id) REFERENCES dbo.parent(id);\n");
+        await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        _mssqlAnalyzer.Received(1).Analyze(Arg.Is<string>(sql => sql.Contains("CREATE TABLE", StringComparison.Ordinal) && sql.Contains("REFERENCES dbo.parent", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>());
+    }
+
     private CatalogBuilder CreateBuilder() => new(
         _lineageAnalyzerResolver,
         _gitHistoryMiner,
