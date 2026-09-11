@@ -27,8 +27,8 @@ export default function History() {
         <HelpButton topic="history" />
       </h1>
       <p className="muted">
-        {commits.length} commit{commits.length === 1 ? '' : 's'} touching tracked objects, most recent first (mined
-        by the analyze-catalog CI stage, bounded to a configurable commit window).
+        {commits.length} commit{commits.length === 1 ? '' : 's'} touching tracked objects, most recent first (mined by
+        the analyze-catalog CI stage, bounded to a configurable commit window).
       </p>
 
       {commits.length === 0 ? (
@@ -39,14 +39,22 @@ export default function History() {
             const isOpen = expanded.has(commit.sha)
             return (
               <li key={commit.sha} className="commit-entry">
-                <button type="button" className="commit-summary" aria-expanded={isOpen} aria-controls={`commit-${commit.sha}`} onClick={() => toggle(commit.sha)}>
+                <button
+                  type="button"
+                  className="commit-summary"
+                  aria-expanded={isOpen}
+                  aria-controls={`commit-${commit.sha}`}
+                  onClick={() => toggle(commit.sha)}
+                >
                   <span className="commit-toggle">{isOpen ? '▾' : '▸'}</span>
                   <span className="commit-date">{new Date(commit.date).toLocaleString()}</span>
                   <span className="commit-message">{commit.message}</span>
                   <span className="commit-count">
                     {commit.objectIds.length} object{commit.objectIds.length === 1 ? '' : 's'}
                   </span>
-                  <span className="commit-sha" title={commit.sha}>{commit.sha.slice(0, 7)}</span>
+                  <span className="commit-sha" title={commit.sha}>
+                    {commit.sha.slice(0, 7)}
+                  </span>
                 </button>
                 {isOpen && (
                   <ul className="commit-objects" id={`commit-${commit.sha}`}>
@@ -57,7 +65,10 @@ export default function History() {
                       return (
                         <li key={id}>
                           <Link to={`/object/${id}`}>{node.qualifiedName}</Link> <TypeBadge type={node.type} />
-                          <span className="commit-object-context">{node.server} / {node.database}{node.schema ? ` / ${node.schema}` : ''}</span>
+                          <span className="commit-object-context">
+                            {node.server} / {node.database}
+                            {node.schema ? ` / ${node.schema}` : ''}
+                          </span>
                         </li>
                       )
                     })}

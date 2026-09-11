@@ -10,7 +10,12 @@ import type { CatalogIndex } from './catalog'
  * structure. Returns a map of reachable node id -> hop distance (seed
  * itself excluded).
  */
-export function getReachable(seedId: string, direction: 'incoming' | 'outgoing', index: CatalogIndex, maxHops = 6): Map<string, number> {
+export function getReachable(
+  seedId: string,
+  direction: 'incoming' | 'outgoing',
+  index: CatalogIndex,
+  maxHops = 6,
+): Map<string, number> {
   const seed = index.byId.get(seedId)
   const edgeMap = direction === 'incoming' ? index.incoming : index.outgoing
   const visited = new Map<string, number>()

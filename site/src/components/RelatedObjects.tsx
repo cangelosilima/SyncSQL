@@ -151,7 +151,8 @@ export default function RelatedObjects({ title, rootId, ids, direction }: Relate
       ) : (
         <>
           <p className="muted related-count-line">
-            Showing {matches.length} of {nodes.length} - grouped into {groups.length} {groups.length === 1 ? 'group' : 'groups'}.
+            Showing {matches.length} of {nodes.length} - grouped into {groups.length}{' '}
+            {groups.length === 1 ? 'group' : 'groups'}.
           </p>
           {groups.map((group) => {
             const open = rowsSoFar < AUTO_EXPAND_ROWS
@@ -230,14 +231,29 @@ function RelatedGroupSection({
   )
 }
 
-function RelatedRow({ node, rootId, direction }: { node: CatalogNode; rootId: string; direction: 'outgoing' | 'incoming' }) {
+function RelatedRow({
+  node,
+  rootId,
+  direction,
+}: {
+  node: CatalogNode
+  rootId: string
+  direction: 'outgoing' | 'incoming'
+}) {
   const { index } = useCatalog()
   if (!index) return null
   const [from, to] = direction === 'outgoing' ? [rootId, node.id] : [node.id, rootId]
   const columns = getEdgeColumns(index, from, to)
   return (
     <li className="related-object-row">
-      <span className="reference-direction" role="img" aria-label={direction === 'outgoing' ? 'This object references' : 'References this object'} title={direction === 'outgoing' ? 'This object → referenced object' : 'This object ← referencing object'}>{direction === 'outgoing' ? '→' : '←'}</span>
+      <span
+        className="reference-direction"
+        role="img"
+        aria-label={direction === 'outgoing' ? 'This object references' : 'References this object'}
+        title={direction === 'outgoing' ? 'This object → referenced object' : 'This object ← referencing object'}
+      >
+        {direction === 'outgoing' ? '→' : '←'}
+      </span>
       <Link to={`/object/${node.id}`}>{node.qualifiedName}</Link> <TypeBadge type={node.type} />
       {isDynamicEdge(index, from, to) && (
         <span

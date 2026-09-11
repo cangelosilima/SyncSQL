@@ -28,7 +28,12 @@ export default function ContentSearchBar({ value, onChange, placeholder, matchCo
         </span>
       )}
       {value.trim() && (
-        <button type="button" className="content-search-clear" aria-label="Clear DDL search" onClick={() => onChange('')}>
+        <button
+          type="button"
+          className="content-search-clear"
+          aria-label="Clear DDL search"
+          onClick={() => onChange('')}
+        >
           &times;
         </button>
       )}

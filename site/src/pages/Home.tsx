@@ -3,11 +3,17 @@ import { useCatalog } from '../lib/CatalogContext'
 import TypeBadge from '../components/TypeBadge'
 import HelpButton from '../components/HelpButton'
 import TypeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/TypeActivityHeatmap'
-import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
+import {
+  formatRelative,
+  getCoChangePairs,
+  getMostChanged,
+  getRecentlyChanged,
+  getTopReferencedTables,
+  intensity,
+} from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
 import BenchmarkExample from '../components/BenchmarkExample'
-
 
 export default function Home() {
   const { index } = useCatalog()
@@ -16,7 +22,9 @@ export default function Home() {
   const { catalog } = index
   const totalObjects = catalog.nodes.length
   const totalServers = catalog.servers.length
-  const totalDatabases = new Set(catalog.nodes.filter(n => n.database !== '_ServerLevel').map((n) => `${n.server}::${n.database}`)).size
+  const totalDatabases = new Set(
+    catalog.nodes.filter((n) => n.database !== '_ServerLevel').map((n) => `${n.server}::${n.database}`),
+  ).size
 
   const recentlyChanged = getRecentlyChanged(index, 10)
   const topReferenced = getTopReferencedTables(index, 10)
@@ -37,9 +45,7 @@ export default function Home() {
         <HelpButton topic="overview" />
       </h1>
       <div className="sync-line">
-        <span className="sync-line-badge">
-          Catalog snapshot
-        </span>
+        <span className="sync-line-badge">Catalog snapshot</span>
         <span>
           Last sync: {new Date(catalog.generatedAt).toLocaleString()} &middot; {totalServers} server(s) &middot;{' '}
           {totalDatabases} database(s)
@@ -65,13 +71,19 @@ export default function Home() {
           <div className="quick-stat-sub">resolved references</div>
         </div>
         <div className="quick-stat">
-          <div className="quick-stat-label"><Link to="/alerts">Alerts</Link></div>
+          <div className="quick-stat-label">
+            <Link to="/alerts">Alerts</Link>
+          </div>
           <div className="quick-stat-value">{metricAnomalies.length + orphanedReferences.length}</div>
-          <div className="quick-stat-sub">{metricAnomalies.length} anomalies · {orphanedReferences.length} orphaned references</div>
+          <div className="quick-stat-sub">
+            {metricAnomalies.length} anomalies · {orphanedReferences.length} orphaned references
+          </div>
         </div>
         <div className="quick-stat">
           <div className="quick-stat-label">Last change</div>
-          <div className="quick-stat-value">{lastChangedNode ? formatRelative(lastChangedNode.lastChangedAt!) : '-'}</div>
+          <div className="quick-stat-value">
+            {lastChangedNode ? formatRelative(lastChangedNode.lastChangedAt!) : '-'}
+          </div>
           <div className="quick-stat-sub">{lastChangedNode ? lastChangedNode.qualifiedName : 'no history mined'}</div>
         </div>
       </div>
@@ -105,7 +117,10 @@ export default function Home() {
 
         <section className="overview-panel">
           <h2>Most referenced tables</h2>
-          <p className="muted overview-panel-hint">Direct = objects pointing straight at it. Indirect includes direct and transitive dependents; traversal stops after crossing a server and at six hops.</p>
+          <p className="muted overview-panel-hint">
+            Direct = objects pointing straight at it. Indirect includes direct and transitive dependents; traversal
+            stops after crossing a server and at six hops.
+          </p>
           {topReferenced.length === 0 ? (
             <p className="muted">No inferred references yet.</p>
           ) : (
@@ -133,10 +148,14 @@ export default function Home() {
                 <li key={node.id}>
                   <span
                     className="heatmap-swatch"
-                    style={{ background: `color-mix(in srgb, ${colorForType(node.type)} ${Math.round(intensity(value, maxChangeCount) * 100)}%, transparent)` }}
+                    style={{
+                      background: `color-mix(in srgb, ${colorForType(node.type)} ${Math.round(intensity(value, maxChangeCount) * 100)}%, transparent)`,
+                    }}
                   />
                   <Link to={`/object/${node.id}`}>{node.qualifiedName}</Link>
-                  <span className="ranked-list-meta">{value} change{value === 1 ? '' : 's'}</span>
+                  <span className="ranked-list-meta">
+                    {value} change{value === 1 ? '' : 's'}
+                  </span>
                 </li>
               ))}
             </ol>
@@ -145,7 +164,9 @@ export default function Home() {
 
         <section className="overview-panel">
           <h2>Commonly changed together</h2>
-          <p className="muted overview-panel-hint">Objects that keep showing up in the same commit. Co-occurrence is not a dependency or a causal relationship.</p>
+          <p className="muted overview-panel-hint">
+            Objects that keep showing up in the same commit. Co-occurrence is not a dependency or a causal relationship.
+          </p>
           {coChanges.length === 0 ? (
             <p className="muted">No co-change pairs found yet.</p>
           ) : (

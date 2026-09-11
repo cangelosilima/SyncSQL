@@ -12,7 +12,7 @@ interface CodeBlockProps {
 }
 
 export default function CodeBlock({ code, formatted = false }: CodeBlockProps) {
-  const display = useMemo(() => code && formatted ? formatSql(code) : { code, failed: false }, [code, formatted])
+  const display = useMemo(() => (code && formatted ? formatSql(code) : { code, failed: false }), [code, formatted])
   const html = useMemo(() => {
     if (!display.code) return ''
     return hljs.highlight(display.code, { language: 'sql' }).value
@@ -24,8 +24,17 @@ export default function CodeBlock({ code, formatted = false }: CodeBlockProps) {
 
   return (
     <>
-      {display.failed && <p className="muted" role="status">This definition could not be formatted. Showing the original SQL with line wrapping.</p>}
-      <pre className={`code-block${formatted ? ' code-block--formatted' : ''}`} tabIndex={0} role="region" aria-label="SQL definition">
+      {display.failed && (
+        <p className="muted" role="status">
+          This definition could not be formatted. Showing the original SQL with line wrapping.
+        </p>
+      )}
+      <pre
+        className={`code-block${formatted ? ' code-block--formatted' : ''}`}
+        tabIndex={0}
+        role="region"
+        aria-label="SQL definition"
+      >
         <code dangerouslySetInnerHTML={{ __html: html }} />
       </pre>
     </>

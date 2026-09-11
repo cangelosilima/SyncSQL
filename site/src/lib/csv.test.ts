@@ -68,7 +68,9 @@ describe('toCsv', () => {
 
 describe('csvFileName', () => {
   it('turns an object id into something a filesystem accepts', () => {
-    expect(csvFileName('SQLPROD01/AppDb/Tables/dbo/Orders', 'columns')).toBe('SQLPROD01-AppDb-Tables-dbo-Orders-columns.csv')
+    expect(csvFileName('SQLPROD01/AppDb/Tables/dbo/Orders', 'columns')).toBe(
+      'SQLPROD01-AppDb-Tables-dbo-Orders-columns.csv',
+    )
     expect(csvFileName('', null, undefined)).toBe('syncsql-export.csv')
   })
 })

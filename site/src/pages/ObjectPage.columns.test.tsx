@@ -37,7 +37,7 @@ vi.mock('../components/LineageGraph', () => ({
 
 function renderObject(id: string, workspace = 'Columns') {
   const result = render(
-      <MemoryRouter initialEntries={[`/object/${id}`]}>
+    <MemoryRouter initialEntries={[`/object/${id}`]}>
       <Routes>
         <Route path="/object/*" element={<ObjectPage />} />
       </Routes>

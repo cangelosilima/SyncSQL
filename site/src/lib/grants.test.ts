@@ -2,8 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { makeNode } from '../test/fixtures'
 import { findObjectsForGrantee, getSuggestedGrantees } from './grants'
 
-const grant = (grantee: string) => ({ grantee, permission: 'SELECT', state: 'GRANT' as const, granteeType: null, column: null })
-const nodes = [makeNode({ id: 'orders', grants: [grant('reader'), grant('admin'), grant('reader')] }), makeNode({ id: 'customers', grants: [grant('reader_team')] }), makeNode({ id: 'private' })]
+const grant = (grantee: string) => ({
+  grantee,
+  permission: 'SELECT',
+  state: 'GRANT' as const,
+  granteeType: null,
+  column: null,
+})
+const nodes = [
+  makeNode({ id: 'orders', grants: [grant('reader'), grant('admin'), grant('reader')] }),
+  makeNode({ id: 'customers', grants: [grant('reader_team')] }),
+  makeNode({ id: 'private' }),
+]
 
 describe('grantee lookup', () => {
   it('deduplicates, sorts, filters and limits suggestions', () => {
@@ -20,7 +30,9 @@ describe('grantee lookup', () => {
 
   it('returns only matching permissions with substring or exact matching', () => {
     expect(findObjectsForGrantee(nodes, ' READ ').map(({ node }) => node.id)).toEqual(['orders', 'customers'])
-    expect(findObjectsForGrantee(nodes, ' READER ', true)).toEqual([{ node: nodes[0], grants: [grant('reader'), grant('reader')] }])
+    expect(findObjectsForGrantee(nodes, ' READER ', true)).toEqual([
+      { node: nodes[0], grants: [grant('reader'), grant('reader')] },
+    ])
     expect(findObjectsForGrantee(nodes, ' ')).toEqual([])
     expect(findObjectsForGrantee(nodes, 'missing')).toEqual([])
   })

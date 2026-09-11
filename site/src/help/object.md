@@ -22,7 +22,7 @@ clicking that count opens the lineage for just that column: the objects that
 read it, and a graph of only those. The open column is kept in the address
 bar, so the view can be shared.
 
-Only that direction is shown. A lineage edge records which of the *target's*
+Only that direction is shown. A lineage edge records which of the _target's_
 columns the source referenced, so "who reads this column" is exact - while
 "what feeds this column" would need expression-level lineage nothing here
 records, and a same-name guess would not be an answer.

@@ -7,19 +7,78 @@ import { buildIndex } from '../lib/catalog'
 import { makeCatalog, makeNode } from '../test/fixtures'
 import type { FilterPlanV1, ModelLoadProgress } from '../ai/types'
 
-const ai = vi.hoisted(() => ({ checking: false, available: true, reason: null as string | null, runtimeStatus: 'idle', progress: null as ModelLoadProgress | null, error: null as string | null, generateFilterPlan: vi.fn(), retry: vi.fn() }))
-const plan: FilterPlanV1 = { version: 1, tokens: [{ attribute: 'type', operator: 'is', values: ['StoredProcedures'] }], contentQuery: 'Orders', confidence: 'medium', warnings: ['Review the interpretation.'], unsupportedFragments: [] }
+const ai = vi.hoisted(() => ({
+  checking: false,
+  available: true,
+  reason: null as string | null,
+  runtimeStatus: 'idle',
+  progress: null as ModelLoadProgress | null,
+  error: null as string | null,
+  generateFilterPlan: vi.fn(),
+  retry: vi.fn(),
+}))
+const plan: FilterPlanV1 = {
+  version: 1,
+  tokens: [{ attribute: 'type', operator: 'is', values: ['StoredProcedures'] }],
+  contentQuery: 'Orders',
+  confidence: 'medium',
+  warnings: ['Review the interpretation.'],
+  unsupportedFragments: [],
+}
 vi.mock('../ai/AiContext', () => ({ useAi: () => ai }))
-vi.mock('../lib/CatalogContext', () => ({ useCatalog: () => ({ index: buildIndex(makeCatalog({ nodes: [makeNode({ id: 'proc', type: 'StoredProcedures', ddl: 'SELECT * FROM Orders' }), makeNode({ id: 'table', ddl: 'Orders' })] })) }) }))
-beforeEach(() => { Object.assign(ai, { checking: false, available: true, reason: null, runtimeStatus: 'idle', progress: null, error: null }); vi.clearAllMocks(); ai.generateFilterPlan.mockResolvedValue(plan) })
-function View() { return <MemoryRouter initialEntries={['/ai']}><Routes><Route path="/ai" element={<AiPage />} /><Route path="/explorer" element={<Explorer />} /></Routes></MemoryRouter> }
-function open() { return render(<View />) }
-async function generate() { fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Find procedures using Orders' } }); fireEvent.click(screen.getByRole('button', { name: 'Generate filters' })); await screen.findByText('medium confidence') }
+vi.mock('../lib/CatalogContext', () => ({
+  useCatalog: () => ({
+    index: buildIndex(
+      makeCatalog({
+        nodes: [
+          makeNode({ id: 'proc', type: 'StoredProcedures', ddl: 'SELECT * FROM Orders' }),
+          makeNode({ id: 'table', ddl: 'Orders' }),
+        ],
+      }),
+    ),
+  }),
+}))
+beforeEach(() => {
+  Object.assign(ai, {
+    checking: false,
+    available: true,
+    reason: null,
+    runtimeStatus: 'idle',
+    progress: null,
+    error: null,
+  })
+  vi.clearAllMocks()
+  ai.generateFilterPlan.mockResolvedValue(plan)
+})
+function View() {
+  return (
+    <MemoryRouter initialEntries={['/ai']}>
+      <Routes>
+        <Route path="/ai" element={<AiPage />} />
+        <Route path="/explorer" element={<Explorer />} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+function open() {
+  return render(<View />)
+}
+async function generate() {
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Find procedures using Orders' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Generate filters' }))
+  await screen.findByText('medium confidence')
+}
 
 describe('local AI presentation and Explorer transition', () => {
   it('opens the resolved column workspace instead of applying a DDL filter', async () => {
-    ai.generateFilterPlan.mockResolvedValue({ ...plan, tokens: [], contentQuery: '', columnReference: { objectId: 'table', column: 'Id' } })
-    open(); await generate()
+    ai.generateFilterPlan.mockResolvedValue({
+      ...plan,
+      tokens: [],
+      contentQuery: '',
+      columnReference: { objectId: 'table', column: 'Id' },
+    })
+    open()
+    await generate()
     expect(screen.getByRole('heading', { name: 'Column references' })).toBeInTheDocument()
     expect(screen.getByText('0 object(s) with recorded references')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open column lineage' })).toHaveAttribute('href', '/object/table?column=Id')
@@ -39,13 +98,17 @@ describe('local AI presentation and Explorer transition', () => {
   })
   it('blocks transfer of unsupported fragments without discarding the explanation', async () => {
     ai.generateFilterPlan.mockResolvedValue({ ...plan, unsupportedFragments: ['owned by billing'] })
-    open(); await generate()
+    open()
+    await generate()
     expect(screen.getByRole('button', { name: 'Open in Explorer' })).toBeDisabled()
     expect(screen.getByText(/owned by billing/)).toBeInTheDocument()
   })
   it('shows determinate and indeterminate model loading and cancellation aborts the request', async () => {
     let signal!: AbortSignal
-    ai.generateFilterPlan.mockImplementation((_query, _nodes, nextSignal: AbortSignal) => { signal = nextSignal; return new Promise(() => {}) })
+    ai.generateFilterPlan.mockImplementation((_query, _nodes, nextSignal: AbortSignal) => {
+      signal = nextSignal
+      return new Promise(() => {})
+    })
     const view = open()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Orders' } })
     fireEvent.click(screen.getByRole('button', { name: 'Generate filters' }))
@@ -57,7 +120,9 @@ describe('local AI presentation and Explorer transition', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '47')
     expect(screen.getByRole('textbox')).toBeDisabled()
     expect(signal.aborted).toBe(false)
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel' })) })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    })
     expect(signal.aborted).toBe(true)
   })
   it('keeps checking, runtime error details and retry visible', async () => {

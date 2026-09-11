@@ -23,7 +23,11 @@ describe('parseMarkdown', () => {
       kind: 'list',
       ordered: false,
       items: [
-        [{ kind: 'text', text: 'alpha' }, { kind: 'text', text: ' ' }, { kind: 'text', text: 'wrapped' }],
+        [
+          { kind: 'text', text: 'alpha' },
+          { kind: 'text', text: ' ' },
+          { kind: 'text', text: 'wrapped' },
+        ],
         [{ kind: 'text', text: 'beta' }],
       ],
     })
@@ -82,8 +86,7 @@ describe('isSafeHref', () => {
     (href) => expect(isSafeHref(href)).toBe(true),
   )
 
-  it.each(['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<script>', '', '   '])(
-    'rejects %s',
-    (href) => expect(isSafeHref(href)).toBe(false),
+  it.each(['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<script>', '', '   '])('rejects %s', (href) =>
+    expect(isSafeHref(href)).toBe(false),
   )
 })

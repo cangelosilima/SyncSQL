@@ -33,7 +33,12 @@ interface TraversalStep {
 }
 
 /** Independent traversals, preserving caller/target attribution through shared connections. */
-export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, dependencies: number, dependents: number): string[] {
+export function getDirectionalNeighborhood(
+  index: CatalogIndex,
+  rootId: string,
+  dependencies: number,
+  dependents: number,
+): string[] {
   const ids = new Set([rootId])
   const isLink = (id: string) => {
     const node = index.byId.get(id)
@@ -42,7 +47,10 @@ export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, 
   // A connection can be reached through several objects, each with different
   // remote references. Deduplicating only by node id would lose those paths.
   const key = ({ id, via }: TraversalStep) => JSON.stringify([id, via])
-  for (const [direction, limit] of [['outgoing', dependencies], ['incoming', dependents]] as const) {
+  for (const [direction, limit] of [
+    ['outgoing', dependencies],
+    ['incoming', dependents],
+  ] as const) {
     const adjacency = index[direction]
     function neighbors({ id, via }: TraversalStep): string[] {
       const adjacent = adjacency.get(id) ?? []
@@ -54,38 +62,45 @@ export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, 
       }
       // Without attribution, keep the connection visible but do not infer
       // that every caller references every target (including older catalogs).
-      return adjacent.filter(neighbor => attributed.has(neighbor))
+      return adjacent.filter((neighbor) => attributed.has(neighbor))
     }
     const root: TraversalStep = { id: rootId }
     const seen = new Set([key(root)])
     let frontier = [root]
     for (let hop = 0; hop < limit && frontier.length; hop++) {
       const next: TraversalStep[] = []
-      for (const step of frontier) for (const neighbor of neighbors(step)) {
-        if (!index.byId.has(neighbor)) continue
-        const nextStep = { id: neighbor, via: isLink(neighbor) ? step.id : undefined }
-        const nextKey = key(nextStep)
-        if (seen.has(nextKey)) continue
-        seen.add(nextKey)
-        ids.add(neighbor)
-        next.push(nextStep)
-      }
+      for (const step of frontier)
+        for (const neighbor of neighbors(step)) {
+          if (!index.byId.has(neighbor)) continue
+          const nextStep = { id: neighbor, via: isLink(neighbor) ? step.id : undefined }
+          const nextKey = key(nextStep)
+          if (seen.has(nextKey)) continue
+          seen.add(nextKey)
+          ids.add(neighbor)
+          next.push(nextStep)
+        }
       frontier = next
     }
     // Show the remote target or caller beyond a connection, without turning onto
     // its unrelated branches or expanding a direction explicitly set to zero.
-    if (limit > 0) for (const step of frontier) {
-      if (!isLink(step.id)) continue
-      for (const neighbor of neighbors(step)) {
-        if (index.byId.has(neighbor)) ids.add(neighbor)
+    if (limit > 0)
+      for (const step of frontier) {
+        if (!isLink(step.id)) continue
+        for (const neighbor of neighbors(step)) {
+          if (index.byId.has(neighbor)) ids.add(neighbor)
+        }
       }
-    }
   }
   return [...ids]
 }
 
 /** Keep one shortest connecting path for each match, including filtered intermediates. */
-export function retainConnectingPaths(index: CatalogIndex, rootId: string, ids: string[], matches: Set<string>): string[] {
+export function retainConnectingPaths(
+  index: CatalogIndex,
+  rootId: string,
+  ids: string[],
+  matches: Set<string>,
+): string[] {
   const allowed = new Set(ids)
   const parent = new Map<string, string | null>([[rootId, null]])
   const queue = [rootId]
@@ -106,7 +121,7 @@ export function retainConnectingPaths(index: CatalogIndex, rootId: string, ids: 
       id = parent.get(id) ?? null
     }
   }
-  return ids.filter(id => kept.has(id))
+  return ids.filter((id) => kept.has(id))
 }
 
 /** Column names of `toId` that the edge from `fromId` is known to reference, if any. */
@@ -143,7 +158,11 @@ export interface NeighborBundle {
 }
 
 /** Group only intermediate layers; leave the focus and the outermost objects visible. */
-export function groupIntermediateLayers(index: CatalogIndex, focusId: string, ids: readonly string[]): BundledNeighborhood {
+export function groupIntermediateLayers(
+  index: CatalogIndex,
+  focusId: string,
+  ids: readonly string[],
+): BundledNeighborhood {
   const allowed = new Set(ids)
   const layers = new Map<string, { direction: 'outgoing' | 'incoming'; hop: number }>()
   for (const direction of ['outgoing', 'incoming'] as const) {
@@ -151,20 +170,21 @@ export function groupIntermediateLayers(index: CatalogIndex, focusId: string, id
     let frontier = [focusId]
     for (let hop = 1; frontier.length; hop++) {
       const next: string[] = []
-      for (const id of frontier) for (const neighbor of index[direction].get(id) ?? []) {
-        if (!allowed.has(neighbor) || seen.has(neighbor)) continue
-        seen.add(neighbor)
-        next.push(neighbor)
-        const previous = layers.get(neighbor)
-        if (!previous || previous.hop > hop) layers.set(neighbor, { direction, hop })
-      }
+      for (const id of frontier)
+        for (const neighbor of index[direction].get(id) ?? []) {
+          if (!allowed.has(neighbor) || seen.has(neighbor)) continue
+          seen.add(neighbor)
+          next.push(neighbor)
+          const previous = layers.get(neighbor)
+          if (!previous || previous.hop > hop) layers.set(neighbor, { direction, hop })
+        }
       frontier = next
     }
   }
   const groups = new Map<string, NeighborBundle>()
   for (const [id, layer] of layers) {
     // An intermediate has a continuation further away on the same side.
-    const hasContinuation = (index[layer.direction].get(id) ?? []).some(next => {
+    const hasContinuation = (index[layer.direction].get(id) ?? []).some((next) => {
       const target = layers.get(next)
       return target?.direction === layer.direction && target.hop > layer.hop
     })
@@ -176,9 +196,9 @@ export function groupIntermediateLayers(index: CatalogIndex, focusId: string, id
     if (group) group.memberIds.push(id)
     else groups.set(key, { id: key, ...layer, type, memberIds: [id] })
   }
-  const bundles = [...groups.values()].filter(group => group.memberIds.length > 1)
-  const bundled = new Set(bundles.flatMap(group => group.memberIds))
-  return { nodeIds: ids.filter(id => !bundled.has(id)), bundles, bundledCount: bundled.size }
+  const bundles = [...groups.values()].filter((group) => group.memberIds.length > 1)
+  const bundled = new Set(bundles.flatMap((group) => group.memberIds))
+  return { nodeIds: ids.filter((id) => !bundled.has(id)), bundles, bundledCount: bundled.size }
 }
 
 export interface BundledNeighborhood {
@@ -260,7 +280,9 @@ export function bundleNeighborhood(
 
   // Ascending size: whatever budget is left goes to the groups that cost the
   // least to show in full, so the long tail of one-off neighbors survives.
-  const ordered = [...groups.values()].sort((a, b) => a.memberIds.length - b.memberIds.length || a.id.localeCompare(b.id))
+  const ordered = [...groups.values()].sort(
+    (a, b) => a.memberIds.length - b.memberIds.length || a.id.localeCompare(b.id),
+  )
 
   const bundles: NeighborBundle[] = []
   let budget = Math.max(options.maxNodes - 1 - kept.length, 0)

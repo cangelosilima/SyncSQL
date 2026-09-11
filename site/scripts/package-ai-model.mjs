@@ -54,26 +54,34 @@ async function verifyModel() {
     return { ok: false, reason: REASON.missing, detail: 'manifest.json is missing or invalid' }
   }
 
-  if (manifest.schemaVersion !== 1
-    || manifest.model !== 'all-MiniLM-L6-v2'
-    || typeof manifest.revision !== 'string'
-    || !/^[a-f0-9]{40}$/i.test(manifest.revision)
-    || !Array.isArray(manifest.files)) {
+  if (
+    manifest.schemaVersion !== 1 ||
+    manifest.model !== 'all-MiniLM-L6-v2' ||
+    typeof manifest.revision !== 'string' ||
+    !/^[a-f0-9]{40}$/i.test(manifest.revision) ||
+    !Array.isArray(manifest.files)
+  ) {
     return { ok: false, reason: REASON.missing, detail: 'manifest.json has an unsupported shape' }
   }
 
   const listedFiles = new Set(manifest.files.map((entry) => entry?.path))
   if (listedFiles.size !== manifest.files.length || [...REQUIRED_FILES].some((file) => !listedFiles.has(file))) {
-    return { ok: false, reason: REASON.missing, detail: 'manifest.json does not list every required model file exactly once' }
+    return {
+      ok: false,
+      reason: REASON.missing,
+      detail: 'manifest.json does not list every required model file exactly once',
+    }
   }
 
   for (const entry of manifest.files) {
-    if (!entry
-      || typeof entry.path !== 'string'
-      || !Number.isSafeInteger(entry.size)
-      || entry.size < 0
-      || typeof entry.sha256 !== 'string'
-      || !/^[a-f0-9]{64}$/i.test(entry.sha256)) {
+    if (
+      !entry ||
+      typeof entry.path !== 'string' ||
+      !Number.isSafeInteger(entry.size) ||
+      entry.size < 0 ||
+      typeof entry.sha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/i.test(entry.sha256)
+    ) {
       return { ok: false, reason: REASON.missing, detail: 'manifest.json contains an invalid file entry' }
     }
     const filePath = path.resolve(sourceRoot, ...entry.path.split('/'))

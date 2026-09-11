@@ -9,7 +9,7 @@ chips to decide which objects enter the graph. Every chip must match. Plain text
 searches object details and SQL; use **DDL content contains** for SQL-only search.
 Remove any chip independently to broaden the results.
 
-- **Click** a node to drill into that object's own neighborhood *in place*.
+- **Click** a node to drill into that object's own neighborhood _in place_.
   Opening a search result clears the object filters used to locate it, so its
   callers and targets become visible. Grantee and DDL content filters remain.
   A breadcrumb trail and a **Back** button walk you out again.
@@ -35,7 +35,7 @@ Remove any chip independently to broaden the results.
 
 **Filters mean different things depending on whether you are navigating.**
 With nothing focused, they select from the whole catalog. Once you have
-drilled into an object, they narrow *that object's neighborhood* instead - so
+drilled into an object, they narrow _that object's neighborhood_ instead - so
 adding "Type is StoredProcedures" while looking at a table shows the
 procedures around it, rather than asking for something that is both. The
 focused object always stays on screen, and the line under the breadcrumb says

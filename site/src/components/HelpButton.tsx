@@ -58,33 +58,34 @@ export default function HelpButton({ topic, className = '' }: HelpButtonProps) {
       >
         ?
       </button>
-      {open && createPortal(
-        <div className="help-overlay" role="presentation" onClick={close}>
-          <div
-            ref={panelRef}
-            className="help-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="help-panel-header">
-              <div>
-                <span className="help-panel-eyebrow">Page guide</span>
-                <h2 id={titleId}>{guide.title}</h2>
+      {open &&
+        createPortal(
+          <div className="help-overlay" role="presentation" onClick={close}>
+            <div
+              ref={panelRef}
+              className="help-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              tabIndex={-1}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="help-panel-header">
+                <div>
+                  <span className="help-panel-eyebrow">Page guide</span>
+                  <h2 id={titleId}>{guide.title}</h2>
+                </div>
+                <button type="button" className="help-close" onClick={close} aria-label="Close help">
+                  &times;
+                </button>
               </div>
-              <button type="button" className="help-close" onClick={close} aria-label="Close help">
-                &times;
-              </button>
+              <div className="help-panel-body">
+                <Markdown source={guide.body} className="markdown help-markdown" />
+              </div>
             </div>
-            <div className="help-panel-body">
-              <Markdown source={guide.body} className="markdown help-markdown" />
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   )
 }

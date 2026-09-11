@@ -1,7 +1,13 @@
 import type { CatalogNode } from '../types'
 import type { FilterTokenInput } from '../lib/filters'
 
-export type AiAvailabilityReason = 'model-missing' | 'lfs-unresolved' | 'checksum-mismatch' | 'packaging-failed' | 'manifest-unavailable' | 'runtime-error'
+export type AiAvailabilityReason =
+  | 'model-missing'
+  | 'lfs-unresolved'
+  | 'checksum-mismatch'
+  | 'packaging-failed'
+  | 'manifest-unavailable'
+  | 'runtime-error'
 
 export interface AiCapability<TId extends string = string> {
   id: TId

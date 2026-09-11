@@ -39,7 +39,12 @@ interface Facets {
 }
 
 export class EmbeddingFilterPlanner implements FilterPlanner {
-  async generate(query: string, nodes: CatalogNode[], adapter: EmbeddingAdapter, signal?: AbortSignal): Promise<FilterPlanV1> {
+  async generate(
+    query: string,
+    nodes: CatalogNode[],
+    adapter: EmbeddingAdapter,
+    signal?: AbortSignal,
+  ): Promise<FilterPlanV1> {
     const trimmed = query.trim()
     if (!trimmed) return emptyPlan('Enter a filter request.')
     if (signal?.aborted) throw abortError()
@@ -61,7 +66,12 @@ export class EmbeddingFilterPlanner implements FilterPlanner {
       for (const attribute of ['server', 'database', 'schema'] as const) {
         const matches = findFacetMatches(clause, facets[attribute])
         if (matches.length === 0) continue
-        addToken(tokens, attribute, operatorForMatches(clause, matches), matches.map((match) => match.value))
+        addToken(
+          tokens,
+          attribute,
+          operatorForMatches(clause, matches),
+          matches.map((match) => match.value),
+        )
         handled = true
       }
 
@@ -69,11 +79,19 @@ export class EmbeddingFilterPlanner implements FilterPlanner {
       const aliasTypeMatches = findTypeAliasMatches(clause, facets.type)
       const typeMatches = aliasTypeMatches.length > 0 ? aliasTypeMatches : explicitTypeMatches
       if (typeMatches.length > 0) {
-        addToken(tokens, 'type', operatorForMatches(clause, typeMatches), typeMatches.map((match) => match.value))
+        addToken(
+          tokens,
+          'type',
+          operatorForMatches(clause, typeMatches),
+          typeMatches.map((match) => match.value),
+        )
         handled = true
       }
 
-      const contentValue = extractCueValue(clause, /\b(?:mentions?|references?|uses?|ddl\s+(?:contains?|mentions?)|definition\s+(?:contains?|mentions?)|code\s+(?:contains?|mentions?))\b/i)
+      const contentValue = extractCueValue(
+        clause,
+        /\b(?:mentions?|references?|uses?|ddl\s+(?:contains?|mentions?)|definition\s+(?:contains?|mentions?)|code\s+(?:contains?|mentions?))\b/i,
+      )
       if (contentValue) {
         contentQueries.push(cleanLiteral(contentValue, facets))
         handled = true
@@ -81,13 +99,17 @@ export class EmbeddingFilterPlanner implements FilterPlanner {
 
       const nameValue = extractCueValue(clause, /\b(?:named|called|name\s+(?:is|contains?))\b/i)
       if (nameValue) {
-        addToken(tokens, 'name', isNegatedNear(clause, nameValue) ? 'is-not' : 'contains', [cleanLiteral(nameValue, facets)])
+        addToken(tokens, 'name', isNegatedNear(clause, nameValue) ? 'is-not' : 'contains', [
+          cleanLiteral(nameValue, facets),
+        ])
         handled = true
       }
 
       const descriptionValue = extractCueValue(clause, /\b(?:description|described\s+as|documented\s+as)\b/i)
       if (descriptionValue) {
-        addToken(tokens, 'description', isNegatedNear(clause, descriptionValue) ? 'is-not' : 'contains', [cleanLiteral(descriptionValue, facets)])
+        addToken(tokens, 'description', isNegatedNear(clause, descriptionValue) ? 'is-not' : 'contains', [
+          cleanLiteral(descriptionValue, facets),
+        ])
         handled = true
       }
 
@@ -122,11 +144,12 @@ export class EmbeddingFilterPlanner implements FilterPlanner {
 
     const cleanTokens = tokens.filter((token) => token.values.every(Boolean))
     const hasOutput = cleanTokens.length > 0 || Boolean(contentQuery)
-    const confidence = !hasOutput || warnings.length > 0 || unsupportedFragments.length > 0
-      ? 'low'
-      : usedSemanticClassification
-        ? 'medium'
-        : 'high'
+    const confidence =
+      !hasOutput || warnings.length > 0 || unsupportedFragments.length > 0
+        ? 'low'
+        : usedSemanticClassification
+          ? 'medium'
+          : 'high'
 
     return { version: 1, tokens: cleanTokens, contentQuery, confidence, warnings, unsupportedFragments }
   }
@@ -138,9 +161,15 @@ function planColumnReference(query: string, nodes: CatalogNode[]): FilterPlanV1 
   if (!/\b(?:references?|referencing|uses?|using|consumers?|reads?)\b.*\bcolumn\b/i.test(query)) return null
   const identifier = '(?:\\[[^\\]]+\\]|"[^"]+"|`[^`]+`|[\\w$#]+)'
   const qualified = `${identifier}(?:\\s*\\.\\s*${identifier}){0,3}`
-  const match = new RegExp(`^(?:(?:show|find|list)\\s+)?(?:all\\s+)?(?:references?\\s+to|consumers?\\s+of|(?:objects?\\s+(?:that\\s+)?)?(?:reference|use|read)s?)\\s+(?:the\\s+)?column\\s+(${identifier})\\s+(?:from|of|in|on)\\s+(${qualified})[.?!]?$`, 'i').exec(query)
+  const match = new RegExp(
+    `^(?:(?:show|find|list)\\s+)?(?:all\\s+)?(?:references?\\s+to|consumers?\\s+of|(?:objects?\\s+(?:that\\s+)?)?(?:reference|use|read)s?)\\s+(?:the\\s+)?column\\s+(${identifier})\\s+(?:from|of|in|on)\\s+(${qualified})[.?!]?$`,
+    'i',
+  ).exec(query)
   const reject = (message: string): FilterPlanV1 => ({ ...emptyPlan(message), unsupportedFragments: [query] })
-  if (!match) return reject('Use “Show all references to column Id from dbo.Orders”. Additional constraints cannot be applied to column references here.')
+  if (!match)
+    return reject(
+      'Use “Show all references to column Id from dbo.Orders”. Additional constraints cannot be applied to column references here.',
+    )
   const unquote = (value: string) => value.replace(/^\[|\]$|^["`]|["`]$/g, '')
   const columnName = unquote(match[1])
   const parts = match[2].match(new RegExp(identifier, 'g'))!.map(unquote)
@@ -148,15 +177,27 @@ function planColumnReference(query: string, nodes: CatalogNode[]): FilterPlanV1 
     const identity = [node.server, node.database, node.schema ?? '', node.name].slice(-parts.length)
     return identity.every((value, position) => value.toLowerCase() === parts[position].toLowerCase())
   })
-  if (candidates.length !== 1) return reject(candidates.length
-    ? 'More than one object matches. Qualify the object as server.database.schema.object.'
-    : 'The object was not found. Use its catalog name, optionally qualified as server.database.schema.object.')
+  if (candidates.length !== 1)
+    return reject(
+      candidates.length
+        ? 'More than one object matches. Qualify the object as server.database.schema.object.'
+        : 'The object was not found. Use its catalog name, optionally qualified as server.database.schema.object.',
+    )
   const columns = candidates[0].columns.filter((column) => column.name.toLowerCase() === columnName.toLowerCase())
-  if (columns.length !== 1) return reject('The column could not be uniquely resolved in the catalog for this object. Check its Columns workspace.')
+  if (columns.length !== 1)
+    return reject(
+      'The column could not be uniquely resolved in the catalog for this object. Check its Columns workspace.',
+    )
   return {
-    version: 1, tokens: [], contentQuery: '', confidence: 'high', unsupportedFragments: [],
+    version: 1,
+    tokens: [],
+    contentQuery: '',
+    confidence: 'high',
+    unsupportedFragments: [],
     columnReference: { objectId: candidates[0].id, column: columns[0].name },
-    warnings: ['Column references use recorded dependency evidence, not a DDL phrase search. Detection is best-effort and can miss SELECT *, computed expressions and dynamic SQL; this is not a complete list of all references.'],
+    warnings: [
+      'Column references use recorded dependency evidence, not a DDL phrase search. Detection is best-effort and can miss SELECT *, computed expressions and dynamic SQL; this is not a complete list of all references.',
+    ],
   }
 }
 
@@ -174,7 +215,10 @@ function unique(values: string[]): string[] {
 }
 
 function splitClauses(query: string): string[] {
-  return query.split(/\s+(?:and|but)\s+|[,;]+/i).map((part) => part.trim()).filter(Boolean)
+  return query
+    .split(/\s+(?:and|but)\s+|[,;]+/i)
+    .map((part) => part.trim())
+    .filter(Boolean)
 }
 
 interface ValueMatch {
@@ -222,7 +266,10 @@ function isNegatedNear(clause: string, literal: string): boolean {
 function extractCueValue(clause: string, cue: RegExp): string | null {
   const match = cue.exec(clause)
   if (!match) return null
-  const rest = clause.slice(match.index + match[0].length).trim().replace(/^(?:is|for|with|that|which|to)\s+/i, '')
+  const rest = clause
+    .slice(match.index + match[0].length)
+    .trim()
+    .replace(/^(?:is|for|with|that|which|to)\s+/i, '')
   return extractQuotedValue(rest) ?? (rest.replace(/[.?!]+$/, '').trim() || null)
 }
 
@@ -236,7 +283,10 @@ function cleanLiteral(value: string, facets: Facets): string {
   for (const facetValue of [...facets.server, ...facets.database, ...facets.schema, ...facets.type]) {
     result = result.replace(new RegExp(`\\b(?:in|on|from|under)\\s+${escapeRegex(facetValue)}\\b`, 'i'), '')
   }
-  return result.replace(/\s+/g, ' ').replace(/[.?!]+$/, '').trim()
+  return result
+    .replace(/\s+/g, ' ')
+    .replace(/[.?!]+$/, '')
+    .trim()
 }
 
 function fallbackLiteral(clause: string, attribute: FilterAttribute | 'content'): string | null {
@@ -273,7 +323,9 @@ function addToken(tokens: FilterTokenInput[], attribute: FilterAttribute, operat
   const cleanValues = [...new Set(values.map((value) => value.trim()).filter(Boolean))]
   if (cleanValues.length === 0) return
   const key = `${attribute}|${operator}|${cleanValues.join('|').toLowerCase()}`
-  const exists = tokens.some((token) => `${token.attribute}|${token.operator}|${token.values.join('|').toLowerCase()}` === key)
+  const exists = tokens.some(
+    (token) => `${token.attribute}|${token.operator}|${token.values.join('|').toLowerCase()}` === key,
+  )
   if (!exists) tokens.push({ attribute, operator, values: cleanValues })
 }
 

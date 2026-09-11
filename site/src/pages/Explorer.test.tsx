@@ -10,24 +10,39 @@ import { downloadCsv } from '../lib/csv'
 
 let nodes = [makeNode({ id: 'a' })]
 vi.mock('../lib/CatalogContext', () => ({ useCatalog: () => ({ index: buildIndex(makeCatalog({ nodes })) }) }))
-vi.mock('../lib/csv', async (original) => ({ ...await original<typeof import('../lib/csv')>(), downloadCsv: vi.fn() }))
-function Location() { return <span data-testid="url">{useLocation().search}</span> }
-function open(query = '') { render(<MemoryRouter initialEntries={['/explorer' + query]}><Explorer /><Location /></MemoryRouter>) }
+vi.mock('../lib/csv', async (original) => ({
+  ...(await original<typeof import('../lib/csv')>()),
+  downloadCsv: vi.fn(),
+}))
+function Location() {
+  return <span data-testid="url">{useLocation().search}</span>
+}
+function open(query = '') {
+  render(
+    <MemoryRouter initialEntries={['/explorer' + query]}>
+      <Explorer />
+      <Location />
+    </MemoryRouter>,
+  )
+}
 beforeEach(() => vi.clearAllMocks())
 
 describe('Explorer workbench parity', () => {
-  it.each(['DDL', 'content', 'name', 'type'])('commits %s as a broad search without selecting a matching attribute', async (query) => {
-    const user = userEvent.setup()
-    nodes = [makeNode({ id: 'match', ddl: `SELECT ${query}` }), makeNode({ id: 'other', ddl: '' })]
-    open()
-    const input = screen.getByRole('textbox')
-    await user.type(input, query)
-    expect(screen.getAllByRole('option').length).toBeGreaterThan(0)
-    await user.keyboard('{Enter}')
-    expect(screen.getByRole('button', { name: `Remove filter ${query}` })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('1 of 2')
-    expect(screen.getByRole('link', { name: nodes[0].qualifiedName })).toBeInTheDocument()
-  })
+  it.each(['DDL', 'content', 'name', 'type'])(
+    'commits %s as a broad search without selecting a matching attribute',
+    async (query) => {
+      const user = userEvent.setup()
+      nodes = [makeNode({ id: 'match', ddl: `SELECT ${query}` }), makeNode({ id: 'other', ddl: '' })]
+      open()
+      const input = screen.getByRole('textbox')
+      await user.type(input, query)
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0)
+      await user.keyboard('{Enter}')
+      expect(screen.getByRole('button', { name: `Remove filter ${query}` })).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent('1 of 2')
+      expect(screen.getByRole('link', { name: nodes[0].qualifiedName })).toBeInTheDocument()
+    },
+  )
 
   it('selects attributes with arrow keys and Enter, then returns to broad search after committing', async () => {
     const user = userEvent.setup()
@@ -56,7 +71,9 @@ describe('Explorer workbench parity', () => {
   })
 
   it('limits visible rows to 500 but exports all 501 matches in the selected sort order', () => {
-    nodes = Array.from({ length: 501 }, (_, i) => makeNode({ id: String(i), qualifiedName: `dbo.Object${String(i).padStart(3, '0')}`, changeCount: i }))
+    nodes = Array.from({ length: 501 }, (_, i) =>
+      makeNode({ id: String(i), qualifiedName: `dbo.Object${String(i).padStart(3, '0')}`, changeCount: i }),
+    )
     open()
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(501)
     expect(screen.getByText(/Showing the first 500 of 501/)).toBeInTheDocument()
@@ -70,8 +87,14 @@ describe('Explorer workbench parity', () => {
   })
 
   it('restores AND tokens plus appended-DDL search, preserves unrelated URL state and keeps unmatched criteria', async () => {
-    nodes = [makeNode({ id: 'a', type: 'Views', sections: [{ title: 'Extra', content: 'ArchivedOrders' }] }), makeNode({ id: 'b', type: 'Tables', ddl: 'ArchivedOrders' })]
-    const filters = encodeTokensForUrl([{ attribute: 'type', operator: 'is', values: ['Views'] }, { attribute: 'database', operator: 'is', values: ['AppDb'] }])
+    nodes = [
+      makeNode({ id: 'a', type: 'Views', sections: [{ title: 'Extra', content: 'ArchivedOrders' }] }),
+      makeNode({ id: 'b', type: 'Tables', ddl: 'ArchivedOrders' }),
+    ]
+    const filters = encodeTokensForUrl([
+      { attribute: 'type', operator: 'is', values: ['Views'] },
+      { attribute: 'database', operator: 'is', values: ['AppDb'] },
+    ])
     open(`?filters=${encodeURIComponent(filters)}&q=ArchivedOrders&keep=yes`)
     expect(screen.getByRole('status')).toHaveTextContent('1 of 2 object(s) match')
     expect(screen.getAllByRole('textbox')).toHaveLength(1)

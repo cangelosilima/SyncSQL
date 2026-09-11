@@ -16,7 +16,12 @@ import { encodeTokensForUrl } from '../lib/filters'
  */
 const Order = makeNode({ id: 'Order', name: 'Order', qualifiedName: 'dbo.Order', type: 'Tables' })
 const readProc = makeNode({ id: 'read', name: 'ReadOrder', qualifiedName: 'dbo.ReadOrder', type: 'StoredProcedures' })
-const writeProc = makeNode({ id: 'write', name: 'WriteOrder', qualifiedName: 'dbo.WriteOrder', type: 'StoredProcedures' })
+const writeProc = makeNode({
+  id: 'write',
+  name: 'WriteOrder',
+  qualifiedName: 'dbo.WriteOrder',
+  type: 'StoredProcedures',
+})
 const summaryView = makeNode({ id: 'view', name: 'OrderSummary', qualifiedName: 'dbo.OrderSummary', type: 'Views' })
 
 const baseCatalog = makeCatalog({
@@ -33,15 +38,31 @@ vi.mock('../lib/CatalogContext', () => ({
 // not provide. The assertions here are about which node ids the page selects,
 // so the graph is stubbed down to a list of the names it was handed.
 vi.mock('../components/LineageGraph', () => ({
-  default: ({ nodeIds, groupIntermediate, onNodeActivate }: { nodeIds: string[]; groupIntermediate?: boolean; onNodeActivate: (id: string) => void }) => (
+  default: ({
+    nodeIds,
+    groupIntermediate,
+    onNodeActivate,
+  }: {
+    nodeIds: string[]
+    groupIntermediate?: boolean
+    onNodeActivate: (id: string) => void
+  }) => (
     <>
-      <div data-testid="graph" data-grouped={String(groupIntermediate)}>{nodeIds.join(',')}</div>
-      {nodeIds.map(id => <button key={id} onClick={() => onNodeActivate(id)}>Focus {id}</button>)}
+      <div data-testid="graph" data-grouped={String(groupIntermediate)}>
+        {nodeIds.join(',')}
+      </div>
+      {nodeIds.map((id) => (
+        <button key={id} onClick={() => onNodeActivate(id)}>
+          Focus {id}
+        </button>
+      ))}
     </>
   ),
 }))
 
-function Location() { return <span data-testid="location">{useLocation().search}</span> }
+function Location() {
+  return <span data-testid="location">{useLocation().search}</span>
+}
 
 function renderAt(entry: string) {
   return render(
@@ -76,18 +97,21 @@ async function addTypeFilter(user: ReturnType<typeof userEvent.setup>, container
 }
 
 describe('LineagePage', () => {
-  beforeEach(() => { catalog = baseCatalog })
-  it.each(['LinkedServers', 'DatabaseLinks'])('opens a %s search result with its callers and targets', async type => {
+  beforeEach(() => {
+    catalog = baseCatalog
+  })
+  it.each(['LinkedServers', 'DatabaseLinks'])('opens a %s search result with its callers and targets', async (type) => {
     catalog = snapshot as unknown as Catalog
     const user = userEvent.setup()
     const filter = encodeURIComponent(encodeTokensForUrl([{ attribute: 'type', operator: 'is', values: [type] }]))
     renderAt(`/lineage?filter=${filter}`)
-    const link = catalog.nodes.find(node => node.type === type)!
-    expect(graphIds().every(id => catalog.nodes.find(node => node.id === id)!.type === type)).toBe(true)
+    const link = catalog.nodes.find((node) => node.type === type)!
+    expect(graphIds().every((id) => catalog.nodes.find((node) => node.id === id)!.type === type)).toBe(true)
 
     await user.click(screen.getByRole('button', { name: `Focus ${link.id}` }))
-    const adjacent = catalog.edges.filter(edge => edge.from === link.id || edge.to === link.id)
-      .map(edge => edge.from === link.id ? edge.to : edge.from)
+    const adjacent = catalog.edges
+      .filter((edge) => edge.from === link.id || edge.to === link.id)
+      .map((edge) => (edge.from === link.id ? edge.to : edge.from))
     expect(adjacent.length).toBeGreaterThan(0)
     expect(graphIds()).toEqual(expect.arrayContaining([link.id, ...adjacent]))
     expect(screen.queryByText(`Type is ${type}`)).not.toBeInTheDocument()
@@ -98,7 +122,9 @@ describe('LineagePage', () => {
     catalog = snapshot as unknown as Catalog
     const user = userEvent.setup()
     const link = 'ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE'
-    const filter = encodeURIComponent(encodeTokensForUrl([{ attribute: 'type', operator: 'is', values: ['LinkedServers'] }]))
+    const filter = encodeURIComponent(
+      encodeTokensForUrl([{ attribute: 'type', operator: 'is', values: ['LinkedServers'] }]),
+    )
     renderAt(`/lineage?focus=${encodeURIComponent(link)}&filter=${filter}&dependencies=3&dependents=2`)
     expect(graphIds()).toEqual([link])
     expect(screen.getByText('Type is LinkedServers')).toBeInTheDocument()
@@ -127,7 +153,7 @@ describe('LineagePage', () => {
 
     for (let hop = 1; hop <= 3; hop++) {
       await user.click(screen.getByRole('button', { name: 'Add dependents hop' }))
-      const names = graphIds().map(id => catalog.nodes.find(node => node.id === id)!.qualifiedName)
+      const names = graphIds().map((id) => catalog.nodes.find((node) => node.id === id)!.qualifiedName)
       expect(names).toContain('PROCUREMENT.P_ONE')
       expect(names).toContain('PROCUREMENT.P_TWO')
       expect(names).not.toContain('ORDER_ENTRY.P_CIRCLE')
@@ -201,7 +227,8 @@ describe('LineagePage', () => {
   })
   it('adds hops on one side, persists grouping and restores the shared view', async () => {
     const user = userEvent.setup()
-    catalog = makeCatalog({ ...baseCatalog,
+    catalog = makeCatalog({
+      ...baseCatalog,
       nodes: [...baseCatalog.nodes, makeNode({ id: 'caller' }), makeNode({ id: 'data' })],
       edges: [...baseCatalog.edges, makeEdge('caller', 'read'), makeEdge('Order', 'data')],
     })
@@ -225,7 +252,8 @@ describe('LineagePage', () => {
   })
   it('keeps a filtered intermediate node when a later hop matches', async () => {
     const user = userEvent.setup()
-    catalog = makeCatalog({ ...baseCatalog,
+    catalog = makeCatalog({
+      ...baseCatalog,
       nodes: [...baseCatalog.nodes, makeNode({ id: 'report', type: 'StoredProcedures' })],
       edges: [...baseCatalog.edges, makeEdge('report', 'view')],
     })
@@ -235,32 +263,37 @@ describe('LineagePage', () => {
     expect(graphIds()).toContain('view')
     expect(screen.getByText(/1 connecting object kept outside the filters/)).toBeInTheDocument()
   })
-  it.each(['dependencies', 'dependents'] as const)('expands %s beyond six hops and restores deep shared views', async (direction) => {
-    const user = userEvent.setup()
-    const ids = Array.from({ length: 22 }, (_, i) => `node${i}`)
-    catalog = makeCatalog({
-      nodes: ids.map(id => makeNode({ id })),
-      edges: ids.slice(1).map((id, i) => direction === 'dependencies' ? makeEdge(ids[i], id) : makeEdge(id, ids[i])),
-    })
-    const otherDirection = direction === 'dependencies' ? 'dependents' : 'dependencies'
-    const label = direction === 'dependencies' ? 'Dependencies' : 'Dependents'
-    const view = renderAt(`/lineage?focus=node0&${direction}=6&${otherDirection}=0`)
-    expect(graphIds()).toHaveLength(7)
-    await user.click(screen.getByRole('button', { name: `Add ${direction} hop` }))
-    expect(graphIds()).toContain('node7')
-    expect(graphIds()).not.toContain('node8')
-    await user.selectOptions(screen.getByRole('combobox', { name: `${label} hops` }), '20')
-    expect(graphIds()).toHaveLength(21)
-    expect(graphIds()).toContain('node20')
-    expect(graphIds()).not.toContain('node21')
-    expect(screen.getByRole('button', { name: `Add ${direction} hop` })).toBeDisabled()
-    const url = screen.getByTestId('location').textContent!
-    expect(url).toContain(`${direction}=20`)
-    view.unmount()
-    renderAt(`/lineage${url}`)
-    expect(screen.getByRole('combobox', { name: `${label} hops` })).toHaveValue('20')
-    expect(graphIds()).toEqual(ids.slice(0, 21))
-  })
+  it.each(['dependencies', 'dependents'] as const)(
+    'expands %s beyond six hops and restores deep shared views',
+    async (direction) => {
+      const user = userEvent.setup()
+      const ids = Array.from({ length: 22 }, (_, i) => `node${i}`)
+      catalog = makeCatalog({
+        nodes: ids.map((id) => makeNode({ id })),
+        edges: ids
+          .slice(1)
+          .map((id, i) => (direction === 'dependencies' ? makeEdge(ids[i], id) : makeEdge(id, ids[i]))),
+      })
+      const otherDirection = direction === 'dependencies' ? 'dependents' : 'dependencies'
+      const label = direction === 'dependencies' ? 'Dependencies' : 'Dependents'
+      const view = renderAt(`/lineage?focus=node0&${direction}=6&${otherDirection}=0`)
+      expect(graphIds()).toHaveLength(7)
+      await user.click(screen.getByRole('button', { name: `Add ${direction} hop` }))
+      expect(graphIds()).toContain('node7')
+      expect(graphIds()).not.toContain('node8')
+      await user.selectOptions(screen.getByRole('combobox', { name: `${label} hops` }), '20')
+      expect(graphIds()).toHaveLength(21)
+      expect(graphIds()).toContain('node20')
+      expect(graphIds()).not.toContain('node21')
+      expect(screen.getByRole('button', { name: `Add ${direction} hop` })).toBeDisabled()
+      const url = screen.getByTestId('location').textContent!
+      expect(url).toContain(`${direction}=20`)
+      view.unmount()
+      renderAt(`/lineage${url}`)
+      expect(screen.getByRole('combobox', { name: `${label} hops` })).toHaveValue('20')
+      expect(graphIds()).toEqual(ids.slice(0, 21))
+    },
+  )
 
   it('restores a legacy shared radius beyond six hops in both directions', () => {
     renderAt('/lineage?focus=Order&hops=12')

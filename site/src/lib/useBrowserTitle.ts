@@ -32,5 +32,7 @@ export function useBrowserTitle(index: Pick<CatalogIndex, 'byId'> | null) {
 
   const title = `${label} | SQLineage`
   // Apply before paint, including on Back/Forward and after catalog loading.
-  useLayoutEffect(() => { document.title = title }, [title])
+  useLayoutEffect(() => {
+    document.title = title
+  }, [title])
 }

@@ -44,8 +44,8 @@ Overview shows the full count. Alerts provides searchable findings and investiga
 - **Change activity** - one row per object type, one cell per week over the
   mined history. It doubles as the object-count-by-type breakdown.
 - **Latest changes** - the 10 most recently changed objects.
-- **Most referenced tables** - *direct* counts objects pointing straight at
-  the table; *indirect* adds transitive dependents, and stops one hop past
+- **Most referenced tables** - _direct_ counts objects pointing straight at
+  the table; _indirect_ adds transitive dependents, and stops one hop past
   a linked-server boundary.
 - **Most changed objects** - change count over the whole mined window.
 - **Commonly changed together** - object pairs that keep landing in the same

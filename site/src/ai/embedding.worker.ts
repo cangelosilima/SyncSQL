@@ -110,5 +110,7 @@ function ensureTrailingSlash(value: string): string {
 }
 
 function isNumberMatrix(value: unknown): value is number[][] {
-  return Array.isArray(value) && value.every((row) => Array.isArray(row) && row.every((item) => typeof item === 'number'))
+  return (
+    Array.isArray(value) && value.every((row) => Array.isArray(row) && row.every((item) => typeof item === 'number'))
+  )
 }

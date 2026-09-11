@@ -24,7 +24,7 @@ as a removable chip; multiple chips must all match.
 ## DDL content search
 
 Choose **DDL content**, then **contains**, enter text and press Enter to
-search *inside* each object's body: the full DDL plus the appended
+search _inside_ each object's body: the full DDL plus the appended
 `Foreign Keys`, `Check Constraints` and `Indexes` sections.
 
 Use it for questions such as "which procedures mention `OrderStatusId`" or
@@ -40,7 +40,7 @@ count line above the filter bar always reports the true number of matches.
 
 ## Export CSV
 
-**Export CSV** downloads *every* matching object, not just the rows on
+**Export CSV** downloads _every_ matching object, not just the rows on
 screen, using the filter exactly as it stands. The file name carries a
 timestamp so repeated exports don't overwrite one another.
 

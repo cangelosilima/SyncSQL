@@ -33,7 +33,9 @@ const link = node({
   qualifiedName: 'SALES_LINK',
 })
 const proc = node({
-  id: 'SQLPROD01/AppDb/StoredProcedures/dbo/GetOrder', name: 'GetOrder', type: 'StoredProcedures',
+  id: 'SQLPROD01/AppDb/StoredProcedures/dbo/GetOrder',
+  name: 'GetOrder',
+  type: 'StoredProcedures',
   ddl: 'select id, amount from dbo.Orders;',
   sections: [{ title: 'Permissions', content: 'GRANT SELECT ON dbo.Orders TO reader;' }],
   history: [{ sha: 'oldsha1', date: '2026-01-01', message: 'Old revision', ddl: 'select id from dbo.Orders;' }],
@@ -74,14 +76,27 @@ function renderObject(id: string) {
 }
 
 describe('ObjectPage linked-server sections', () => {
-  it("lists everything referenced through a linked server, with the objects that reach it", () => {
+  it('lists everything referenced through a linked server, with the objects that reach it', () => {
     renderObject(link.id)
 
     const table = screen.getByRole('table')
-    expect(within(table).getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Referenced by', 'Remote object', 'In catalog'])
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Referenced by', 'Remote object', 'In catalog'])
     const firstRow = within(table).getAllByRole('row')[1]
-    expect(within(firstRow).getAllByRole('cell').map(cell => cell.textContent)).toEqual(['dbo.GetOrder', 'SalesDb.dbo.Archive', 'not extracted'])
-    expect(within(screen.getByRole('tabpanel', { name: 'Graph' })).getAllByRole('heading', { level: 3 }).slice(0, 2).map(heading => heading.textContent)).toEqual(['Used by (0)', 'Depends on (0)'])
+    expect(
+      within(firstRow)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['dbo.GetOrder', 'SalesDb.dbo.Archive', 'not extracted'])
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Graph' }))
+        .getAllByRole('heading', { level: 3 })
+        .slice(0, 2)
+        .map((heading) => heading.textContent),
+    ).toEqual(['Used by (0)', 'Depends on (0)'])
     expect(within(table).getByRole('link', { name: 'SalesDb.dbo.Orders' })).toHaveAttribute(
       'href',
       `/object/${remote.id}`,
