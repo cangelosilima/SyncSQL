@@ -15,6 +15,7 @@ import { csvFileName } from '../lib/csv'
 import { objectGrantColumns, type ObjectGrantRow } from '../lib/catalogCsv'
 import { decodeTokensFromUrl, encodeTokensForUrl, matchingGrants, newTokenId, type FilterToken } from '../lib/filters'
 import type { CatalogNode } from '../types'
+import { GRAPH_LEGEND_ITEMS, GRAPH_LEGEND_NOTE } from '../lib/graphLegend'
 
 const GRAPH_CAP = 300
 const MAX_HOPS = 20
@@ -279,14 +280,11 @@ export default function LineagePage() {
         <details className="lineage-legend">
           <summary><span>Graph legend</span><span className="legend-reminder">→ References · dashed = dynamic SQL</span></summary>
           <ul>
-            <li><span className="legend-arrow" aria-hidden="true">→</span>Referencing object → referenced object</li>
-            <li><span className="legend-line" aria-hidden="true" />Reference</li>
-            <li><span className="legend-line legend-line--columns" aria-hidden="true" />Labeled edge: recorded column references</li>
-            <li><span className="legend-line legend-line--dynamic" aria-hidden="true" />Dashed edge: dynamic SQL reference (weaker evidence)</li>
-            <li><span className="legend-node legend-node--focus" aria-hidden="true" />Current focus</li>
-            <li><span className="legend-node legend-node--group" aria-hidden="true" />Dashed node: grouped objects</li>
+            {GRAPH_LEGEND_ITEMS.map(item => <li key={item.kind}>
+              <span className={item.kind === 'arrow' ? 'legend-arrow' : item.kind === 'focus' || item.kind === 'group' ? `legend-node legend-node--${item.kind}` : `legend-line legend-line--${item.kind}`} aria-hidden="true">{item.kind === 'arrow' ? '→' : null}</span>{item.label}
+            </li>)}
           </ul>
-          <p className="muted">Node border color indicates object type. Column references are best-effort evidence detected from SQL, not complete column lineage.</p>
+          <p className="muted">{GRAPH_LEGEND_NOTE}</p>
           <ul aria-label="Object types in this graph">
             {[...new Set(nodeIds.map(id => index.byId.get(id)?.type).filter((type): type is string => Boolean(type)))].sort().map(type => (
               <li key={type}><span className="legend-node" style={{ borderColor: colorForType(type) }} aria-hidden="true" />{type}</li>

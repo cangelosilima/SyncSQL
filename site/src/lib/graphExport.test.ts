@@ -5,7 +5,7 @@ import { buildLineageGraphSvg, downloadPng, pngDimensions } from './graphExport'
 const context = { font: '', measureText: (text: string) => ({ width: text.length * 6 }), scale: vi.fn(), drawImage: vi.fn(), translate: vi.fn(), fillText: vi.fn() }
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D)
-  document.documentElement.style.cssText = '--surface:#fffdf8;--selected:#dcebe2;--text:#302d28;--border:#918576;--text-muted:#696052;--font-body:Source Sans 3, sans-serif'
+  document.documentElement.style.cssText = '--surface:#fffdf8;--surface-alt:#eee7dc;--selected:#dcebe2;--text:#302d28;--border:#918576;--accent:#28665c;--text-muted:#696052;--font-body:Source Sans 3, sans-serif'
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.documentElement.removeAttribute('style'); document.documentElement.removeAttribute('data-theme') })
 
@@ -50,6 +50,29 @@ it('renders the dark graph background and readable empty state', () => {
   expect(buildLineageGraphSvg([], []).markup).toContain('No nodes to export.')
 })
 
+it.each([220, 1380])('always places a complete legend below the graph at width %s', width => {
+  const svg = buildLineageGraphSvg([
+    { ...nodes[0], measured: { width, height: 74 }, data: { label: 'Focus', objectType: 'Packages' } },
+    { ...nodes[1], data: { label: '8 grouped Tables', objectType: 'Tables' } },
+    { ...nodes[1], id: 'hidden', hidden: true, data: { label: 'Hidden', objectType: 'Views' } },
+  ], [])
+  const xml = new DOMParser().parseFromString(svg.markup, 'image/svg+xml')
+  const legend = xml.querySelector('#graph-legend')!
+  const text = [...legend.querySelectorAll('text')].map(el => el.textContent).join(' ')
+  for (const label of ['Graph legend', 'Referencing object → referenced object', 'recorded column references', 'dynamic SQL reference (weaker evidence)', 'Current focus', 'grouped objects', 'not complete column lineage', 'Packages', 'Tables']) expect(text).toContain(label)
+  expect(text).not.toContain('Views')
+  expect(legend.querySelector('rect[stroke="#14b8a6"]')).not.toBeNull()
+  expect(legend.querySelector('rect[stroke="#3b82f6"]')).not.toBeNull()
+  const top = Number(legend.querySelector('rect')!.getAttribute('y'))
+  expect(top).toBeGreaterThan(236)
+  const [minX, minY] = xml.documentElement.getAttribute('viewBox')!.split(' ').map(Number)
+  for (const label of legend.querySelectorAll('text')) {
+    expect(Number(label.getAttribute('y'))).toBeLessThan(minY + svg.height)
+    expect(Number(label.getAttribute('x')) + (label.textContent?.length ?? 0) * 6).toBeLessThan(minX + svg.width)
+  }
+  expect(buildLineageGraphSvg([], []).markup).toContain('Graph legend')
+})
+
 it('exports at 3x while bounding very wide and dense graphs', () => {
   expect(pngDimensions(1000, 500)).toEqual({ width: 3000, height: 1500 })
   for (const [width, height] of [[50000, 100], [5000, 5000], [100, 50000]]) {
@@ -67,6 +90,7 @@ it('draws PNG labels with the loaded page font and cleans up failed encodes', as
   vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(null))
   await expect(downloadPng(buildLineageGraphSvg(nodes, []), 'graph.png')).rejects.toThrow('Unable to encode')
   expect(context.fillText).toHaveBeenCalled()
+  expect(context.fillText).toHaveBeenCalledWith('Graph legend', expect.any(Number), expect.any(Number))
   expect(context.font).toContain('Source Sans 3')
   expect(revoke).toHaveBeenCalledWith('blob:graph')
 })
