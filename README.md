@@ -552,10 +552,14 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   modes - the older `tab=access`/`grantee`/`q` links are migrated into
   equivalent chips on open. Adding a **Grantee** chip (`is` for an exact
   principal, `contains` for part of a name, `is in` for several) turns on a
-  permissions table above the graph - every object that principal holds a
+  permissions table above the graph - the objects that principal holds a
   GRANT or DENY on, down to the column where the grant is scoped that way,
   with its own **Export CSV** of one row per permission - while the graph
-  keeps showing how those objects relate.
+  keeps showing how those objects relate. The table and its CSV follow the
+  graph's selection: with nothing focused that is every matching object in
+  the catalog, but while an object is focused it is only the matches inside
+  that neighborhood, so clear the focus before exporting a principal's full
+  permission set.
 
   Clicking a node drills the graph into that object's own neighborhood in
   place (breadcrumb trail, **Back** button) rather than leaving the page;
@@ -1321,7 +1325,7 @@ button writes exactly the rows currently on screen:
 | Object detail, Columns | Column name, data type, description. |
 | Object detail, Access | Grantee, grantee type, permission, state, column. |
 | Object detail, Lineage | Both directions as flat rows — direction, target identity, and the column-level tags for that edge. |
-| Lineage, permissions table | One row per permission across every object matching the grantee (and any other) filter chips. |
+| Lineage, permissions table | One row per permission across the objects matching the grantee (and any other) filter chips — catalog-wide with no focus, limited to the focused neighborhood while one is active. |
 
 Files are UTF-8 **with a BOM** (without it Excel reads them in the machine's
 ANSI codepage and mangles every accented object name and description) and

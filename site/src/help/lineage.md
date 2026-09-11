@@ -62,8 +62,11 @@ from "what can this principal touch" straight into how those objects relate.
 
 **Grantee is** matches exactly; **Grantee contains** matches part of a name, and
 **Grantee is in** accepts multiple names. Combine these with object and SQL chips.
-The permissions table and **Export CSV** use the same filtered selection, with
-one CSV row per matching permission. Retained graph connectors do not imply access.
+The permissions table and **Export CSV** use the same selection the graph shows,
+with one CSV row per matching permission: catalog-wide with nothing focused, and
+only the matches inside the neighborhood while an object is focused - clear the
+focus for a principal's complete permission set. Retained graph connectors do not
+imply access.
 Existing access and DDL-search links are converted into equivalent chips.
 
 ## Reading the graph
