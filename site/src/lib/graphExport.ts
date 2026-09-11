@@ -1,4 +1,6 @@
 import { getBezierPath, Position, type Edge, type Node } from '@xyflow/react'
+import { GRAPH_LEGEND_ITEMS, GRAPH_LEGEND_NOTE } from './graphLegend'
+import { colorForType } from './typeColors'
 
 interface ExportNode {
   id: string
@@ -120,6 +122,51 @@ export interface GraphSvg {
   height: number
 }
 
+/** A separate footer stays readable without covering nodes or depending on UI state. */
+function buildLegend(x: number, y: number, width: number, font: string, types: string[], measure: (value: string, size: number) => number) {
+  const color = resolveColor('var(--text)')
+  const border = resolveColor('var(--border)')
+  const accent = resolveColor('var(--accent)')
+  const content: string[] = []
+  const text = (value: string, tx: number, ty: number, size = 12) => `<text x="${tx}" y="${ty}" font-family="${escapeXml(font)}" font-size="${size}" fill="${color}" dominant-baseline="central">${escapeXml(value)}</text>`
+  content.push(text('Graph legend', x + 24, y + 28, 16))
+  const columns = Math.max(1, Math.min(3, Math.floor((width - 48) / 340)))
+  const columnWidth = (width - 48) / columns
+  let rowY = y + 58
+  let rowHeight = 0
+  GRAPH_LEGEND_ITEMS.forEach((item, i) => {
+    const column = i % columns
+    if (i && column === 0) { rowY += rowHeight + 14; rowHeight = 0 }
+    const left = x + 24 + column * columnWidth
+    const lines = wrapLabel(item.label, columnWidth - 54, value => measure(value, 12))
+    rowHeight = Math.max(rowHeight, lines.length * 18)
+    if (item.kind === 'focus' || item.kind === 'group') {
+      content.push(`<rect x="${left}" y="${rowY - 7}" width="26" height="14" rx="2" fill="${item.kind === 'focus' ? resolveColor('var(--selected)') : resolveColor('var(--surface-alt)')}" stroke="${border}" stroke-width="2"${item.kind === 'group' ? ' stroke-dasharray="4 3"' : ''}/>`)
+    } else {
+      const stroke = item.kind === 'columns' || item.kind === 'arrow' ? accent : border
+      content.push(`<path d="M${left},${rowY} h28" fill="none" stroke="${stroke}" stroke-width="${item.kind === 'columns' ? 2 : 1}"${item.kind === 'dynamic' ? ' stroke-dasharray="4 3"' : ''}/>`)
+      if (item.kind === 'arrow') content.push(`<path d="M${left + 23},${rowY - 4} l5,4 -5,4" fill="none" stroke="${stroke}" stroke-width="1.5"/>`)
+    }
+    lines.forEach((line, lineIndex) => content.push(text(line, left + 40, rowY + lineIndex * 18)))
+  })
+  rowY += rowHeight + 16
+  const note = wrapLabel(GRAPH_LEGEND_NOTE, width - 48, value => measure(value, 11))
+  note.forEach((line, i) => content.push(text(line, x + 24, rowY + i * 16, 11)))
+  rowY += note.length * 16 + 18
+  let typeX = x + 24
+  for (const type of types) {
+    const lines = wrapLabel(type, width - 100, value => measure(value, 12))
+    const itemWidth = Math.max(...lines.map(line => measure(line, 12))) + 56
+    if (typeX > x + 24 && typeX + itemWidth > x + width - 24) { typeX = x + 24; rowY += 28 }
+    content.push(`<rect x="${typeX}" y="${rowY - 7}" width="26" height="14" rx="2" fill="none" stroke="${colorForType(type)}" stroke-width="2"/>`)
+    lines.forEach((line, i) => content.push(text(line, typeX + 36, rowY + i * 18)))
+    if (lines.length > 1) { rowY += (lines.length - 1) * 18; typeX = x + width }
+    else typeX += itemWidth
+  }
+  const height = rowY - y + 28
+  return { height, markup: `<g id="graph-legend" aria-label="Graph legend"><rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${resolveColor('var(--surface)')}"/><path d="M${x},${y} h${width}" stroke="${border}"/>${content.join('')}</g>` }
+}
+
 /**
  * Renders the current lineage graph as a standalone SVG string - built
  * directly from node positions/dimensions rather than rasterizing the live
@@ -144,7 +191,13 @@ export function buildLineageGraphSvg(rawNodes: Node[], rawEdges: Edge[]): GraphS
 
   if (nodes.length === 0) {
     const markup = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 240 80"><rect width="240" height="80" fill="${background}"/><text x="12" y="44" font-family="ui-monospace, monospace" font-size="13">No nodes to export.</text></svg>`
-    return { markup, width: 240, height: 80 }
+    const legend = buildLegend(0, 80, 640, font, [], measure)
+    const height = 80 + legend.height
+    return {
+      markup: markup.replace('width="240" height="80" viewBox="0 0 240 80"', `width="640" height="${height}" viewBox="0 0 640 ${height}"`).replace('</svg>', `${legend.markup}</svg>`),
+      width: 640,
+      height,
+    }
   }
 
   const bounds = nodes.map(n => ({ x: n.x, y: n.y, width: n.width, height: n.height }))
@@ -196,16 +249,22 @@ export function buildLineageGraphSvg(rawNodes: Node[], rawEdges: Edge[]): GraphS
     )
     .join('\n')
 
-  const minX = Math.min(...bounds.map(b => b.x)) - PADDING
+  const graphMinX = Math.min(...bounds.map(b => b.x)) - PADDING
   const minY = Math.min(...bounds.map(b => b.y)) - PADDING
-  const width = Math.ceil(Math.max(...bounds.map(b => b.x + b.width)) + PADDING - minX)
-  const height = Math.ceil(Math.max(...bounds.map(b => b.y + b.height)) + PADDING - minY)
+  const graphWidth = Math.ceil(Math.max(...bounds.map(b => b.x + b.width)) + PADDING - graphMinX)
+  const width = Math.max(640, graphWidth)
+  const minX = graphMinX - (width - graphWidth) / 2
+  const graphHeight = Math.ceil(Math.max(...bounds.map(b => b.y + b.height)) + PADDING - minY)
+  const types = [...new Set(rawNodes.filter(node => !node.hidden).map(node => node.data.objectType).filter((type): type is string => typeof type === 'string'))].sort()
+  const legend = buildLegend(minX, minY + graphHeight, width, font, types, measure)
+  const height = graphHeight + legend.height
   const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">
     <defs>${markerDefs}<pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="0.5" fill="${dark ? '#555' : '#91919a'}"/></pattern></defs>
     <rect x="${minX.toFixed(1)}" y="${minY.toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" fill="${background}" />
     <rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="url(#dots)"/>
     ${edgeMarkup}
     ${nodeMarkup}
+    ${legend.markup}
   </svg>`
 
   return { markup, width, height }

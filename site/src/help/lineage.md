@@ -76,6 +76,8 @@ standalone image, built from node positions rather than by rasterizing the
 page - it renders correctly outside the site and matches the active theme.
 PNG exports use higher resolution, the page's loaded font, full wrapped object
 names, curved edges and the same dashed references and focus highlight.
+Both formats always include the full graph legend beneath the diagram, including
+the object types shown, even when the on-screen legend is collapsed.
 
 ## What lineage does not cover
 

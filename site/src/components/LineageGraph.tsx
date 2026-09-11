@@ -76,7 +76,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
           id: node.id,
           className: isFocus ? 'lineage-node--focus' : undefined,
           ariaLabel: `${node.qualifiedName}, ${node.type}${isFocus ? ', current focus' : ''}`,
-          data: { label: `${node.qualifiedName}${connectorIds.includes(node.id) ? ' (connecting object)' : ''}` },
+          data: { label: `${node.qualifiedName}${connectorIds.includes(node.id) ? ' (connecting object)' : ''}`, objectType: node.type },
           position: { x: 0, y: 0 },
           style: {
             background: isFocus ? 'var(--selected)' : 'var(--surface)',
@@ -157,7 +157,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
       flowNodes.push({
         id: bundle.id,
         ariaLabel: `${bundle.memberIds.length} grouped ${bundle.type}${bundle.hop ? `, hop ${bundle.hop}` : ''}`,
-        data: { label: `${bundle.memberIds.length} ${bundle.type}${bundle.hop ? ` · ${bundle.direction === 'outgoing' ? 'Dependencies' : 'Dependents'} · hop ${bundle.hop}` : ''}` },
+        data: { label: `${bundle.memberIds.length} ${bundle.type}${bundle.hop ? ` · ${bundle.direction === 'outgoing' ? 'Dependencies' : 'Dependents'} · hop ${bundle.hop}` : ''}`, objectType: bundle.type },
         position: { x: 0, y: 0 },
         style: {
           background: 'var(--surface-alt)',
