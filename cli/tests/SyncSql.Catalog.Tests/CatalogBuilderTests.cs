@@ -10,6 +10,35 @@ namespace SyncSql.Catalog.Tests;
 public sealed class CatalogBuilderTests : IDisposable
 {
     [Fact]
+    public async Task BuildAsync_Passes_each_objects_Broker_context_to_its_analyzer()
+    {
+        Guid brokerGuid = Guid.Parse("aabbccdd-1111-2222-3333-444444444444");
+        foreach (var context in new[] { (Database: "App", Guid: (Guid?)brokerGuid), (Database: "Legacy", Guid: (Guid?)null) })
+        {
+            ExtractedObject obj = new()
+            {
+                Server = "SQL",
+                Database = context.Database,
+                Schema = "dbo",
+                Type = "StoredProcedures",
+                Name = "Send",
+                Ddl = $"CREATE PROCEDURE dbo.Send AS PRINT '{context.Database}';",
+                Engine = DatabaseEngine.MsSql,
+                ServiceBrokerGuid = context.Guid,
+            };
+            string path = Path.Combine(_objectsRoot, ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, ExtractedObjectFile.Write(obj));
+        }
+        Core.Domain.Catalog catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot, DynamicSql = false }, CancellationToken.None);
+        foreach (CatalogNode node in catalog.Nodes)
+        {
+            Assert.Equal(node.Database == "App" ? brokerGuid : (Guid?)null, node.ServiceBrokerGuid);
+            _mssqlAnalyzer.Received(1).Analyze(node.Ddl, Arg.Is<LineageAnalysisOptions>(o => o.ServiceBrokerGuid == node.ServiceBrokerGuid && !o.DynamicSql));
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_NestedLinkedServer_PreservesRemoteIdentityAndResolvesReference()
     {
         WriteObjectFile("ROOT", "_ServerLevel", "LinkedServers", null, "REMOTE", LinkedServerDdl("REMOTE", "host.example.com", "SalesDb"));

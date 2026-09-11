@@ -17,7 +17,8 @@ namespace SyncSql.Lineage.MsSql;
 /// literal in a SELECT list is still never treated as SQL.
 /// </summary>
 /// <param name="dynamicSql">Whether to scan dynamically-built SQL at all (see <see cref="Core.Abstractions.LineageAnalysisOptions"/>).</param>
-internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentVisitor
+/// <param name="serviceBrokerGuid">The current database's extracted Broker identity, when available.</param>
+internal sealed class TSqlLineageVisitor(bool dynamicSql = true, Guid? serviceBrokerGuid = null) : TSqlFragmentVisitor
 {
     /// <summary>One budget per object, shared by every nested scan this walk starts.</summary>
     private readonly DynamicSqlScanner.Budget _budget = new();
@@ -106,8 +107,11 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
     public override void Visit(BeginDialogStatement node)
     {
         AddBrokerReference(node.InitiatorServiceName, "Services");
-        // A specified remote broker instance cannot be resolved as a local service.
-        if (node.InstanceSpec is null)
+        // CURRENT DATABASE and the extracted database GUID both explicitly select local routing.
+        // Unknown variables and other GUIDs must not bind a same-named local service.
+        if (node.InstanceSpec is null || node.InstanceSpec is StringLiteral instance
+            && (instance.Value.Equals("CURRENT DATABASE", StringComparison.OrdinalIgnoreCase)
+                || serviceBrokerGuid is { } localGuid && Guid.TryParse(instance.Value, out Guid targetGuid) && targetGuid == localGuid))
         {
             AddBrokerReference(node.TargetServiceName, "Services");
         }

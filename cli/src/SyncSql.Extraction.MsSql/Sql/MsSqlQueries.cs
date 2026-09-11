@@ -9,6 +9,8 @@ internal static class MsSqlQueries
 {
     public const string Databases = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name;";
 
+    public const string ServiceBrokerGuid = "SELECT service_broker_guid FROM sys.databases WHERE database_id = DB_ID();";
+
     public const string ColumnDefinitions = """
         SELECT c.object_id AS ObjectId, c.name AS ColumnName, ty.name AS TypeName, SCHEMA_NAME(ty.schema_id) AS TypeSchema,
             ty.is_user_defined AS IsUserDefined, c.max_length AS MaxLength, c.precision AS Precision, c.scale AS Scale,

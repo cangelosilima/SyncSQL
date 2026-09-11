@@ -6,6 +6,9 @@ namespace SyncSql.Extraction.MsSql.Sql;
 /// <summary>Thin Dapper wrappers, one per MsSqlQueries entry - all the actual SQL text lives in MsSqlQueries; this just runs it and maps rows.</summary>
 internal static class MsSqlCatalogReader
 {
+    public static Task<Guid?> GetServiceBrokerGuidAsync(SqlConnection connection) =>
+        connection.QuerySingleOrDefaultAsync<Guid?>(MsSqlQueries.ServiceBrokerGuid);
+
     public static Task<IEnumerable<ColumnDefinitionRow>> GetColumnDefinitionsAsync(SqlConnection connection) =>
         connection.QueryAsync<ColumnDefinitionRow>(MsSqlQueries.ColumnDefinitions);
 

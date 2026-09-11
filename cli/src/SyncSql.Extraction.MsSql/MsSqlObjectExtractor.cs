@@ -238,6 +238,14 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         }
 
         await AppendConfigurationAsync(connection, server.Name, database, objects, firstObject);
+        if (objects.Count > firstObject)
+        {
+            Guid? brokerGuid = await MsSqlCatalogReader.GetServiceBrokerGuidAsync(connection);
+            for (int i = firstObject; i < objects.Count; i++)
+            {
+                objects[i] = objects[i] with { ServiceBrokerGuid = brokerGuid };
+            }
+        }
     }
 
     private static async Task ExtractModuleObjectsAsync(

@@ -39,7 +39,8 @@ public sealed class MsSqlLineageAnalyzer(ILogger<MsSqlLineageAnalyzer> logger) :
                 logger.LogWarning("ScriptDom parse produced {Count} error(s) (continuing with the partial AST): {Message}", errors.Count, errors[0].Message);
             }
 
-            TSqlLineageVisitor visitor = new((options ?? LineageAnalysisOptions.Default).DynamicSql);
+            LineageAnalysisOptions context = options ?? LineageAnalysisOptions.Default;
+            TSqlLineageVisitor visitor = new(context.DynamicSql, context.ServiceBrokerGuid);
             fragment.Accept(visitor);
 
             return new LineageAnalysisResult

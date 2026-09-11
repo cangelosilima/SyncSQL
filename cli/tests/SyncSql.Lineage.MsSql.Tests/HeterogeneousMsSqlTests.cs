@@ -8,6 +8,24 @@ public sealed class HeterogeneousMsSqlTests
 {
     private readonly MsSqlLineageAnalyzer _analyzer = new(NullLogger<MsSqlLineageAnalyzer>.Instance);
 
+    [Theory]
+    [InlineData("N'CURRENT DATABASE'", null, true)]
+    [InlineData("'current database'", null, true)]
+    [InlineData("N'AABBCCDD-1111-2222-3333-444444444444'", "aabbccdd-1111-2222-3333-444444444444", true)]
+    [InlineData("N'aabbccdd-1111-2222-3333-444444444444'", null, false)]
+    [InlineData("N'11111111-1111-1111-1111-111111111111'", "aabbccdd-1111-2222-3333-444444444444", false)]
+    [InlineData("@instance", "aabbccdd-1111-2222-3333-444444444444", false)]
+    public void Explicit_Broker_instances_only_resolve_targets_known_to_be_local(string instance, string? localGuid, bool expectedLocal)
+    {
+        var result = _analyzer.Analyze($"""
+            DECLARE @h uniqueidentifier, @instance nvarchar(128);
+            BEGIN DIALOG @h FROM SERVICE [sender] TO SERVICE N'target', {instance} ON CONTRACT [agreement];
+            """, new Core.Abstractions.LineageAnalysisOptions { ServiceBrokerGuid = localGuid is null ? null : Guid.Parse(localGuid) });
+        Assert.Equal(expectedLocal, result.ObjectRefs.Any(r => r is { Name: "target", ObjectType: "Services" }));
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "sender", ObjectType: "Services" });
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "agreement", ObjectType: "Contracts" });
+    }
+
     [Fact]
     public void Broker_definitions_and_operations_preserve_their_namespaces()
     {

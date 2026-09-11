@@ -86,6 +86,11 @@ public sealed class HeterogeneousLiveTests(ITestOutputHelper output)
                 ParsedObjectFile parsed = ExtractedObjectFile.Parse(await File.ReadAllLinesAsync(path, timeout.Token));
                 Assert.NotNull(parsed.Identity);
                 Assert.Equal(node.Server, parsed.Identity.Server);
+                Assert.Equal(node.ServiceBrokerGuid, parsed.Identity.ServiceBrokerGuid);
+                if (node.Engine == DatabaseEngine.MsSql && node.Database != "_ServerLevel")
+                {
+                    Assert.NotNull(node.ServiceBrokerGuid);
+                }
             }
             // Packages are catalog objects; each body must preserve all ten callable members.
             foreach (CatalogNode package in catalog.Nodes.Where(n => n.Type == "PackageBodies"))
