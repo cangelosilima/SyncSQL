@@ -1,8 +1,9 @@
 # Catalog example and GitHub Pages
 
 The default catalog is a real extracted snapshot of the **heterogeneous-lineage**
-benchmark: Helios Oracle, Atlas SQL Server and Meridian SQL Server, with 174
-objects, 48 workload users and six attributed lineage paths. The overview provides
+benchmark: Helios Oracle, Atlas SQL Server and Meridian SQL Server, with 208
+objects, 48 workload users and sixteen lineage paths, including replication
+article sources and local Service Broker messaging. The overview provides
 object, user-access and path entry points. Hash routing and relative assets support
 GitHub project Pages, including reloads and shared object links.
 
