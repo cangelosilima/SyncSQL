@@ -7,6 +7,8 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
+      # Publications are inspected without running replication delivery jobs.
+      MSSQL_AGENT_ENABLED: "false"
       MSSQL_SA_PASSWORD: ${BENCH_PASSWORD:?set BENCH_PASSWORD}
       MSSQL_MEMORY_LIMIT_MB: "2048"
     ports: ["127.0.0.1:14431:1433"]
@@ -27,6 +29,8 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
+      # Publications are inspected without running replication delivery jobs.
+      MSSQL_AGENT_ENABLED: "false"
       MSSQL_SA_PASSWORD: ${BENCH_PASSWORD:?set BENCH_PASSWORD}
       MSSQL_MEMORY_LIMIT_MB: "2048"
     ports: ["127.0.0.1:14432:1433"]

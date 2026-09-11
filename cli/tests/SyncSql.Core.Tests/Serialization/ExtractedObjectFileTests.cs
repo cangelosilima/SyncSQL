@@ -5,6 +5,29 @@ namespace SyncSql.Core.Tests.Serialization;
 
 public class ExtractedObjectFileTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("aabbccdd-1111-2222-3333-444444444444")]
+    public void Broker_context_round_trips_without_changing_legacy_identities(string? brokerGuid)
+    {
+        ExtractedObject obj = new()
+        {
+            Server = "SQL",
+            Database = "App",
+            Schema = "dbo",
+            Type = "StoredProcedures",
+            Name = "Send",
+            Ddl = "CREATE PROCEDURE dbo.Send AS SELECT 1;",
+            Engine = DatabaseEngine.MsSql,
+            ServiceBrokerGuid = brokerGuid is null ? null : Guid.Parse(brokerGuid),
+        };
+        string content = ExtractedObjectFile.Write(obj);
+        ObjectFileIdentity identity = Assert.IsType<ObjectFileIdentity>(ExtractedObjectFile.Parse(content.Split('\n')).Identity);
+        Assert.Equal(obj.ServiceBrokerGuid, identity.ServiceBrokerGuid);
+        Assert.Equal("SQL/App/StoredProcedures/dbo/Send", ExtractedObjectFile.ObjectId(identity.Server, identity.Database, identity.Schema, identity.Type, identity.Name));
+        Assert.Equal(brokerGuid is not null, content.Contains("ServiceBrokerGuid", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void WriteThenParse_RoundTripsDdlColumnsGrantsSectionsAndEngine()
     {

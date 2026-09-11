@@ -34,6 +34,9 @@ public sealed record LineageAnalysisOptions
     /// </summary>
     public bool DynamicSql { get; init; } = true;
 
+    /// <summary>The current SQL database's Broker identity, when supplied by extraction metadata.</summary>
+    public Guid? ServiceBrokerGuid { get; init; }
+
     public static LineageAnalysisOptions Default { get; } = new();
 }
 

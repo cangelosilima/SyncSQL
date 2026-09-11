@@ -70,6 +70,11 @@ internal sealed class NodeIndex
     private readonly Dictionary<string, List<string>> _bareOnServer = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<string>> _databasesByServer = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedServerMap _linkedServers;
+    private readonly Dictionary<string, string> _typedInDatabase = new(StringComparer.Ordinal);
+
+    private static string BrokerKey(string server, string database, string type, string? schema, string name) =>
+        $"{server.ToUpperInvariant()}::{database.ToUpperInvariant()}::{type.ToUpperInvariant()}::{schema?.ToUpperInvariant()}."
+        + (type == "Queues" ? name.ToUpperInvariant() : name);
     private readonly Dictionary<string, DatabaseEngine?> _enginesByServer = new(StringComparer.OrdinalIgnoreCase);
 
     public NodeIndex(IEnumerable<CatalogNode> nodes)
@@ -86,9 +91,18 @@ internal sealed class NodeIndex
             .Select(n => $"{n.Server}::{n.Database}::{n.Schema}.{n.Name}").ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (CatalogNode node in allNodes)
         {
+            if (node.Type is "MessageTypes" or "Contracts" or "Services" or "Queues")
+            {
+                _typedInDatabase[BrokerKey(node.Server, node.Database, node.Type, node.Schema, node.Name)] = node.Id;
+            }
             if (node.Engine is { } engine)
             {
                 _enginesByServer.TryAdd(node.Server, engine);
+            }
+            // Database-scoped Broker names are not candidates for ordinary table/routine references.
+            if (node.Type is "MessageTypes" or "Contracts" or "Services")
+            {
+                continue;
             }
             // Spec and body share an Oracle name. Calls resolve to the public spec;
             // the catalog adds the spec -> implementation dependency separately.
@@ -143,6 +157,18 @@ internal sealed class NodeIndex
     /// </summary>
     public ReferenceResolution Resolve(CatalogNode fromNode, ObjectRef reference)
     {
+        // Broker message types, contracts and services have separate database-local namespaces.
+        // Never widen these references to a similarly named object in another database.
+        if (reference.ObjectType is { } objectType)
+        {
+            if (reference.Name == "DEFAULT" && objectType is "MessageTypes" or "Contracts")
+            {
+                return ReferenceResolution.System;
+            }
+            string? schema = objectType == "Queues" ? reference.Schema ?? fromNode.Schema ?? "dbo" : null;
+            return _typedInDatabase.TryGetValue(BrokerKey(fromNode.Server, fromNode.Database, objectType, schema, reference.Name), out string? id)
+                ? ReferenceResolution.Found(id) : ReferenceResolution.NotFound;
+        }
         if (string.IsNullOrWhiteSpace(reference.Name))
         {
             return ReferenceResolution.NotFound;
