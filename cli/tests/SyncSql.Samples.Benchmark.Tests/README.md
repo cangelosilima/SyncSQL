@@ -1,5 +1,12 @@
 # SyncSql.Samples.Benchmark.Tests
 
+The [heterogeneous lineage scenario](../../../samples/scenarios/heterogeneous-lineage/README.md)
+also lives in this project. Its `HeterogeneousLineageTests` always run; only
+`HeterogeneousLiveTests` needs `SYNCSQL_HETEROGENEOUS=1`. It has its own three-server
+Docker fleet, 48 users and an independent expected catalog, and runs through the
+real CLI after provisioning. Use the scenario runner to set credentials and start
+the containers. The older upstream sample fleet below retains its own opt-in flag.
+
 An end-to-end benchmark: extract every database in
 [`samples/`](../../../samples), build the catalog from what came out, and assert
 the result.

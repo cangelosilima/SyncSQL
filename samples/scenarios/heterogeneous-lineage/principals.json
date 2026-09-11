@@ -1,0 +1,242 @@
+[
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "ORDER_ENTRY_READ"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "ORDER_ENTRY_WRITE"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "ORDER_ENTRY_EXEC"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "FULFILLMENT_READ"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "FULFILLMENT_WRITE"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "FULFILLMENT_EXEC"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "ORDER_AUDIT_READ"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "ORDER_AUDIT_WRITE"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "name": "ORDER_AUDIT_EXEC"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "INVOICING_READ"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "INVOICING_WRITE"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "INVOICING_EXEC"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "SETTLEMENT_READ"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "SETTLEMENT_WRITE"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "SETTLEMENT_EXEC"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "FINANCE_AUDIT_READ"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "FINANCE_AUDIT_WRITE"
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "name": "FINANCE_AUDIT_EXEC"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "INVENTORY_READ"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "INVENTORY_WRITE"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "INVENTORY_EXEC"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "DISPATCH_READ"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "DISPATCH_WRITE"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "DISPATCH_EXEC"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "STOCK_AUDIT_READ"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "STOCK_AUDIT_WRITE"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "name": "STOCK_AUDIT_EXEC"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "REPORTING_READ"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "REPORTING_WRITE"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "REPORTING_EXEC"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "ANALYTICS_ETL_READ"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "ANALYTICS_ETL_WRITE"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "ANALYTICS_ETL_EXEC"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "REPORT_AUDIT_READ"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "REPORT_AUDIT_WRITE"
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "name": "REPORT_AUDIT_EXEC"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PROCUREMENT_READ"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PROCUREMENT_WRITE"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PROCUREMENT_EXEC"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "COMPLIANCE_READ"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "COMPLIANCE_WRITE"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "COMPLIANCE_EXEC"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PKG_PROCUREMENT_READ"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PKG_PROCUREMENT_WRITE"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PKG_PROCUREMENT_EXEC"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PKG_COMPLIANCE_READ"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PKG_COMPLIANCE_WRITE"
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "name": "PKG_COMPLIANCE_EXEC"
+  }
+]

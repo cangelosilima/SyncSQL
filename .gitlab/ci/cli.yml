@@ -21,10 +21,12 @@ variables:
       changes:
         - cli/**/*
         - grammar/**/*
+        - samples/scenarios/heterogeneous-lineage/**/*
     - if: '$CI_PIPELINE_SOURCE == "push"'
       changes:
         - cli/**/*
         - grammar/**/*
+        - samples/scenarios/heterogeneous-lineage/**/*
   before_script:
     - cd cli
   cache:

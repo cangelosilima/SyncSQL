@@ -13,5 +13,7 @@ site/vendor/ai/**/*.onnx filter=lfs diff=lfs merge=lfs -text
 # checkout with core.autocrlf=true would hand bash and sqlcmd CRLF line endings,
 # which both mis-handle - keep these LF regardless of platform.
 samples/scripts/**/*.sh text eol=lf
+samples/scenarios/**/*.sh text eol=lf
+samples/scenarios/**/*.ora text eol=lf
 samples/**/*.sql text eol=lf
 samples/docker/.env.example text eol=lf

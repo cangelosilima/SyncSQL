@@ -161,6 +161,14 @@ run `npm run dev` in [`site/`](../site).
 
 ## The benchmark
 
+For the first-party cross-engine scenario with three servers, two Oracle packages,
+48 workload users and cyclic lineage, run
+`samples/scripts/run-benchmark.ps1 -Scenario heterogeneous-lineage` or
+`bash samples/scripts/run-benchmark.sh --scenario heterogeneous-lineage`.
+See [the scenario contract and Docker instructions](scenarios/heterogeneous-lineage/README.md).
+Its database-free contract runs in ordinary solution tests; its live test provisions
+the isolated fleet and compares real CLI output against the same expectations.
+
 ```sh
 samples/scripts/run-benchmark.sh
 ```

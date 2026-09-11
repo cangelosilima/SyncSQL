@@ -20,9 +20,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Only Core: the benchmark reads the same file format and catalog types the
-         CLI writes, and runs the CLI itself as a process rather than in-proc. -->
+    <!-- Live benchmarks drive the real CLI; offline scenario tests use the same
+         catalog builder and analyzers. The owner-credential check exercises Oracle directly. -->
     <ProjectReference Include="..\..\src\SyncSql.Core\SyncSql.Core.csproj" />
+    <ProjectReference Include="..\..\src\SyncSql.Catalog\SyncSql.Catalog.csproj" />
+    <ProjectReference Include="..\..\src\SyncSql.Lineage.MsSql\SyncSql.Lineage.MsSql.csproj" />
+    <ProjectReference Include="..\..\src\SyncSql.Lineage.Oracle\SyncSql.Lineage.Oracle.csproj" />
+    <ProjectReference Include="..\..\src\SyncSql.Extraction.MsSql\SyncSql.Extraction.MsSql.csproj" />
+    <ProjectReference Include="..\..\src\SyncSql.Extraction.Oracle\SyncSql.Extraction.Oracle.csproj" />
   </ItemGroup>
 
 </Project>

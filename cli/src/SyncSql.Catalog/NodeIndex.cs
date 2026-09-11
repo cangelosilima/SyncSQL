@@ -70,6 +70,7 @@ internal sealed class NodeIndex
     private readonly Dictionary<string, List<string>> _bareOnServer = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<string>> _databasesByServer = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedServerMap _linkedServers;
+    private readonly Dictionary<string, DatabaseEngine?> _enginesByServer = new(StringComparer.OrdinalIgnoreCase);
 
     public NodeIndex(IEnumerable<CatalogNode> nodes)
         : this(nodes, LinkedServerMap.Empty)
@@ -80,8 +81,19 @@ internal sealed class NodeIndex
     {
         _linkedServers = linkedServers;
 
-        foreach (CatalogNode node in nodes)
+        List<CatalogNode> allNodes = [.. nodes];
+        HashSet<string> packageSpecs = allNodes.Where(n => n.Type == "Packages")
+            .Select(n => $"{n.Server}::{n.Database}::{n.Schema}.{n.Name}").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (CatalogNode node in allNodes)
         {
+            _enginesByServer.TryAdd(node.Server, node.Engine);
+            // Spec and body share an Oracle name. Calls resolve to the public spec;
+            // the catalog adds the spec -> implementation dependency separately.
+            if (node.Type == "PackageBodies" && packageSpecs.Contains($"{node.Server}::{node.Database}::{node.Schema}.{node.Name}"))
+            {
+                continue;
+            }
+
             if (!string.IsNullOrEmpty(node.Schema))
             {
                 _qualified[$"{node.Server}::{node.Database}::{node.Schema}.{node.Name}"] = node.Id;
@@ -146,7 +158,7 @@ internal sealed class NodeIndex
         if (!string.IsNullOrWhiteSpace(reference.Server)
             && !string.Equals(reference.Server, fromNode.Server, StringComparison.OrdinalIgnoreCase))
         {
-            LinkedServerLink? link = _linkedServers.Resolve(fromNode.Server, reference.Server);
+            LinkedServerLink? link = _linkedServers.Resolve(fromNode.Server, reference.Server, fromNode.Database, fromNode.Schema);
             if (link?.TargetServer is not { } linkedTargetServer)
             {
                 // Either the server declares no such link, or the link points somewhere nothing in the
@@ -154,6 +166,14 @@ internal sealed class NodeIndex
                 return ReferenceResolution.External(link);
             }
 
+            if (reference.IsRoutine && reference.Database is not null
+                && _enginesByServer.GetValueOrDefault(linkedTargetServer) == DatabaseEngine.Oracle)
+            {
+                // T-SQL's dynamic scanner sees OWNER.PACKAGE.MEMBER as three name
+                // parts. On the Oracle destination these are not database.schema.name.
+                reference = reference with { Schema = reference.Database, Name = reference.Schema!, Database = null };
+                statedDatabase = null;
+            }
             statedDatabase ??= link.DefaultDatabase;
 
             // A loopback link lands right back here: the reference is local, and drawing it through the
@@ -242,6 +262,12 @@ internal sealed class NodeIndex
         LinkedServerLink? crossServerLink = null;
         foreach (string linkedServer in _linkedServers.ReachableFrom(fromNode.Server))
         {
+            LinkedServerLink? accessibleLink = _linkedServers.LinkTo(fromNode.Server, linkedServer, fromNode.Database, fromNode.Schema);
+            if (accessibleLink is null)
+            {
+                continue;
+            }
+
             if (Unique(_qualifiedOnServer, $"{linkedServer}::{qualifiedName}") is not { } linked)
             {
                 continue;
@@ -253,7 +279,7 @@ internal sealed class NodeIndex
             }
 
             crossServerMatch = linked.NodeId;
-            crossServerLink = _linkedServers.LinkTo(fromNode.Server, linkedServer);
+            crossServerLink = accessibleLink;
         }
 
         return crossServerMatch is not null

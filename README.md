@@ -867,7 +867,7 @@ Precision comes from being narrow:
   dynamically built `o.OrderId` doesn't invent a schema called `o`. A bare name
   is as untrustworthy here as it is anywhere else, and is left alone.
 - **The enclosing linked server comes with it.** A name found inside
-  `OPENQUERY(SIG, '...')` is attributed to `SIG`, which is what turns it into a
+  `OPENQUERY(SQL_A, '...')` is attributed to `SQL_A`, which is what turns it into a
   real hop through that link (see
   [Linked servers as lineage hops](#linked-servers-as-lineage-hops)) rather
   than a floating reference. `EXEC ... AT LNK` works the same way.
@@ -1108,6 +1108,15 @@ npm run test    # Vitest, watch mode
 `site/public/data/catalog.json` ships a small demo fixture so `npm run dev`
 has something to render before any pipeline has actually run; replace it
 with a real one (see below) to preview actual data.
+
+The site uses Transformers.js 3.8.1 until its newer releases stop depending on
+the unpatched `adm-zip` extraction vulnerability
+([GHSA-vwc7-r8mq-g2x9](https://github.com/advisories/GHSA-vwc7-r8mq-g2x9)).
+The `allowScripts` entries in `site/package.json` approve the reviewed esbuild
+and protobufjs install scripts at specific versions and disable ONNX's native
+CUDA download, which the browser app does not use. After dependency updates,
+use `npm install-scripts ls` with a current npm release to review new scripts
+before approving them.
 
 The development server is model-free by default. To exercise AI locally,
 materialize the Git LFS files, verify them, and preview a production build:

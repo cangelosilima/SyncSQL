@@ -84,10 +84,12 @@ internal sealed partial class LinkedServerMap
                 .Select(candidate => candidate.Server).Distinct(StringComparer.OrdinalIgnoreCase)];
             string? targetServer = nestedServers.Length == 1 ? nestedServers[0] : MatchCatalogServer(catalogServers, node.Name, dataSource);
 
-            // A link name is unique per server, so the first entry wins; Oracle qualifies links by owner,
-            // but the name is still what the DDL writes after the "@".
+            // Private Oracle links are scoped to both service and owner. Two owners
+            // may use REMOTE for completely different destinations.
             map._linksByName.TryAdd(
-                $"{node.Server}::{node.Name}",
+                node.Type == "DatabaseLinks"
+                    ? $"{node.Server}::{node.Database}::{node.Schema}::{node.Name}"
+                    : $"{node.Server}::{node.Name}",
                 new LinkedServerLink(node.Id, node.Name, node.Server, dataSource, NullIfBlank(catalog), targetServer));
 
             // A link that comes back to the server it's declared on adds no reachability - following it
@@ -115,18 +117,40 @@ internal sealed partial class LinkedServerMap
     }
 
     /// <summary>The link "<paramref name="linkName"/>" as written on <paramref name="fromServer"/>, or null when that server declares no such link.</summary>
-    public LinkedServerLink? Resolve(string fromServer, string linkName)
+    public LinkedServerLink? Resolve(string fromServer, string linkName, string? database = null, string? schema = null)
     {
+        if (database is not null)
+        {
+            foreach (string owner in new[] { schema, "PUBLIC" }.OfType<string>())
+            {
+                if (_linksByName.TryGetValue($"{fromServer}::{database}::{owner}::{linkName}", out LinkedServerLink? owned))
+                {
+                    return owned;
+                }
+            }
+        }
         if (_linksByName.TryGetValue($"{fromServer}::{linkName}", out LinkedServerLink? link))
         {
             return link;
+        }
+        // Older callers have no owner context. Only an unambiguous name is usable.
+        // Normal catalog resolution always supplies database and schema.
+        if (database is null)
+        {
+            LinkedServerLink[] matches = [.. _linksByName.Values.Where(l =>
+                string.Equals(l.OnServer, fromServer, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(l.Name, linkName, StringComparison.OrdinalIgnoreCase)).Take(2)];
+            if (matches.Length == 1)
+            {
+                return matches[0];
+            }
         }
 
         // Oracle writes a link's full "NAME.DOMAIN" (and T-SQL sometimes an FQDN) where the link object
         // itself is named by the bare label - try that before giving up.
         int firstDot = linkName.IndexOf('.', StringComparison.Ordinal);
-        return firstDot > 0 && _linksByName.TryGetValue($"{fromServer}::{linkName[..firstDot]}", out LinkedServerLink? shortLink)
-            ? shortLink
+        return firstDot > 0
+            ? Resolve(fromServer, linkName[..firstDot], database, schema)
             : null;
     }
 
@@ -135,12 +159,13 @@ internal sealed partial class LinkedServerMap
         _reachableByServer.TryGetValue(fromServer, out IReadOnlyList<string>? targets) ? targets : [];
 
     /// <summary>The link on <paramref name="fromServer"/> that lands on <paramref name="targetServer"/>, for attributing a hop the lookup took without a named link.</summary>
-    public LinkedServerLink? LinkTo(string fromServer, string targetServer)
+    public LinkedServerLink? LinkTo(string fromServer, string targetServer, string? database = null, string? schema = null)
     {
         foreach (LinkedServerLink link in _linksByName.Values)
         {
             if (string.Equals(link.OnServer, fromServer, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(link.TargetServer, targetServer, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(link.TargetServer, targetServer, StringComparison.OrdinalIgnoreCase)
+                && (database is null || Resolve(fromServer, link.Name, database, schema)?.NodeId == link.NodeId))
             {
                 return link;
             }

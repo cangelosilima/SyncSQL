@@ -11,14 +11,14 @@ import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
  * bug shows up on: drilling into the table, then asking for just the stored
  * procedures around it.
  */
-const boleta = makeNode({ id: 'boleta', name: 'Opn_Boleta', qualifiedName: 'dbo.Opn_Boleta', type: 'Tables' })
-const readProc = makeNode({ id: 'read', name: 'ReadBoleta', qualifiedName: 'dbo.ReadBoleta', type: 'StoredProcedures' })
-const writeProc = makeNode({ id: 'write', name: 'WriteBoleta', qualifiedName: 'dbo.WriteBoleta', type: 'StoredProcedures' })
-const summaryView = makeNode({ id: 'view', name: 'BoletaSummary', qualifiedName: 'dbo.BoletaSummary', type: 'Views' })
+const Order = makeNode({ id: 'Order', name: 'Order', qualifiedName: 'dbo.Order', type: 'Tables' })
+const readProc = makeNode({ id: 'read', name: 'ReadOrder', qualifiedName: 'dbo.ReadOrder', type: 'StoredProcedures' })
+const writeProc = makeNode({ id: 'write', name: 'WriteOrder', qualifiedName: 'dbo.WriteOrder', type: 'StoredProcedures' })
+const summaryView = makeNode({ id: 'view', name: 'OrderSummary', qualifiedName: 'dbo.OrderSummary', type: 'Views' })
 
 const baseCatalog = makeCatalog({
-  nodes: [boleta, readProc, writeProc, summaryView],
-  edges: [makeEdge('read', 'boleta'), makeEdge('write', 'boleta'), makeEdge('view', 'boleta')],
+  nodes: [Order, readProc, writeProc, summaryView],
+  edges: [makeEdge('read', 'Order'), makeEdge('write', 'Order'), makeEdge('view', 'Order')],
 })
 let catalog = baseCatalog
 
@@ -72,32 +72,32 @@ async function addTypeFilter(user: ReturnType<typeof userEvent.setup>, container
 describe('LineagePage', () => {
   beforeEach(() => { catalog = baseCatalog })
   it('shows the focused object and its neighbours when arriving with ?focus=', () => {
-    renderAt('/lineage?focus=boleta')
+    renderAt('/lineage?focus=Order')
 
-    expect(graphIds().sort()).toEqual(['boleta', 'read', 'view', 'write'])
+    expect(graphIds().sort()).toEqual(['Order', 'read', 'view', 'write'])
   })
 
   it('does not seed a name filter token from ?focus=', () => {
-    renderAt('/lineage?focus=boleta')
+    renderAt('/lineage?focus=Order')
 
     // The chip is what used to make every later filter contradictory.
-    expect(screen.queryByText(/Name is dbo\.Opn_Boleta/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Name is dbo\.Order/i)).not.toBeInTheDocument()
   })
 
   /**
-   * The reported bug: navigating into dbo.Opn_Boleta and adding "Type is
+   * The reported bug: navigating into dbo.Order and adding "Type is
    * StoredProcedures" used to drop the focus and AND both tokens against the
    * whole catalog, which asked for an object that was both the table and a
    * stored procedure - so the graph emptied.
    */
   it('narrows the focused neighbourhood by type instead of emptying the graph', async () => {
     const user = userEvent.setup()
-    const { container } = renderAt('/lineage?focus=boleta')
+    const { container } = renderAt('/lineage?focus=Order')
 
     await addTypeFilter(user, container, 'StoredProcedures')
 
     const ids = graphIds().sort()
-    expect(ids).toContain('boleta')
+    expect(ids).toContain('Order')
     expect(ids).toContain('read')
     expect(ids).toContain('write')
     expect(ids).not.toContain('view')
@@ -105,37 +105,37 @@ describe('LineagePage', () => {
 
   it('keeps the focus when a filter is added', async () => {
     const user = userEvent.setup()
-    const { container } = renderAt('/lineage?focus=boleta')
+    const { container } = renderAt('/lineage?focus=Order')
 
     await addTypeFilter(user, container, 'StoredProcedures')
 
     expect(screen.getByText('Navigating:')).toBeInTheDocument()
-    expect(screen.getByText(/Showing 3 of 4 objects around dbo\.Opn_Boleta/)).toBeInTheDocument()
+    expect(screen.getByText(/Showing 3 of 4 objects around dbo\.Order/)).toBeInTheDocument()
   })
 
   it('turns the navigation into a name filter when focus is cleared', async () => {
     const user = userEvent.setup()
-    renderAt('/lineage?focus=boleta')
+    renderAt('/lineage?focus=Order')
 
     await user.click(screen.getByRole('button', { name: /Clear focus/i }))
 
     // Not back to the whole catalog - still looking at that one object.
-    expect(graphIds()).toEqual(['boleta'])
-    expect(screen.getByText(/Name is dbo\.Opn_Boleta/i)).toBeInTheDocument()
+    expect(graphIds()).toEqual(['Order'])
+    expect(screen.getByText(/Name is dbo\.Order/i)).toBeInTheDocument()
   })
 
   it('selects from the whole catalog when nothing is focused', () => {
     renderAt('/lineage')
 
-    expect(graphIds().sort()).toEqual(['boleta', 'read', 'view', 'write'])
+    expect(graphIds().sort()).toEqual(['Order', 'read', 'view', 'write'])
   })
   it('adds hops on one side, persists grouping and restores the shared view', async () => {
     const user = userEvent.setup()
     catalog = makeCatalog({ ...baseCatalog,
       nodes: [...baseCatalog.nodes, makeNode({ id: 'caller' }), makeNode({ id: 'data' })],
-      edges: [...baseCatalog.edges, makeEdge('caller', 'read'), makeEdge('boleta', 'data')],
+      edges: [...baseCatalog.edges, makeEdge('caller', 'read'), makeEdge('Order', 'data')],
     })
-    const view = renderAt('/lineage?focus=boleta')
+    const view = renderAt('/lineage?focus=Order')
     await user.click(screen.getByRole('button', { name: 'Add dependents hop' }))
     expect(graphIds()).toContain('caller')
     expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('1')
@@ -159,14 +159,14 @@ describe('LineagePage', () => {
       nodes: [...baseCatalog.nodes, makeNode({ id: 'report', type: 'StoredProcedures' })],
       edges: [...baseCatalog.edges, makeEdge('report', 'view')],
     })
-    const { container } = renderAt('/lineage?focus=boleta&hops=2')
+    const { container } = renderAt('/lineage?focus=Order&hops=2')
     await addTypeFilter(user, container, 'StoredProcedures')
     expect(graphIds()).toContain('report')
     expect(graphIds()).toContain('view')
     expect(screen.getByText(/1 connecting object kept outside the filters/)).toBeInTheDocument()
   })
   it('validates hop limits and keeps old radius links working', () => {
-    renderAt('/lineage?focus=boleta&hops=3&dependencies=-1&dependents=100')
+    renderAt('/lineage?focus=Order&hops=3&dependencies=-1&dependents=100')
     expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('3')
     expect(screen.getByRole('combobox', { name: 'Dependents hops' })).toHaveValue('3')
   })

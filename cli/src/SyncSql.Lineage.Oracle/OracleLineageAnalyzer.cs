@@ -20,11 +20,18 @@ public sealed class OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
     public DatabaseEngine Engine => DatabaseEngine.Oracle;
 
     /// <summary>
-    /// <paramref name="options"/> is accepted for the shared <see cref="ILineageAnalyzer"/> contract and
-    /// deliberately unused: PL/SQL's dynamic SQL (<c>EXECUTE IMMEDIATE</c>) has no equivalent scanner yet,
-    /// so there is nothing here for the flag to turn on or off.
+    /// Literal EXECUTE IMMEDIATE statements are parsed with the Oracle grammar.
+    /// Nested scans have a shared count budget and depth/size bounds.
     /// </summary>
     public LineageAnalysisResult Analyze(string ddl, LineageAnalysisOptions? options = null)
+        => AnalyzeCore(ddl, options ?? LineageAnalysisOptions.Default, 0, new DynamicBudget());
+
+    private sealed class DynamicBudget
+    {
+        public int Remaining { get; set; } = 64;
+    }
+
+    private LineageAnalysisResult AnalyzeCore(string ddl, LineageAnalysisOptions options, int depth, DynamicBudget budget)
     {
         if (string.IsNullOrWhiteSpace(ddl))
         {
@@ -51,7 +58,10 @@ public sealed class OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
                 logger.LogWarning("PL/SQL parse produced {Count} error(s) (continuing with the partial tree): {Message}", errorListener.Errors.Count, errorListener.Errors[0]);
             }
 
-            PlSqlLineageVisitor visitor = new();
+            PlSqlLineageVisitor visitor = new(options.DynamicSql ? sql =>
+                depth < 4 && sql.Length <= 65536 && budget.Remaining-- > 0
+                    ? AnalyzeCore(sql.EndsWith(';') ? sql : sql + ";", options, depth + 1, budget)
+                    : LineageAnalysisResult.Empty : null);
             visitor.Visit(tree);
 
             return new LineageAnalysisResult

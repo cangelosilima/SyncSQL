@@ -25,7 +25,7 @@ public sealed record SampleBaseline
     [JsonPropertyName("objectsPerDatabase")]
     public required IReadOnlyDictionary<string, int> ObjectsPerDatabase { get; init; }
 
-    public static SampleBaseline Capture(Catalog catalog) => new()
+    public static SampleBaseline Capture(Core.Domain.Catalog catalog) => new()
     {
         NodeCount = catalog.Nodes.Count,
         EdgeCount = catalog.Edges.Count,

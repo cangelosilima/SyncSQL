@@ -21,6 +21,7 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
 {
     /// <summary>One budget per object, shared by every nested scan this walk starts.</summary>
     private readonly DynamicSqlScanner.Budget _budget = new();
+    private ObjectRef? _triggerTarget;
     public List<ObjectRef> ObjectRefs { get; } = [];
     public Dictionary<string, ObjectRef> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<ColumnRef> ColumnRefs { get; } = [];
@@ -108,6 +109,13 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
             return;
         }
 
+        if (_triggerTarget is not null && objRef.Schema is null && objRef.Database is null
+            && (objRef.Name.Equals("inserted", StringComparison.OrdinalIgnoreCase)
+                || objRef.Name.Equals("deleted", StringComparison.OrdinalIgnoreCase)))
+        {
+            Aliases[objRef.Name] = _triggerTarget;
+            objRef = _triggerTarget;
+        }
         ObjectRefs.Add(objRef);
 
         if (node.Alias?.Value is { } aliasValue)
@@ -199,6 +207,15 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
     // (MyFunc(...)) are indistinguishable from built-in function calls at the AST level without a full
     // catalog, so those are intentionally left alone - same "don't guess" posture the bare-name
     // resolver already has.
+    public override void Visit(TriggerObject node)
+    {
+        if (FromSchemaObjectName(node.Name) is { } reference)
+        {
+            _triggerTarget = reference;
+            ObjectRefs.Add(reference);
+        }
+    }
+
     public override void Visit(FunctionCall node)
     {
         // CallTarget holds only the qualifying prefix (e.g. "dbo" in dbo.MyFunc(...)) - the function's

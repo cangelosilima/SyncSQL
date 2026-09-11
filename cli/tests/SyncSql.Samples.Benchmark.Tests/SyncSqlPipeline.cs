@@ -20,6 +20,20 @@ internal sealed class SyncSqlPipeline
     /// <summary>Everything the CLI printed across the run, for attaching to a failure message.</summary>
     public string Log => _log.ToString();
 
+    public async Task RunScenarioAsync(string configPath, string outputRoot, string credentialsPath, CancellationToken cancellationToken)
+    {
+        if (Directory.Exists(outputRoot))
+        {
+            throw new InvalidOperationException("Scenario extraction requires a fresh output directory.");
+        }
+
+        Directory.CreateDirectory(outputRoot);
+        await InvokeAsync(["validate-config", "--config", configPath], cancellationToken);
+        await InvokeAsync(["sync", "--config", configPath, "--credentials-file", credentialsPath, "--output-root", outputRoot], cancellationToken);
+        await InvokeAsync(["metrics", "update", "--output-root", outputRoot], cancellationToken);
+        await InvokeAsync(["catalog", "build", "--output-root", outputRoot, "--metrics-root", Path.Combine(outputRoot, "metrics")], cancellationToken);
+    }
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         WriteCredentialsFile();

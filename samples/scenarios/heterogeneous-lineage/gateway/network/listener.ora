@@ -1,0 +1,7 @@
+LISTENER=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=0.0.0.0)(PORT=1521)))
+SID_LIST_LISTENER=(SID_LIST=
+  (SID_DESC=(SID_NAME=commerce)(ORACLE_HOME=/opt/oracle/product/19c/gateway)(PROGRAM=dg4msql))
+  (SID_DESC=(SID_NAME=receivables)(ORACLE_HOME=/opt/oracle/product/19c/gateway)(PROGRAM=dg4msql))
+  (SID_DESC=(SID_NAME=distribution)(ORACLE_HOME=/opt/oracle/product/19c/gateway)(PROGRAM=dg4msql))
+  (SID_DESC=(SID_NAME=intelligence)(ORACLE_HOME=/opt/oracle/product/19c/gateway)(PROGRAM=dg4msql))
+)

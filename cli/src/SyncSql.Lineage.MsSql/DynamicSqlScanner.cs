@@ -57,7 +57,7 @@ internal static class DynamicSqlScanner
     /// <summary>Statement keywords that make a following qualified name a reference on their own ("DELETE dbo.T").</summary>
     private static readonly string[] SqlKeywordsWorthScanningFor =
     [
-        "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "EXEC", "EXECUTE", "FROM", "JOIN", "OPENQUERY",
+        "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "EXEC", "EXECUTE", "FROM", "JOIN", "OPENQUERY", "BEGIN",
     ];
 
     /// <summary>Tracks the per-object scan budget across the whole nested walk.</summary>
@@ -146,7 +146,7 @@ internal static class DynamicSqlScanner
             {
                 FlushName();
                 // The nested query text carries the server established around it - that is what turns
-                // OPENQUERY(SIG, '...dbo.Fn(...') into a reference to dbo.Fn *on SIG* rather than here.
+                // OPENQUERY(SQL_A, '...dbo.Fn(...') into a reference to dbo.Fn *on SQL_A* rather than here.
                 Scan(DecodeStringLiteral(text), openQueryServer ?? atServer ?? inheritedServer, depth + 1, budget, into);
                 referencePosition = false;
                 continue;
@@ -177,7 +177,8 @@ internal static class DynamicSqlScanner
                     FlushName();
                 }
 
-                if (parts.Count == 0 && IsKeyword(word, ReferencePositionKeywords))
+                if (parts.Count == 0 && (IsKeyword(word, ReferencePositionKeywords)
+                    || (inheritedServer is not null && word.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))))
                 {
                     referencePosition = true;
                     continue;
@@ -251,7 +252,7 @@ internal static class DynamicSqlScanner
             {
                 if (ToObjectRef(parts, openQueryServer ?? atServer ?? inheritedServer) is { } objectRef)
                 {
-                    into.Add(objectRef);
+                    into.Add(objectRef with { IsRoutine = calledAsFunction });
                 }
             }
 

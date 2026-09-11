@@ -17,6 +17,7 @@ internal static class OracleTypeMaps
         ("Synonyms", "SYNONYM"),
     ];
 
-    /// <summary>ALL_OBJECTS.OBJECT_TYPE value -> the type name DBMS_METADATA.GET_DDL expects (differs only for PACKAGE BODY).</summary>
-    public static string ToDdlType(string oracleObjectType) => oracleObjectType.Replace(' ', '_');
+    /// <summary>PACKAGE returns specification and body together; extract the specification separately so dependencies are attributed correctly.</summary>
+    public static string ToDdlType(string oracleObjectType) =>
+        oracleObjectType == "PACKAGE" ? "PACKAGE_SPEC" : oracleObjectType.Replace(' ', '_');
 }

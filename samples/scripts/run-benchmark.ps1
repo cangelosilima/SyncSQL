@@ -19,11 +19,23 @@
 param(
     [switch]$Reuse,
     [switch]$UpdateBaseline,
-    [string]$Filter
+    [string]$Filter,
+    [switch]$Gateway,
+    [ValidateSet('samples', 'heterogeneous-lineage')]
+    [string]$Scenario = 'samples'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($Scenario -eq 'heterogeneous-lineage') {
+    if ($Reuse -or $UpdateBaseline -or $Filter) {
+        throw 'The heterogeneous scenario always provisions and compares its independent contract; Reuse, UpdateBaseline and Filter are not supported.'
+    }
+    & (Join-Path $PSScriptRoot '../scenarios/heterogeneous-lineage/run.ps1') -Gateway:$Gateway
+    return
+}
+if ($Gateway) { throw 'Gateway applies only to the heterogeneous-lineage scenario.' }
 
 Import-Module (Join-Path $PSScriptRoot 'lib/Common.psm1') -Force
 

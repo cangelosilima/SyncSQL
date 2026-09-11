@@ -214,6 +214,19 @@ public sealed class CatalogBuilder(
         HashSet<string> systemKeys = [];
         List<CatalogSystemReference> systemReferences = [];
 
+        foreach (CatalogNode spec in nodes.Where(n => n.Engine == DatabaseEngine.Oracle && n.Type == "Packages"))
+        {
+            CatalogNode? body = nodes.FirstOrDefault(n => n.Type == "PackageBodies"
+                && string.Equals(n.Server, spec.Server, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(n.Database, spec.Database, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(n.Schema, spec.Schema, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(n.Name, spec.Name, StringComparison.OrdinalIgnoreCase));
+            if (body is not null)
+            {
+                AddEdge(spec.Id, body.Id, false);
+            }
+        }
+
         foreach (CatalogNode node in nodes)
         {
             if (node.Engine is not { } engine)

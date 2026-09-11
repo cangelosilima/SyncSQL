@@ -196,19 +196,19 @@ public class MsSqlLineageAnalyzerTests
     public void Analyze_OpenQueryInsideABuiltString_FindsTheRemoteFunctionOnItsLinkedServer()
     {
         LineageAnalysisResult result = _analyzer.Analyze("""
-            CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode(@Id_Boleta CHAR(13))
+            CREATE FUNCTION dbo.fns_GetOrderId(@Id_Order CHAR(13))
             RETURNS VARCHAR(50)
             AS
             BEGIN
-                DECLARE @Result TABLE (TransactionCode VARCHAR(50));
-                DECLARE @SQL NVARCHAR(MAX) = 'SELECT TransactionCode FROM OPENQUERY(SIG, ''SELECT dbo.fns_Sig_Open_GetTransactionCode(''' + @Id_Boleta + ''') AS TransactionCode'')';
-                RETURN (SELECT TOP 1 TransactionCode FROM @Result);
+                DECLARE @Result TABLE (OrderId VARCHAR(50));
+                DECLARE @SQL NVARCHAR(MAX) = 'SELECT OrderId FROM OPENQUERY(SQL_A, ''SELECT dbo.fns_GetOrderId(''' + @Id_Order + ''') AS OrderId'')';
+                RETURN (SELECT TOP 1 OrderId FROM @Result);
             END
             """);
 
         Assert.Contains(
             result.ObjectRefs,
-            r => r is { Server: "SIG", Schema: "dbo", Name: "fns_Sig_Open_GetTransactionCode", Origin: ReferenceOrigin.Dynamic });
+            r => r is { Server: "SQL_A", Schema: "dbo", Name: "fns_GetOrderId", Origin: ReferenceOrigin.Dynamic });
     }
 
     [Fact]
