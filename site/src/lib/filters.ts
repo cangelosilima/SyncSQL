@@ -1,7 +1,7 @@
 import type { CatalogNode } from '../types'
 import { nodeContentText } from './contentSearch'
 
-export type FilterAttribute = 'server' | 'database' | 'schema' | 'type' | 'name' | 'description' | 'ddl'
+export type FilterAttribute = 'server' | 'database' | 'schema' | 'type' | 'name' | 'description' | 'ddl' | 'grantee'
 export type FilterOperator = 'is' | 'is-not' | 'contains' | 'is-in' | 'is-not-in'
 
 export interface FilterToken {
@@ -28,6 +28,7 @@ export const FILTER_ATTRIBUTES: FilterAttributeDef[] = [
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'description', label: 'Description', kind: 'text' },
   { key: 'ddl', label: 'DDL content', kind: 'text' },
+  { key: 'grantee', label: 'Grantee', kind: 'enum' },
 ]
 
 export const OPERATOR_LABELS: Record<FilterOperator, string> = {
@@ -39,6 +40,7 @@ export const OPERATOR_LABELS: Record<FilterOperator, string> = {
 }
 
 export function operatorsFor(attribute: FilterAttribute | null): FilterOperator[] {
+  if (attribute === 'grantee') return ['is', 'contains', 'is-in', 'is-not', 'is-not-in']
   const def = FILTER_ATTRIBUTES.find((a) => a.key === attribute)
   const kind = def?.kind ?? 'text'
   return kind === 'enum' ? ['is', 'is-not', 'is-in', 'is-not-in'] : ['is', 'is-not', 'contains']
@@ -60,6 +62,8 @@ export function getFieldValue(node: CatalogNode, attribute: FilterAttribute): st
       return node.description ?? ''
     case 'ddl':
       return nodeContentText(node)
+    case 'grantee':
+      return node.grants.map(grant => grant.grantee).join(', ')
   }
 }
 
@@ -74,14 +78,18 @@ export function getSuggestedValues(nodes: CatalogNode[], attribute: FilterAttrib
   const set = new Set<string>()
   const scanCap = limit * 20
   for (const node of nodes) {
-    const value = getFieldValue(node, attribute)
-    if (value && (!needle || value.toLowerCase().includes(needle))) set.add(value)
+    const values = attribute === 'grantee' ? node.grants.map(grant => grant.grantee) : [getFieldValue(node, attribute)]
+    for (const value of values) {
+      if (value && (!needle || value.toLowerCase().includes(needle))) set.add(value)
+      if (set.size >= scanCap) break
+    }
     if (set.size >= scanCap) break
   }
   return [...set].sort((a, b) => a.localeCompare(b)).slice(0, limit)
 }
 
 export function matchesToken(node: CatalogNode, token: FilterToken): boolean {
+  if (token.attribute === 'grantee') return matchingGrants(node, [token]).length > 0
   if (!token.attribute) {
     const needle = (token.values[0] ?? '').toLowerCase()
     if (!needle) return true
@@ -96,7 +104,11 @@ export function matchesToken(node: CatalogNode, token: FilterToken): boolean {
     )
   }
 
-  const fieldValue = getFieldValue(node, token.attribute).toLowerCase()
+  return matchesValue(getFieldValue(node, token.attribute), token)
+}
+
+function matchesValue(value: string, token: FilterToken): boolean {
+  const fieldValue = value.toLowerCase()
   const values = token.values.map((v) => v.toLowerCase()).filter(Boolean)
   if (values.length === 0) return true
 
@@ -116,7 +128,16 @@ export function matchesToken(node: CatalogNode, token: FilterToken): boolean {
 
 export function applyFilters(nodes: CatalogNode[], tokens: FilterToken[]): CatalogNode[] {
   if (tokens.length === 0) return nodes
-  return nodes.filter((node) => tokens.every((token) => matchesToken(node, token)))
+  const objectTokens = tokens.filter(token => token.attribute !== 'grantee')
+  const hasGrantee = tokens.some(token => token.attribute === 'grantee')
+  return nodes.filter(node => objectTokens.every(token => matchesToken(node, token))
+    && (!hasGrantee || matchingGrants(node, tokens).length > 0))
+}
+
+/** All grantee conditions must match the same recorded permission. */
+export function matchingGrants(node: CatalogNode, tokens: FilterToken[]) {
+  const grantees = tokens.filter(token => token.attribute === 'grantee')
+  return node.grants.filter(grant => grantees.every(token => matchesValue(grant.grantee, token)))
 }
 
 export function describeToken(token: FilterToken): string {

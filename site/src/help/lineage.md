@@ -1,13 +1,13 @@
 # Lineage explorer
 
-The full dependency graph, laid out automatically. Two modes sit behind the
-tabs at the top.
+The full dependency graph, laid out automatically, with one shared filter bar.
 
 ## Browse
 
-The attribute filter bar and the DDL content search box decide which objects
-enter the graph. The filter bar supports the same chips as Explorer; the
-separate DDL box also lets you narrow the graph as you type.
+Combine Server, Database, Schema, Type, Name, Description, DDL content and Grantee
+chips to decide which objects enter the graph. Every chip must match. Plain text
+searches object details and SQL; use **DDL content contains** for SQL-only search.
+Remove any chip independently to broaden the results.
 
 - **Click** a node to drill into that object's own neighborhood *in place*.
   A breadcrumb trail and a **Back** button walk you out again.
@@ -44,15 +44,22 @@ certainty than the solid ones.
 
 ## Access
 
-Search by grantee - a user, role or group - to see every object they hold a
+Add a **Grantee** chip - a user, role or group - to see every object they hold a
 GRANT or DENY permission on, down to the column where the grant is scoped
 that way. Matches appear both as a table and in the graph, so you can go
 from "what can this principal touch" straight into how those objects relate.
 
-**Exact match** turns off substring matching, which matters when one role
-name is a prefix of another. **Export CSV** writes one row per permission.
+**Grantee is** matches exactly; **Grantee contains** matches part of a name, and
+**Grantee is in** accepts multiple names. Combine these with object and SQL chips.
+The permissions table and **Export CSV** use the same filtered selection, with
+one CSV row per matching permission. Retained graph connectors do not imply access.
+Existing access and DDL-search links are converted into equivalent chips.
 
 ## Reading the graph
+
+The compact **Graph legend** stays at the bottom of the graph area. Its summary
+keeps the relationship direction and dynamic-SQL reminder visible. Expand it for
+the complete key and object-type colors; collapse it to make room for analysis.
 
 Edges carrying a known column-level reference are highlighted and labeled
 with up to three column names. Click one to open a panel listing every
