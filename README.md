@@ -434,7 +434,7 @@ GitHub workflows are grouped into independent CLI and Site families:
 | [Quality](.github/workflows/quality.yml) | CodeQL, dependency review and full npm/NuGet audits, CLI/Site lint and format checks, coverage thresholds, workflow lint, and a single aggregate quality gate. |
 | [CLI - CI](.github/workflows/cli.yml) | .NET format, build, tests and coverage on Linux and Windows; gateway publishing guards and CLI workflow validation; publishing-script compatibility checks, including the actual Windows PowerShell 5.1 parser. |
 | [CLI - benchmark](.github/workflows/cli-benchmark.yml) | Provisions the sample databases, extracts objects and verifies lineage on relevant pull requests or manual runs. Manual runs can also enable the prepared Oracle gateway runner. |
-| [CLI - publish Oracle gateway to GHCR](.github/workflows/cli-publish-oracle-gateway.yml) | Manually validates and publishes the private gateway image from the default branch. |
+| [Docker - publish Oracle gateway to GHCR](.github/workflows/cli-publish-oracle-gateway.yml) | Manually validates and publishes the private gateway image from the default branch. |
 | [Site - CI](.github/workflows/site.yml) | Browser/unit tests and coverage, strict verification of the Git LFS-backed local AI model, and typechecked builds on Linux and Windows; site workflow validation. |
 | [Site - deploy catalog demo](.github/workflows/site-deploy.yml) | Checks the example catalog contract, tests and builds the demo, then deploys to GitHub Pages on `main`. Pull requests build without deploying. |
 

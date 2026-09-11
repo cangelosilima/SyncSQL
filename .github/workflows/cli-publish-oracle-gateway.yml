@@ -1,4 +1,4 @@
-name: CLI - publish Oracle gateway to GHCR
+name: Docker - publish Oracle gateway to GHCR
 
 on:
   workflow_dispatch:
