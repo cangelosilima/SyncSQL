@@ -3,7 +3,10 @@
 SQLineage is the database catalog and investigation app, formerly branded SyncSQL. The repository, CLI/project identifiers and deployment paths retain their existing names for compatibility.
 
 [![CLI CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml)
+[![CLI benchmark](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-benchmark.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-benchmark.yml)
+[![Oracle gateway publish](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-publish-oracle-gateway.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-publish-oracle-gateway.yml)
 [![Site CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml)
+[![Site deploy](https://github.com/cangelosilima/SyncSQL/actions/workflows/site-deploy.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/site-deploy.yml)
 
 SQLineage extracts database objects — stored procedures, views, functions,
 triggers, tables (with foreign keys, check constraints and indexes), schemas,
