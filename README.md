@@ -4,6 +4,8 @@ SQLineage is the database catalog and investigation app, formerly branded SyncSQ
 
 [![CLI CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml)
 [![Quality gate](https://github.com/cangelosilima/SyncSQL/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/cangelosilima/SyncSQL/actions/workflows/quality.yml)
+[![CLI coverage](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcangelosilima%2FSyncSQL%2Fcoverage-badges%2Fcli.json&query=%24.lineCoverage&label=CLI%20coverage&suffix=%25&color=blue)](https://github.com/cangelosilima/SyncSQL/actions/workflows/quality.yml)
+[![Site coverage](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcangelosilima%2FSyncSQL%2Fcoverage-badges%2Fsite.json&query=%24.lineCoverage&label=Site%20coverage&suffix=%25&color=blue)](https://github.com/cangelosilima/SyncSQL/actions/workflows/quality.yml)
 [![CLI benchmark](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-benchmark.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-benchmark.yml)
 [![Oracle gateway publish](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-publish-oracle-gateway.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-publish-oracle-gateway.yml)
 [![Site CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml)
@@ -431,7 +433,7 @@ GitHub workflows are grouped into independent CLI and Site families:
 |----------|--------------|
 | [Quality](.github/workflows/quality.yml) | CodeQL, dependency review and full npm/NuGet audits, CLI/Site lint and format checks, coverage thresholds, workflow lint, and a single aggregate quality gate. |
 | [CLI - CI](.github/workflows/cli.yml) | .NET format, build, tests and coverage on Linux and Windows; gateway publishing guards and CLI workflow validation; publishing-script compatibility checks, including the actual Windows PowerShell 5.1 parser. |
-| [CLI - heterogeneous benchmark](.github/workflows/cli-benchmark.yml) | Provisions the sample databases, extracts objects and verifies lineage on relevant pull requests or manual runs. Manual runs can also enable the prepared Oracle gateway runner. |
+| [CLI - benchmark](.github/workflows/cli-benchmark.yml) | Provisions the sample databases, extracts objects and verifies lineage on relevant pull requests or manual runs. Manual runs can also enable the prepared Oracle gateway runner. |
 | [CLI - publish Oracle gateway to GHCR](.github/workflows/cli-publish-oracle-gateway.yml) | Manually validates and publishes the private gateway image from the default branch. |
 | [Site - CI](.github/workflows/site.yml) | Browser/unit tests and coverage, strict verification of the Git LFS-backed local AI model, and typechecked builds on Linux and Windows; site workflow validation. |
 | [Site - deploy catalog demo](.github/workflows/site-deploy.yml) | Checks the example catalog contract, tests and builds the demo, then deploys to GitHub Pages on `main`. Pull requests build without deploying. |
@@ -459,6 +461,16 @@ Code Security for private repositories).
 Coverage minimums are 70% CLI lines (excluding tests and generated grammar),
 and 80% site lines/statements, 75% functions, and 70% branches. The existing 100%
 packaging-script threshold is retained. Reports are uploaded even on test failures.
+The CLI and Site percentage badges show measured line coverage from the latest
+successful Quality run on `main`. CI extracts the values from ReportGenerator and
+Vitest, validates them on pull requests, and publishes the two small JSON files to
+the `coverage-badges` branch only after the quality gate passes on `main`.
+The badges populate after the first successful `main` run with this workflow.
+Each completed Quality run on a same-repository pull request creates or updates
+one results comment with job outcomes, CLI/Site line coverage, and a link to the
+run and reports, including failed checks. Fork pull requests still run all checks;
+their read-only token does not post a comment. Cancelled runs do not replace the
+latest results comment.
 Dependency audits fail on all known vulnerability severities, including transitive
 and development dependencies; unavailable NuGet audit data also fails the check.
 
