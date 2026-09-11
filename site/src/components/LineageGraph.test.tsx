@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
@@ -44,10 +44,10 @@ describe('graph integration retained in inspector layout', () => {
     expect(graph.nodes.find(node => node.id === 'b')?.className).toBe('lineage-node--focus')
     expect(graph.nodes.find(node => node.id === 'a')?.className).toBeUndefined()
   })
-  it('exports the displayed live graph with a timestamped filename', () => {
+  it('exports the displayed live graph with a timestamped filename', async () => {
     render(<MemoryRouter><LineageGraph nodeIds={['a', 'b']} focusId="a" /></MemoryRouter>)
     fireEvent.click(screen.getByRole('button', { name: 'Export SVG' }))
-    expect(buildLineageGraphSvg).toHaveBeenLastCalledWith(graph.nodes, graph.edges)
+    await waitFor(() => expect(buildLineageGraphSvg).toHaveBeenLastCalledWith(graph.nodes, graph.edges))
     expect(downloadSvg).toHaveBeenLastCalledWith('<svg/>', expect.stringMatching(/^syncsql-lineage-.*\.svg$/))
   })
   it.each([false, true])('preserves outer connections and reverse edges when grouping is %s', (groupIntermediate) => {

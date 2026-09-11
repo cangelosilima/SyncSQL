@@ -1,4 +1,4 @@
-import type { CatalogIndex } from './catalog'
+import { isLinkNode, type CatalogIndex } from './catalog'
 
 /**
  * BFS outward from `rootId` in both directions up to `hops` steps, returning
@@ -26,7 +26,7 @@ export function getNeighborhoodIds(index: CatalogIndex, rootId: string, hops: nu
   return [...seen]
 }
 
-/** Independent, directed traversals: dependencies never turn back into dependents. */
+/** Independent traversals, with one extra step past links at the hop boundary. */
 export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, dependencies: number, dependents: number): string[] {
   const ids = new Set([rootId])
   for (const [adjacency, limit] of [[index.outgoing, dependencies], [index.incoming, dependents]] as const) {
@@ -41,6 +41,15 @@ export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, 
         next.push(neighbor)
       }
       frontier = next
+    }
+    // Show the remote target or caller beyond a connection, without turning onto
+    // its unrelated branches or expanding a direction explicitly set to zero.
+    if (limit > 0) for (const id of frontier) {
+      const node = index.byId.get(id)
+      if (!node || !isLinkNode(node)) continue
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (index.byId.has(neighbor)) ids.add(neighbor)
+      }
     }
   }
   return [...ids]

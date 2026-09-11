@@ -209,7 +209,7 @@ syncsql metrics update --snapshot-root ./metrics-snapshot --history-root ./metri
 Lints T-SQL script(s) with the same real parser (`Microsoft.SqlServer.TransactSql.ScriptDom`)
 `catalog build` uses for lineage - not regex/text matching. Reports:
 
-- actual **syntax errors** from the parser (rule `syntax-error`, always `error` severity), and
+- actual **syntax errors** from the parser (rule `syntax-error`, default `error` severity), and
 - a small set of style/best-practice findings, run over the parsed AST:
 
   | Rule            | What it flags |
@@ -230,7 +230,8 @@ syncsql lint --path ./staging
 |-----------------|-----------|-------------|
 | `--output-root` | `./MSSQL` | Default T-SQL input directory; Oracle exports are excluded. |
 | `--path`        | `<output-root>` | A `.sql` file, or a directory searched recursively for `*.sql` files. Repeatable. |
-| `--fail-on`  | `error`   | Minimum finding severity that makes the command exit non-zero: `warning` or `error`. |
+| `--config` | `./config/sql-style.json`, or packaged defaults if absent | Shared SQL lint/format JSON. See [`config/README.md`](../../config/README.md). |
+| `--fail-on`  | `lint.failOn` in the JSON (`error` by default) | Overrides the minimum finding severity that makes the command exit non-zero: `warning` or `error`. |
 
 Findings are logged one per line as `path:line:column [rule-id] message`, at
 `ERROR` or `WARN` level depending on severity, followed by a summary line.

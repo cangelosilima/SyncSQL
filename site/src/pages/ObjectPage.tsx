@@ -12,6 +12,7 @@ import XlsxExportButton from '../components/XlsxExportButton'
 import HelpButton from '../components/HelpButton'
 import WorkspaceTabs, { WorkspacePanel } from '../components/WorkspaceTabs'
 import { isLinkNode, qualifiedRefName } from '../lib/catalog'
+import { getDirectionalNeighborhood } from '../lib/neighborhood'
 import { epochOf } from '../lib/analytics'
 import { csvFileName } from '../lib/csv'
 import { xlsxFileName } from '../lib/xlsx'
@@ -63,6 +64,7 @@ export default function ObjectPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedColumn = searchParams.get('column')
   const [workspace, setWorkspace] = useState<Workspace>('Columns')
+  const [formatted, setFormatted] = useState(false)
   useEffect(() => { setWorkspace('Columns') }, [id])
   useEffect(() => { if (selectedColumn) setWorkspace('Columns') }, [selectedColumn])
   function selectColumn(column: string | null) {
@@ -88,10 +90,9 @@ export default function ObjectPage() {
   }, [id])
 
   const neighborhoodIds = useMemo(() => {
-    if (!node) return []
-    return Array.from(new Set([node.id, ...outgoing, ...incoming]))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node?.id, outgoing.join(','), incoming.join(',')])
+    if (!index || !index.byId.has(id)) return []
+    return getDirectionalNeighborhood(index, id, 1, 1)
+  }, [index, id])
 
   if (!index) return null
 
@@ -247,7 +248,13 @@ export default function ObjectPage() {
       )}
 
       <section className="object-definition" aria-labelledby="object-definition-title">
-      <h2 id="object-definition-title">Definition</h2>
+      <div className="object-definition-header">
+        <h2 id="object-definition-title">Definition</h2>
+        <div className="definition-view-toggle" role="group" aria-label="Definition view">
+          <button type="button" aria-pressed={!formatted} onClick={() => setFormatted(false)}>Original</button>
+          <button type="button" aria-pressed={formatted} onClick={() => setFormatted(true)}>Formatted</button>
+        </div>
+      </div>
       {viewingVersion && (
         <div className="version-banner">
           Viewing revision from {new Date(viewingVersion.date).toLocaleString()} ({viewingVersion.sha.slice(0, 7)}):{' '}
@@ -257,13 +264,13 @@ export default function ObjectPage() {
           </button>
         </div>
       )}
-      <CodeBlock code={viewingVersion ? (viewingVersion.ddl ?? '-- Not available at this revision.') : node.ddl} />
+      <CodeBlock code={viewingVersion ? (viewingVersion.ddl ?? '-- Not available at this revision.') : node.ddl} formatted={formatted} />
 
       {!viewingVersion &&
         node.sections.map((section) => (
           <details key={section.title} className="object-section">
             <summary>{section.title}</summary>
-            <CodeBlock code={section.content} />
+            <CodeBlock code={section.content} formatted={formatted} />
           </details>
         ))}
 
@@ -428,18 +435,14 @@ export default function ObjectPage() {
             <table className="columns-table">
               <thead>
                 <tr>
+                  <th>Referenced by</th>
                   <th>Remote object</th>
                   <th>In catalog</th>
-                  <th>Referenced by</th>
                 </tr>
               </thead>
               <tbody>
                 {targetsThroughThisLink.map((target) => (
                   <tr key={target.to ?? target.label}>
-                    <td>
-                      {target.to ? <Link to={`/object/${target.to}`}>{target.label}</Link> : <code>{target.label}</code>}
-                    </td>
-                    <td>{target.to ? 'yes' : 'not extracted'}</td>
                     <td>
                       {target.callers.map((caller, i) => (
                         <span key={caller}>
@@ -448,6 +451,10 @@ export default function ObjectPage() {
                         </span>
                       ))}
                     </td>
+                    <td>
+                      {target.to ? <Link to={`/object/${target.to}`}>{target.label}</Link> : <code>{target.label}</code>}
+                    </td>
+                    <td>{target.to ? 'yes' : 'not extracted'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -513,8 +520,8 @@ export default function ObjectPage() {
         certified column-level lineage report.
       </p>
       <div className="lineage-lists">
-        <RelatedObjects title="Depends on" rootId={node.id} ids={outgoing} direction="outgoing" />
         <RelatedObjects title="Used by" rootId={node.id} ids={incoming} direction="incoming" />
+        <RelatedObjects title="Depends on" rootId={node.id} ids={outgoing} direction="outgoing" />
       </div>
 
       {neighborhoodIds.length === 1 && <p className="empty-state">No inferred dependencies or consumers are recorded for this object.</p>}
@@ -533,8 +540,8 @@ export default function ObjectPage() {
             <h2>Relationships</h2>
             <button type="button" className="lineage-share-btn" onClick={() => setWorkspace('Graph')}>All relationship evidence</button>
           </div>
-          <RelatedObjects title="Depends on" rootId={node.id} ids={outgoing} direction="outgoing" />
           <RelatedObjects title="Used by" rootId={node.id} ids={incoming} direction="incoming" />
+          <RelatedObjects title="Depends on" rootId={node.id} ids={outgoing} direction="outgoing" />
         </WorkspacePanel>
       </div>
       </div>

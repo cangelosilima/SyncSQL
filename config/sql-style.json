@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "lint": {
+    "failOn": "error",
+    "rules": {
+      "syntax-error": "error",
+      "select-star": "warning",
+      "nolock-hint": "warning",
+      "cursor-usage": "warning"
+    }
+  },
+  "format": {
+    "tabWidth": 2,
+    "keywordCase": "preserve",
+    "linesBetweenQueries": 1,
+    "alignColumns": true,
+    "columnSpacing": 1
+  }
+}

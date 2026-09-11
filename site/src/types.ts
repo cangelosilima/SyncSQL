@@ -69,6 +69,8 @@ export interface CatalogObjectVersion {
 export interface CatalogNode {
   id: string
   server: string
+  /** Engine of the owning server; absent in older catalog snapshots. */
+  engine?: string | null
   database: string
   schema: string | null
   type: string

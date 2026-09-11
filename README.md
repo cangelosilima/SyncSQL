@@ -185,7 +185,7 @@ syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
                        [--no-dynamic-sql]
 syncsql metrics update [--output-root] [--snapshot-root <path>] [--history-root <path>]
                         [--history-limit]
-syncsql lint [--output-root] [--path <file-or-dir>...] [--fail-on warning|error]
+syncsql lint [--output-root] [--path <file-or-dir>...] [--config <sql-style.json>] [--fail-on warning|error]
 ```
 
 Every input is a parameter, and every one of them has a local default:
@@ -205,6 +205,13 @@ same real `ScriptDom` parser `catalog build` uses for lineage and reports
 syntax errors plus a few style/best-practice findings (`SELECT *`, `NOLOCK`
 hints, cursor usage) - see [`cli/docs/cli.md`](cli/docs/cli.md) for the
 full rule list.
+
+SQL lint and display-format settings live in [`config/sql-style.json`](config/sql-style.json).
+The CLI reads its `lint` section; the site's Formatted definition view uses its
+`format` section. The site build publishes the same JSON at `config/sql-style.json`
+relative to the site's base URL, including deployments under a project subpath.
+Edit the repository file and rebuild to apply changes; there is no separate site
+copy to keep in sync. See [`config/README.md`](config/README.md) for the settings.
 Publishing results to git is
 [`scripts/Publish-SyncSqlObjects.ps1`](scripts/Publish-SyncSqlObjects.ps1)'s
 job - a PowerShell script the CI `sync` stage invokes with parameters, and

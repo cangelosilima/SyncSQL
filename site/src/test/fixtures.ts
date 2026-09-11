@@ -10,6 +10,7 @@ export function makeNode(overrides: Partial<CatalogNode> & Pick<CatalogNode, 'id
   return {
     id: overrides.id,
     server,
+    engine: overrides.engine,
     database,
     schema,
     type,

@@ -567,10 +567,16 @@ a {
   padding: 1rem;
   border-radius: 2px;
   border: 1px solid var(--code-border);
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(60vh, 36rem);
   font-size: 0.82rem;
   line-height: 1.5;
   font-family: var(--font-mono);
+}
+
+.code-block--formatted {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .code-block--empty {
@@ -734,7 +740,19 @@ a {
 
 .lineage-export-panel {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.4rem;
+  max-width: calc(100% - 24px);
+}
+
+.lineage-export-panel .react-flow__controls {
+  position: static;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
 }
 
 .lineage-export-btn {
@@ -903,7 +921,7 @@ a {
   white-space: nowrap;
 }
 
-.lineage-hops select {
+.lineage-hop-control select {
   padding: 0.25rem 0.4rem;
   border-radius: 2px;
   border: 1px solid var(--border);

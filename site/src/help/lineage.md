@@ -13,8 +13,11 @@ Remove any chip independently to broaden the results.
   A breadcrumb trail and a **Back** button walk you out again.
 - **Double-click** a node to open its full detail page.
 - **View options** sets **Dependencies** (objects the focus references) and
-  **Dependents** (objects that reference the focus) independently, from 0 to 6
+  **Dependents** (objects that reference the focus) independently, from 0 to 20
   hops. Use **+ Add hop** to expand one direction; 0 hides that side.
+  When a hop ends at a linked server or database link, the graph includes one
+  extra hop in that direction to show its callers or remote targets. Object
+  detail graphs use this same context on both sides.
 - **Group intermediate layers** combines intermediate objects of the same type,
   direction and hop into counted nodes. The focus and outer objects stay visible.
   Click a group to see its members and focus an individual object. Group edges
@@ -71,6 +74,8 @@ cross-server dependency is visible rather than hidden inside an edge.
 **Export SVG** and **Export PNG** render the currently visible graph as a
 standalone image, built from node positions rather than by rasterizing the
 page - it renders correctly outside the site and matches the active theme.
+PNG exports use higher resolution, the page's loaded font, full wrapped object
+names, curved edges and the same dashed references and focus highlight.
 
 ## What lineage does not cover
 

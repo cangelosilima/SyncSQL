@@ -227,7 +227,6 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
           proOptions={{ hideAttribution: true }}
         >
           <Background />
-          <Controls showInteractive={false} />
           <ExportControls />
           <FitGraph nodeIds={nodes.map(node => node.id).join('|')} focusId={focusId} />
         </ReactFlow>
@@ -302,23 +301,33 @@ function timestampForFilename(): string {
  */
 function ExportControls() {
   const { getNodes, getEdges } = useReactFlow()
+  const [exporting, setExporting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function handleExport(format: 'svg' | 'png') {
-    const svg = buildLineageGraphSvg(getNodes(), getEdges())
-    const stamp = timestampForFilename()
-    if (format === 'svg') {
-      downloadSvg(svg, `syncsql-lineage-${stamp}.svg`)
-    } else {
-      downloadPng(svg, `syncsql-lineage-${stamp}.png`)
+  async function handleExport(format: 'svg' | 'png') {
+    setExporting(true)
+    setError(null)
+    try {
+      await document.fonts?.ready
+      const svg = buildLineageGraphSvg(getNodes(), getEdges())
+      const stamp = timestampForFilename()
+      if (format === 'svg') downloadSvg(svg, `syncsql-lineage-${stamp}.svg`)
+      else await downloadPng(svg, `syncsql-lineage-${stamp}.png`)
+    } catch {
+      setError('Graph export failed. Please try again.')
+    } finally {
+      setExporting(false)
     }
   }
 
   return (
     <Panel position="top-right" className="lineage-export-panel">
-      <button type="button" className="lineage-export-btn" onClick={() => handleExport('svg')}>
+      <Controls showInteractive={false} orientation="horizontal" />
+      {error && <span role="alert">{error}</span>}
+      <button type="button" className="lineage-export-btn" disabled={exporting} onClick={() => handleExport('svg')}>
         Export SVG
       </button>
-      <button type="button" className="lineage-export-btn" onClick={() => handleExport('png')}>
+      <button type="button" className="lineage-export-btn" disabled={exporting} onClick={() => handleExport('png')}>
         Export PNG
       </button>
     </Panel>

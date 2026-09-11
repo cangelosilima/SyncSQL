@@ -20,6 +20,7 @@ public sealed class TSqlLinter
     ];
 
     private readonly IReadOnlyList<ITSqlLintRule> _rules;
+    private readonly TSqlLintConfiguration _configuration;
 
     public TSqlLinter()
         : this(DefaultRules)
@@ -27,8 +28,19 @@ public sealed class TSqlLinter
     }
 
     public TSqlLinter(IReadOnlyList<ITSqlLintRule> rules)
+        : this(rules, TSqlLintConfiguration.Default)
+    {
+    }
+
+    public TSqlLinter(TSqlLintConfiguration configuration)
+        : this(DefaultRules, configuration)
+    {
+    }
+
+    private TSqlLinter(IReadOnlyList<ITSqlLintRule> rules, TSqlLintConfiguration configuration)
     {
         _rules = rules;
+        _configuration = configuration;
     }
 
     public IReadOnlyList<TSqlLintFinding> Lint(string sql)
@@ -58,6 +70,8 @@ public sealed class TSqlLinter
         }
 
         return findings
+            .Where(f => !_configuration.Rules.TryGetValue(f.RuleId, out TSqlLintSeverity? severity) || severity is not null)
+            .Select(f => _configuration.Rules.TryGetValue(f.RuleId, out TSqlLintSeverity? severity) ? f with { Severity = severity!.Value } : f)
             .OrderBy(f => f.Line)
             .ThenBy(f => f.Column)
             .ToList();

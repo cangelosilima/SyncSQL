@@ -91,7 +91,7 @@ function Shell() {
         </div>
       </header>
       <div className="body">
-        {(pathname.replace(/\/$/, '') === '/explorer' || pathname.startsWith('/object/')) && <CatalogSidebar nodes={index?.catalog.nodes ?? []} />}
+        {(pathname.replace(/\/$/, '') === '/explorer' || pathname.startsWith('/object/')) && <CatalogSidebar nodes={index?.catalog.nodes ?? []} linkedServerReferences={index?.catalog.linkedServerReferences} />}
         <main className="content" id="main-content" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<Home />} />

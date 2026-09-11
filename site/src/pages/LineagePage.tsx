@@ -17,10 +17,11 @@ import { decodeTokensFromUrl, encodeTokensForUrl, matchingGrants, newTokenId, ty
 import type { CatalogNode } from '../types'
 
 const GRAPH_CAP = 300
-const HOP_OPTIONS = [0, 1, 2, 3, 4, 5, 6] as const
+const MAX_HOPS = 20
+const HOP_OPTIONS = Array.from({ length: MAX_HOPS + 1 }, (_, hop) => hop)
 function parseHops(value: string | null, fallback = 1): number {
   const number = value === null ? fallback : Number(value)
-  return Number.isInteger(number) && number >= 0 && number <= 6 ? number : fallback
+  return Number.isInteger(number) && number >= 0 && number <= MAX_HOPS ? number : fallback
 }
 
 export default function LineagePage() {
@@ -247,29 +248,6 @@ export default function LineagePage() {
         </div>
       ) : null}
 
-      {currentFocus && <details className="lineage-view-options" open>
-        <summary>View options</summary>
-        <div className="lineage-view-controls">
-          {([
-            ['Dependencies', dependencyHops, setDependencyHops],
-            ['Dependents', dependentHops, setDependentHops],
-          ] as const).map(([label, value, setValue]) => <div className="lineage-hop-control" key={label}>
-            <label className="lineage-hops">
-              {label}
-              <select aria-label={`${label} hops`} value={value} onChange={event => setValue(Number(event.target.value))}>
-                {HOP_OPTIONS.map(hop => <option key={hop} value={hop}>{hop} hop{hop === 1 ? '' : 's'}</option>)}
-              </select>
-            </label>
-            <button type="button" className="lineage-nav-back" disabled={value >= 6} onClick={() => setValue(value + 1)} aria-label={`Add ${label.toLowerCase()} hop`}>+ Add hop</button>
-          </div>)}
-          <label className="lineage-group-toggle">
-            <input type="checkbox" checked={groupIntermediate} onChange={event => setGroupIntermediate(event.target.checked)} />
-            Group intermediate layers
-          </label>
-        </div>
-        <p className="muted">Dependencies are objects the focus references; dependents are objects that reference it. Set either direction to 0 to hide it. Grouping combines intermediate objects of the same type and hop, keeping the focus and outer objects visible.</p>
-      </details>}
-
       {currentFocus ? (
         <p className="muted" style={{ margin: '0.5rem 0' }}>
           {nodeIds.length < narrowedFrom
@@ -319,6 +297,27 @@ export default function LineagePage() {
         </>
       )}
       </div>
+      <div className="lineage-sidebar">
+      {currentFocus && <details className="lineage-view-options" open>
+        <summary>View options</summary>
+        <div className="lineage-view-controls">
+          {([
+            ['Dependencies', dependencyHops, setDependencyHops],
+            ['Dependents', dependentHops, setDependentHops],
+          ] as const).map(([label, value, setValue]) => <div className="lineage-hop-control" key={label}>
+            <label className="lineage-hops" htmlFor={`lineage-${label.toLowerCase()}-hops`}>{label}</label>
+            <select id={`lineage-${label.toLowerCase()}-hops`} aria-label={`${label} hops`} value={value} onChange={event => setValue(Number(event.target.value))}>
+              {HOP_OPTIONS.map(hop => <option key={hop} value={hop}>{hop} hop{hop === 1 ? '' : 's'}</option>)}
+            </select>
+            <button type="button" className="lineage-nav-back" disabled={value >= MAX_HOPS} onClick={() => setValue(value + 1)} aria-label={`Add ${label.toLowerCase()} hop`}>+ Add hop</button>
+          </div>)}
+          <label className="lineage-group-toggle">
+            <input type="checkbox" checked={groupIntermediate} onChange={event => setGroupIntermediate(event.target.checked)} />
+            Group intermediate layers
+          </label>
+        </div>
+        <p className="muted">Dependencies are objects the focus references; dependents are objects that reference it. Set either direction to 0 to hide it. Grouping combines intermediate objects of the same type and hop, keeping the focus and outer objects visible.</p>
+      </details>}
       <InspectorPanel>
         {edgeEvidence && nodeIds.length <= GRAPH_CAP && <section aria-label="Edge evidence">
           <h3>Edge evidence</h3>
@@ -332,8 +331,8 @@ export default function LineagePage() {
           <TypeBadge type={index.byId.get(currentFocus)!.type} />
           <p className="muted">{index.byId.get(currentFocus)!.server} → {index.byId.get(currentFocus)!.database}</p>
           <Link to={`/object/${currentFocus}`}>Open object workbench →</Link>
-          <RelatedObjects title="Depends on" rootId={currentFocus} ids={index.outgoing.get(currentFocus) ?? []} direction="outgoing" />
           <RelatedObjects title="Used by" rootId={currentFocus} ids={index.incoming.get(currentFocus) ?? []} direction="incoming" />
+          <RelatedObjects title="Depends on" rootId={currentFocus} ids={index.outgoing.get(currentFocus) ?? []} direction="outgoing" />
           {hasGranteeFilter && <><h3>Recorded permissions</h3>
             <p className="muted">Current object grants, not an effective-access calculation.</p>
             {index.byId.get(currentFocus)!.grants.length === 0 && <p>No grants recorded.</p>}
@@ -343,6 +342,7 @@ export default function LineagePage() {
             </li>)}</ul></>}
         </> : <p className="empty-state">Drill into a graph node to inspect its identity and relationships. Edge details appear beside the selected relationship in the graph.</p>}
       </InspectorPanel>
+      </div>
       </div>
     </div>
   )
