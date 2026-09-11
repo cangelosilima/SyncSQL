@@ -1,4 +1,19 @@
-# Latest validation — 2026-09-07
+# Validation
+
+## Current suite — 2026-09-11
+
+`npx vitest run --configLoader runner --reporter=dot --maxWorkers=2` from `site`:
+**336 tests passed across 48 files**, 23.5 seconds. Coverage added since the
+2026-09-07 record below tracks the changes in
+[current-experience.md](current-experience.md): the unified chip filter bar on
+Explorer and Lineage (grantee and DDL content as attributes, legacy URLs
+migrated), directional dependency/dependent hops and intermediate-layer
+grouping, the graph legend in SVG/PNG exports, SQL display formatting from
+`config/sql-style.json`, catalog sidebar engine labels and per-route document
+titles. The browser/accessibility/performance certification limits recorded
+below are unchanged - a passing unit suite does not close them.
+
+## Historical record — 2026-09-07
 
 Full suite rerun for this documentation update: **253 tests passed across 38 files**, 38.32 seconds, two workers. See [latest-tests.log](latest-tests.log). Run from `site` using `node node_modules/vitest/vitest.mjs run --configLoader runner --reporter=dot --maxWorkers=2`.
 

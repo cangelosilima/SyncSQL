@@ -1,13 +1,14 @@
 # Explorer
 
 The primary way to browse the catalog: one sortable, filterable row per
-extracted object. One filter bar searches object details and DDL.
+extracted object. One filter bar searches object details, DDL and recorded
+grantees.
 
 ## Attribute filter bar
 
 Type to get attribute suggestions - server, database, schema, type, name,
-description, DDL content - then pick an operator and enter a value or choose
-one of the suggested catalog values:
+description, DDL content, grantee - then pick an operator and enter a value or
+choose one of the suggested catalog values:
 
 - `is` / `is not` - exact match.
 - `contains` - substring match.
@@ -20,6 +21,11 @@ filtered view is a shareable link.
 For a broad search, type text and press Enter. It matches server, database,
 schema, type, name, description, or DDL content. Each committed filter appears
 as a removable chip; multiple chips must all match.
+
+A **Grantee** chip keeps only objects a user, role or group holds a GRANT or
+DENY on. To go the other way - from a principal to everything it reaches,
+with the permissions listed - use the Lineage explorer, where the same chip
+also renders the permissions table.
 
 ## DDL content search
 

@@ -10,7 +10,8 @@ SQLineage is the database catalog and investigation app, formerly branded SyncSQ
 
 SQLineage extracts database objects — stored procedures, views, functions,
 triggers, tables (with foreign keys, check constraints and indexes), schemas,
-synonyms, and linked servers / database links — from a fleet of **MSSQL** and
+synonyms, replication publications, Service Broker messaging objects, and
+linked servers / database links — from a fleet of **MSSQL** and
 **Oracle** servers into a git repository: one file per object, one commit per
 run, diffable like any other source code. On top of that history it builds a
 browsable **structure, lineage and access catalog**, published as a React
@@ -23,16 +24,27 @@ noisy.
 
 ## Screenshots
 
-Captured at 1440×900 against a small demo catalog, in the default light theme
-unless noted.
+Captured at 1440×900 against a small two-server demo fixture, except the
+interactive-example panel, which comes from the benchmark catalog this
+repository actually ships in `site/public/data/catalog.json`. The site has one
+light theme; there is no theme switch.
 
 **Overview** — five summary cards (total objects, commits mined, lineage
 edges, **Alerts**, last change), a per-type change-activity heatmap, latest
 changes, most-referenced tables, most-changed objects and commonly changed
-pairs. The top bar reports the catalog snapshot, not live database
-connectivity.
+pairs. The top bar reports the catalog snapshot, not live database connectivity.
 
 ![Overview page](docs/screenshots/overview.png)
+
+**Interactive example** — a catalog published with example metadata (the
+GitHub Pages demo, built from the heterogeneous benchmark) opens the overview
+with a guided walk of it: an **Example catalog** badge in the top bar, a
+workload-user picker that jumps to that principal's recorded access, and
+expandable lineage paths — linked-server round trips, cycles, Service Broker
+sender → queue flows, publication → source table — whose every hop links to
+the object it names.
+
+![Overview interactive example](docs/screenshots/overview-example.png)
 
 **Alerts** — one investigation page for every metric anomaly and orphaned
 reference the snapshot holds. Category and text filters (both kept in the URL)
@@ -50,32 +62,37 @@ Object.
 
 ![Explorer page](docs/screenshots/explorer.png)
 
-**DDL content search** — a separate search-as-you-type box live-filters
-across every object's full DDL body, not just its metadata — e.g. "which
-procs reference this column".
+**DDL content search** — the same filter bar searches inside SQL: pick the
+**DDL content** attribute (or just type text and press Enter to match object
+details *and* DDL) to answer "which procs reference this column". It is one
+chip among the others, so it combines with **Type is StoredProcedures** and
+the rest.
 
 ![Explorer DDL content search](docs/screenshots/explorer-search.png)
 
 **Lineage graph** — an interactive dependency graph with drill-down, built
-from a real SQL parser per engine, not text matching. A collapsible legend
-explains direction, reference styles and node types; the inspector stays
-beside the graph. Edges carrying a known column reference are highlighted and
-labeled. The current filter/focus/hop state stays live in the URL (**Copy
-link** for a shareable view), and **Export SVG**/**Export PNG** render the
-visible graph to a standalone image.
+from a real SQL parser per engine, not text matching. One filter bar drives
+the whole page; **View options** set dependency and dependent hops
+independently and can collapse intermediate layers; a compact legend is
+docked at the bottom of the graph; the inspector stays beside it. Edges
+carrying a known column reference are highlighted and labeled. The current
+filter/focus/hop/grouping state stays live in the URL (**Copy link** for a
+shareable view), and **Export SVG**/**Export PNG** render the visible graph —
+legend included — to a standalone image.
 
 ![Lineage graph](docs/screenshots/lineage.png)
 
-**Access** — the same page flipped around: search a grantee (user, role or
-group) to see every object they hold a GRANT or DENY on, listed in a table and
-drawn in the same graph.
+**Access** — the same page with a **Grantee** chip: search a user, role or
+group to see every object they hold a GRANT or DENY on, listed in a table
+(with its own **Export CSV**) and drawn in the same graph.
 
 ![Lineage access search](docs/screenshots/lineage-access.png)
 
 **Object explorer** — a breadcrumb trail, a quick-facts bar (modified date,
-deps, used-by, columns) with a jump to the lineage graph, and the **SQL
-definition always visible above** the workspace tabs: Columns, Graph, Access,
-Relationships, Metrics, History and Diff.
+deps, used-by, columns) with a jump to the lineage graph and **Export details
+CSV** / **Export XLSX**, and the **SQL definition always visible above** the
+workspace tabs: Columns, Graph, Access, Relationships, Metrics, History and
+Diff. The definition has an **Original / Formatted** toggle.
 
 ![Object explorer](docs/screenshots/object-detail.png)
 
@@ -103,7 +120,9 @@ picks any two revisions (including the current definition) for a diff.
 **AI filter assistant** — an English request becomes a preview of validated
 Explorer filters and one DDL content query, planned in the browser by a local
 model. It is only ever a preview of filters — no SQL is generated or run — and
-**Open in Explorer** hands the plan to the Explorer filter bar.
+**Open in Explorer** hands the plan to the Explorer filter bar. (This capture
+predates the header simplification - it needs a build carrying the Git
+LFS-backed model to retake.)
 
 ![AI filter assistant](docs/screenshots/ai.png)
 
@@ -122,7 +141,7 @@ flowchart TD
 
     subgraph extract["CI stage: extract - one parallel job per server"]
         direction LR
-        mssql["MSSQL extraction<br/>modules, tables + FKs/checks/indexes, grants,<br/>synonyms, replication, extended properties<br/>+ a per-table metrics snapshot"]
+        mssql["MSSQL extraction<br/>modules, tables + FKs/checks/indexes, grants,<br/>synonyms, replication, Service Broker, extended properties<br/>+ a per-table metrics snapshot"]
         oracle["Oracle extraction<br/>DBMS_METADATA.GET_DDL, managed driver<br/>+ a per-table metrics snapshot (reduced scope)"]
     end
 
@@ -258,10 +277,15 @@ for the full schema; in short:
 - `defaults` / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
   (`Schemas`, `Types`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
-  `Triggers`, `Synonyms`, `LinkedServers`, `Replication` for MSSQL;
+  `Triggers`, `Synonyms`, `LinkedServers`, `Replication`, `MessageTypes`,
+  `Contracts`, `Queues`, `Services` for MSSQL;
   `Schemas`, `Types`, `TypeBodies`, `Tables`, `Views`, `Procedures`, `Functions`, `Packages`,
   `PackageBodies`, `Triggers`, `Synonyms`, `DatabaseLinks` for Oracle).
   A server that specifies a key fully replaces the default for that key.
+  The four Service Broker types (`MessageTypes`, `Contracts`, `Queues`,
+  `Services`) are opt-in: `config/servers.example.json` doesn't list them,
+  so add them where a database actually uses Broker - see
+  [Replication and Service Broker objects](#replication-and-service-broker-objects).
 - `serverSelection`: regex filter over which of the listed servers
   actually run in a given pipeline execution (can also be overridden per
   run with `--server-include` / `--server-exclude`).
@@ -462,7 +486,11 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   the investigation page. The remaining panels show per-type change activity,
   latest changes, most-referenced tables, most-changed objects and commonly
   changed pairs. The evidence behind each anomaly and orphan lives in Alerts,
-  not on this page.
+  not on this page. A catalog published with example metadata (the demo
+  deployment, built from the heterogeneous benchmark) also gets an
+  **Interactive example** panel above the cards: a workload-user picker that
+  opens that principal's recorded access, and expandable benchmark lineage
+  paths whose every hop links to the object it names.
 - **Alerts** (`/#/alerts`) — complete findings with category and text filters
   preserved in the URL (`category` and `q`), incremental results, object and
   lineage links, and in-app help. Metric anomalies are **Heuristic** and
@@ -470,12 +498,14 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   scope and limitations. Missing orphan analysis is distinguished from an
   empty finding set. These are snapshot findings, not live notifications.
 - **Explorer** — a sortable, filterable table listing every object; it's the
-  primary way to browse the catalog. A separate DDL content search box
-  live-filters (search-as-you-type, debounced) across every object's full
-  DDL body plus its appended sections (Foreign Keys, Check Constraints,
-  Indexes, ...) — e.g. "which procs reference this column" — distinct from
-  the attribute filter bar above it, which only matches server/database/
-  schema/type/name/description.
+  primary way to browse the catalog. One filter bar covers metadata, SQL and
+  permissions: the attributes are server, database, schema, type, name,
+  description, **DDL content** (every object's full DDL body plus its
+  appended Foreign Keys / Check Constraints / Indexes sections — e.g. "which
+  procs reference this column") and **Grantee**. Typing free text and
+  pressing Enter searches identity, description and DDL at once. The table renders at most 500 rows (the
+  count line above always reports the true number of matches) and
+  **Export CSV** writes every match, not just the rendered rows.
 - **AI** (`/#/ai`) — an optional, entirely browser-local assistant that turns
   an English request into a preview of validated Explorer filters and one DDL
   content query. It uses the quantized `all-MiniLM-L6-v2` model only to
@@ -487,7 +517,13 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
 - **Object explorer** — the SQL definition stays visible above workspace tabs:
   **Columns**, **Graph**, **Access**, **Relationships**, **Metrics**, **History**
   and **Diff**. Relationships contains dependency evidence; there is no separate
-  object inspector or duplicate Properties panel. The page retains qualified
+  object inspector or duplicate Properties panel. The definition carries an
+  **Original / Formatted** toggle - Formatted re-indents the captured SQL in
+  the browser using [`config/sql-style.json`](config/sql-style.json)'s
+  `format` section (a display transform only; exports and diffs keep the
+  captured text, and a definition the formatter can't parse is shown as
+  captured with a note). The quick-facts bar carries **Export details CSV**
+  and **Export XLSX** (the whole page as one workbook). The page retains qualified
   name, `sys.extended_properties` descriptions
   (object + column level, MSSQL only), the full structural column list with
   data types (Tables/Views), an **orphaned reference** warning when this
@@ -504,31 +540,57 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   too many dependencies" below.
 - **Lineage** (`/#/lineage`) — a full graph explorer rendered with
   `@xyflow/react` + `dagre` auto-layout, with a permanently visible inspector
-  and a collapsible legend above the graph. Arrows show reference direction
-  from caller to target; there is no minimap. Two modes (tabs) are available:
-  - **Browse** — the object filter bar and a DDL content search box (same
-    as Explorer's) together drive which objects are shown. Clicking a node
-    drills the graph into that object's own neighborhood in place
-    (breadcrumb trail, Back button, adjustable 1/2/3-hop radius) rather than
-    leaving the page; double-click opens that object's full detail page.
+  and a compact legend docked at the bottom of the graph (collapsed it keeps
+  the direction and dynamic-SQL reminder; expanded it adds the full key and
+  the object-type colors present in this graph). Arrows show reference
+  direction from caller to target; there is no minimap.
 
-    While an object is focused, the filter bar and content search **narrow
-    that object's neighborhood** rather than re-selecting from the whole
-    catalog — "Type is StoredProcedures" while looking at a table means "show
-    me the procedures around this", and the focused object itself is always
-    kept so the graph never renders rootless. **Clear focus** turns the
-    navigation into a real name filter at that moment, so releasing it lands
-    on that one object instead of dumping out to the whole catalog.
+  **One filter bar drives the whole page.** Its attributes are the object
+  ones (server, database, schema, type, name, description) plus **DDL
+  content** and **Grantee**, so "who can touch this" and "what mentions this
+  column" are chips beside "Type is StoredProcedures" rather than separate
+  modes - the older `tab=access`/`grantee`/`q` links are migrated into
+  equivalent chips on open. Adding a **Grantee** chip (`is` for an exact
+  principal, `contains` for part of a name, `is in` for several) turns on a
+  permissions table above the graph - every object that principal holds a
+  GRANT or DENY on, down to the column where the grant is scoped that way,
+  with its own **Export CSV** of one row per permission - while the graph
+  keeps showing how those objects relate.
 
-    The current filter tokens, drill-down focus, hop radius, and content
-    search are all kept live in the URL, so **Copy link** hands over an
-    exact, shareable snapshot of the current view — handy for incident
-    write-ups or design docs referencing a specific dependency chain.
-  - **Access** — search by grantee (user, role or group) to see every
-    object they have a GRANT or DENY permission on, down to the column when
-    scoped that way (see "Grant mapping" below); matches are listed in a
-    table and rendered in the same graph, so you can drill from "what can
-    this principal touch" straight into how those objects relate.
+  Clicking a node drills the graph into that object's own neighborhood in
+  place (breadcrumb trail, **Back** button) rather than leaving the page;
+  double-click opens that object's full detail page. Opening a search result
+  drops the object filters that located it - otherwise "Type is LinkedServers"
+  would hide every caller and target - while grantee and DDL-content chips
+  stay on.
+
+  **View options** (beside the graph, while an object is focused) set
+  **Dependencies** (what the focus references) and **Dependents** (what
+  references it) independently, 0 to 20 hops each, with **+ Add hop** to
+  extend one direction and 0 to hide that side. A hop that ends on a linked
+  server or database link is given one extra hop in that direction so the
+  callers or remote targets recorded for that flow stay visible.
+  **Group intermediate layers** collapses intermediate objects of the same
+  type, direction and hop into counted dashed nodes, keeping the focus and
+  the outer objects individually visible; clicking a group lists its members.
+
+  While an object is focused, the filters **narrow that object's
+  neighborhood** rather than re-selecting from the whole catalog - "Type is
+  StoredProcedures" while looking at a table means "show me the procedures
+  around this", and the focused object itself is always kept so the graph
+  never renders rootless. Objects outside the filters that are needed to keep
+  a matching object connected are retained and labeled as connecting objects,
+  and the line under the breadcrumb says how much of the neighborhood is
+  hidden; if the filters hide everything around the focus, **Show full
+  neighborhood** clears them while keeping the focus and hop settings.
+  **Clear focus** turns the navigation into a real name filter at that
+  moment, so releasing it lands on that one object instead of dumping out to
+  the whole catalog.
+
+  The filter tokens, drill-down focus, both hop counts, grouping and content
+  search are all kept live in the URL, so **Copy link** hands over an exact,
+  shareable snapshot of the current view — handy for incident write-ups or
+  design docs referencing a specific dependency chain.
 
   Edges carrying a known column-level reference (see "Column dependency
   tracking" below) are highlighted, labeled with up to 3 referenced column
@@ -537,20 +599,29 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   currently visible graph to a standalone image (built directly from node
   positions rather than rasterizing the live page, so it renders correctly
   outside the site and matches the site's light theme) for dropping into
-  an incident write-up or design doc.
+  an incident write-up or design doc. Both formats draw the full legend,
+  object types included, beneath the diagram even when the on-screen legend
+  is collapsed; PNG additionally renders at higher resolution with the
+  page's loaded font and full wrapped object names.
+  A selection too large to draw (more than 300 objects) is answered with a
+  breakdown of what it is made of - counts by server, database and type,
+  each row a one-click narrowing - rather than a dead-end warning.
 - **History** — a global commit timeline of everything the pipeline has
   changed, expandable per commit.
 
-All of Explorer/Lineage's filter bar share one GitLab-style filter bar: type
-to get attribute suggestions (server, database, schema, type, name,
-description), pick an operator (is / is not / contains / is in / is not
-in), then pick from suggested values pulled from the catalog. Suggestion
-lookups are capped and debounced, and committed filters (not keystrokes)
-are what actually re-filter the object list, so it stays responsive on
-large catalogs. The DDL content search box next to it is separate and
-lighter-weight by design: it live-filters as you type (no attribute/operator
-to pick, no commit step) since it's meant for a quick "does this term appear
-in any object's body" pass rather than a precise structured filter.
+Explorer and Lineage share one GitLab-style filter bar, with the same
+attributes on both: type to get suggestions (server, database, schema, type,
+name, description, DDL content, grantee), pick an operator (is / is not /
+contains / is in / is not in), then pick from suggested values pulled from
+the catalog. A grantee chip selects objects by who holds a permission on
+them wherever it is used; on Lineage it additionally renders the permissions
+table described above. Every committed chip must match, and each one can be removed on
+its own. Typing plain text and pressing Enter instead commits a broad search
+across identity, description and DDL content. Suggestion lookups are capped
+and debounced, and committed filters (not keystrokes) are what actually
+re-filter the object list, so it stays responsive on large catalogs. Links
+that carry the older separate `q` (DDL search) or `grantee`/`tab=access`
+parameters still work: they open as the equivalent chips.
 
 **Lineage inference uses a real parser for each engine, not text
 matching.** `syncsql` tags every extracted object with the engine that
@@ -601,7 +672,10 @@ and is absent from the other pages. Its expandable hierarchy is
 **Server → Database → Schema → Type → Object**, with bounded branch results
 and Show more. Objects without a schema keep Type directly under the database;
 server-scoped objects use `_ServerLevel → Type → Object`. No artificial schema
-branch is added. Expanding the tree does not change Explorer filters.
+branch is added. Each server branch is annotated with the engine(s) it was
+extracted with (SQL Server / Oracle), and a linked server / database link
+carries the engine of whatever the catalog records on the other side of it.
+Expanding the tree does not change Explorer filters.
 
 ### Export hierarchy and compatibility
 
@@ -696,11 +770,26 @@ and the `helpGuides` map in `site/src/help/index.ts`, and render
 
 ### Theme
 
-The site uses a light theme: warm ivory surfaces, charcoal text, restrained
-teal accents and soft borders. SQL viewers use a dedicated dark
-syntax-highlighting surface; the Lineage graph uses the site's light theme.
-Shared colors and spacing live in `site/src/tokens.css`.
+The site has one light theme: warm ivory surfaces, charcoal text, restrained
+teal accents and soft borders. There is no theme switch and no dark mode -
+the earlier toggle was removed, and the graph, its exported images and the
+printable views all assume the light palette. SQL viewers keep a dedicated
+dark syntax-highlighting surface (the Midnight palette in
+`site/src/components/midnight-hljs.css`), which is a code surface rather than
+a theme. Shared colors and spacing live in `site/src/tokens.css`.
 The SQLineage database-and-relationships icon is used in the header and favicon.
+
+### Browser tab and history titles
+
+Every view names itself in the document title, so a browser history entry,
+a bookmark and a restored tab say what they point at instead of repeating one
+app name. Plain pages use `Overview | SQLineage`, `Explorer | SQLineage` and
+so on; an object page uses `schema.object · server/database | SQLineage`
+(with the column appended when a column deep link is open, and the
+`_ServerLevel` pseudo-database omitted); a focused lineage view prefixes the
+same identity with `Lineage · `. Titles are applied before paint, including
+on Back/Forward and once the catalog finishes loading, and nothing about
+this adds or replaces history entries.
 
 ### Grant mapping
 
@@ -976,6 +1065,51 @@ logs a summary count as a warning. The site includes their total in the
 Overview Alerts card, lists searchable findings on Alerts, and retains
 reference evidence on the referencing object's own page.
 
+### Replication and Service Broker objects
+
+Two MSSQL-only object families exist so asynchronous data flow lands in the
+same graph as the synchronous kind: a publication and a Broker conversation
+move data between objects just as surely as an `EXEC` does, and neither of
+them appears in any module's parse tree.
+
+**Replication** (`Replication` in `objectTypes`) extracts each publication
+with its article list from `dbo.syspublications` / `dbo.sysarticles`,
+best-effort: where those tables don't exist or aren't readable, the step logs
+a warning and the rest of the database extracts normally. The generated file
+is an informational listing rather than a deployment script, but it ends with
+one `EXEC sys.sp_addarticle @publication, @article, @source_owner,
+@source_object` line per article - real T-SQL, so the same parser that reads
+every other object turns each into an edge from the publication to the table
+it replicates. Subscribers are deliberately not enumerated (see "Known
+limitations" below), so a publication says what it publishes, not where it
+lands.
+
+**Service Broker** (`MessageTypes`, `Contracts`, `Queues` and `Services` -
+four separate, opt-in `objectTypes` entries) extracts the database's own
+definitions only: engine-provided message types, contracts and services are
+filtered out by id, and `is_ms_shipped` queues with them. Each object is
+scripted as the `CREATE` statement its catalog metadata implies - a message
+type with its validation (including the XML schema collection it validates
+against), a contract with every message type and the side that may send it, a
+queue with its status, retention, poison-message handling and activation
+(procedure, readers, `EXECUTE AS`), and a service with its queue and
+contracts. Queues are schema-scoped and carry their own grants; message
+types, contracts and services are database-scoped and keep no schema. Every
+object extracted from that database also records the database's Broker GUID
+in its `-- Identity:` header, which is what makes the next paragraph
+possible.
+
+Broker lineage is read off the parse tree like everything else: `SEND`
+resolves its message type, `RECEIVE` and `CREATE SERVICE ... ON QUEUE`
+resolve the queue, a queue's activation procedure resolves the procedure it
+names, and `BEGIN DIALOG` resolves its initiator service and contract. Its
+**target** service is resolved only when the dialog is explicitly local - no
+`INSTANCE` clause at all, `'CURRENT DATABASE'`, or an instance GUID equal to
+this database's own Broker GUID. A dialog aimed at another instance's GUID,
+or at a variable whose value only exists at runtime, is left unresolved
+rather than bound to a same-named local service that may have nothing to do
+with it.
+
 ### Linked servers as lineage hops
 
 A reference that crosses a linked server / database link doesn't become a
@@ -1187,7 +1321,7 @@ button writes exactly the rows currently on screen:
 | Object detail, Columns | Column name, data type, description. |
 | Object detail, Access | Grantee, grantee type, permission, state, column. |
 | Object detail, Lineage | Both directions as flat rows — direction, target identity, and the column-level tags for that edge. |
-| Lineage → Access | One row per permission across every object matching the grantee search. |
+| Lineage, permissions table | One row per permission across every object matching the grantee (and any other) filter chips. |
 
 Files are UTF-8 **with a BOM** (without it Excel reads them in the machine's
 ANSI codepage and mangles every accented object name and description) and
@@ -1300,6 +1434,12 @@ stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
   exist and be readable) — subscriber enumeration is intentionally left
   out since subscription table shapes vary too much across SQL Server
   versions/topologies to guess at reliably.
+- Service Broker extraction covers the database's own message types,
+  contracts, queues and services - routes, remote service bindings,
+  conversation/dialog state and the transmission queue are not extracted.
+  A `BEGIN DIALOG` whose target instance is another database's Broker GUID,
+  or a variable, stays unresolved rather than being bound to a same-named
+  local service. See "Replication and Service Broker objects" above.
 - Oracle `DatabaseLinks` extraction requires privileges on `SYS.LINK$`
   (or equivalent); without them, that object type is skipped with a
   warning rather than failing the whole run.

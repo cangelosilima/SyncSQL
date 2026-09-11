@@ -1,6 +1,6 @@
 # SQL definition audit
 
-Updated 2026-09-08. This audit covers the objects supported by the CLI's MSSQL and Oracle extractors.
+Updated 2026-09-11. This audit covers the objects supported by the CLI's MSSQL and Oracle extractors.
 
 ## Changes
 
@@ -16,6 +16,7 @@ Updated 2026-09-08. This audit covers the objects supported by the CLI's MSSQL a
 | Rowstore indexes | Filter predicates and persistent index options omitted | INCLUDE/WHERE, fill factor, padding, duplicate-key behavior, lock options and disabled state |
 | Object/schema/type security | Schema/type permissions, GRANT WITH GRANT OPTION, column REVOKE exceptions, grantor, explicit ownership | Executable Permissions and Ownership sections, independently queried from description metadata |
 | Extended properties | Only description-like object/column properties retained | All supported schema/type/object/column properties receive executable definitions retaining SQL variant base type and precision |
+| MSSQL Service Broker | Message types, contracts, queues and services were not extracted at all | Opt-in `MessageTypes`, `Contracts`, `Queues` and `Services` object types, scripted as `CREATE` statements with authorization, message validation (including the XML schema collection), contract message directions, queue status/retention/activation/poison-message handling and service contracts. Engine-provided definitions are excluded; queues keep their schema and grants, and every object from that database records the database's Broker GUID in its `-- Identity:` header |
 | Linked servers | Global login mappings filtered out; local login names, self-mappings without remote names, location and server options omitted | Explicit global and local mappings, default self-mapping removal before replay, location, RPC/data-access/collation/timeouts/transaction-promotion settings |
 
 ## Layout and compatibility
@@ -28,6 +29,7 @@ The JSON `-- Identity:` header records the logical server/database/schema/type/n
 
 - These exports document database objects; they are not a full database backup or a dependency-ordered deployment package. Roles/users, CLR assembly binaries, XML schema collections, bound rule/default objects and target linked-server credentials may need separate provisioning before replay.
 - MSSQL temporal/ledger/graph/encryption features, table storage/partition placement and compression are not fully reconstructed. Specialized XML, spatial, columnstore and hash indexes on regular tables retain the existing informational fallback. Replication remains an informational publication/article snapshot.
+- Service Broker coverage stops at the database's own message types, contracts, queues and services: routes, remote service bindings, conversation/dialog state and the transmission queue are not extracted, and a `BEGIN DIALOG` naming another instance's Broker GUID stays unresolved rather than binding a same-named local service.
 - Passwords cannot be recovered from linked-login metadata; explicit remote-password mappings keep a placeholder. Catalog visibility still depends on the extraction account's permissions.
 - Oracle object DDL continues to come from DBMS_METADATA. Schema/user DDL may fall back to an informational comment when inaccessible; Oracle grants and ancillary user configuration are not expanded by this change.
 - Discovery retains configured depth and de-duplication rules. Links already covered by a configured or previously discovered target are skipped, with a logged reason, rather than duplicating the target extraction.
