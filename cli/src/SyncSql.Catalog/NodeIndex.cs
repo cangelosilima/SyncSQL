@@ -86,7 +86,10 @@ internal sealed class NodeIndex
             .Select(n => $"{n.Server}::{n.Database}::{n.Schema}.{n.Name}").ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (CatalogNode node in allNodes)
         {
-            _enginesByServer.TryAdd(node.Server, node.Engine);
+            if (node.Engine is { } engine)
+            {
+                _enginesByServer.TryAdd(node.Server, engine);
+            }
             // Spec and body share an Oracle name. Calls resolve to the public spec;
             // the catalog adds the spec -> implementation dependency separately.
             if (node.Type == "PackageBodies" && packageSpecs.Contains($"{node.Server}::{node.Database}::{node.Schema}.{node.Name}"))

@@ -130,6 +130,7 @@ internal static class DynamicSqlScanner
 
         // Whether the last meaningful token puts a name in a reference position.
         bool referencePosition = false;
+        bool routinePosition = false;
 
         List<string> parts = [];
 
@@ -181,6 +182,8 @@ internal static class DynamicSqlScanner
                     || (inheritedServer is not null && word.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))))
                 {
                     referencePosition = true;
+                    // Remote PL/SQL permits a procedure call after BEGIN without parentheses.
+                    routinePosition = word.Equals("BEGIN", StringComparison.OrdinalIgnoreCase);
                     continue;
                 }
 
@@ -242,6 +245,7 @@ internal static class DynamicSqlScanner
             if (parts.Count == 0)
             {
                 referencePosition = false;
+                routinePosition = false;
                 return;
             }
 
@@ -252,12 +256,13 @@ internal static class DynamicSqlScanner
             {
                 if (ToObjectRef(parts, openQueryServer ?? atServer ?? inheritedServer) is { } objectRef)
                 {
-                    into.Add(objectRef with { IsRoutine = calledAsFunction });
+                    into.Add(objectRef with { IsRoutine = calledAsFunction || routinePosition });
                 }
             }
 
             parts.Clear();
             referencePosition = false;
+            routinePosition = false;
         }
     }
 
