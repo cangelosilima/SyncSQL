@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'config/sql-style.json'
       - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
       - '.github/workflows/catalog-demo.yml'
   pull_request:
     paths:
       - 'site/**'
+      - 'config/sql-style.json'
       - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
       - '.github/workflows/catalog-demo.yml'
   workflow_dispatch:

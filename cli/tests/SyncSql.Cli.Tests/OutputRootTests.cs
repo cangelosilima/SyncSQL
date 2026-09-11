@@ -126,6 +126,47 @@ public sealed class OutputRootTests : IDisposable
         Assert.Equal(0, await Run("lint"));
     }
 
+    [Fact]
+    public async Task Lint_LoadsLocalConfigurationAndCommandLineThresholdWins()
+    {
+        File.WriteAllText("query.sql", "SELECT * FROM dbo.Items;");
+        Directory.CreateDirectory("config");
+        WriteLintConfig("config/sql-style.json", "warning", "warning");
+        Assert.Equal(1, await Run("lint", "--path", "query.sql"));
+        Assert.Equal(0, await Run("lint", "--path", "query.sql", "--fail-on", "error"));
+        WriteLintConfig("custom.json", "warning", "off");
+        Assert.Equal(0, await Run("lint", "--path", "query.sql", "--config", "custom.json"));
+    }
+
+    [Fact]
+    public async Task Lint_RejectsMissingOrInvalidExplicitConfiguration()
+    {
+        File.WriteAllText("query.sql", "SELECT 1;");
+        Assert.Equal(1, await Run("lint", "--path", "query.sql", "--config", "missing.json"));
+        File.WriteAllText("invalid.json", "{\"version\":2}");
+        Assert.Equal(1, await Run("lint", "--path", "query.sql", "--config", "invalid.json"));
+        Assert.Equal(1, await Run("lint", "--path", "query.sql", "--fail-on", "42"));
+    }
+
+    private static void WriteLintConfig(string path, string failOn, string selectStar)
+    {
+        File.WriteAllText(path, JsonSerializer.Serialize(new
+        {
+            version = 1,
+            lint = new
+            {
+                failOn,
+                rules = new Dictionary<string, string>
+                {
+                    ["syntax-error"] = "error",
+                    ["select-star"] = selectStar,
+                    ["nolock-hint"] = "warning",
+                    ["cursor-usage"] = "warning",
+                },
+            },
+        }));
+    }
+
     public void Dispose()
     {
         Directory.SetCurrentDirectory(_previousDirectory);

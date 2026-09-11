@@ -1,4 +1,5 @@
 ﻿using System.CommandLine;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SyncSql.Cli.Composition;
 using SyncSql.Lineage.MsSql.Linting;
@@ -19,10 +20,13 @@ internal static class LintCommand
         {
             Description = "A .sql file, or a directory searched recursively for *.sql files. Repeatable. Default: ./MSSQL, or --output-root when supplied. Oracle SQL is not T-SQL.",
         };
-        Option<string> failOnOption = new("--fail-on")
+        Option<string?> configOption = new("--config")
+        {
+            Description = "SQL lint/format JSON configuration. Default: ./config/sql-style.json when present, otherwise the packaged defaults.",
+        };
+        Option<string?> failOnOption = new("--fail-on")
         {
             Description = "Minimum finding severity that makes the command exit non-zero: 'warning' or 'error'.",
-            DefaultValueFactory = _ => "error",
         };
 
         Command command = new("lint", "Lint T-SQL script(s) for syntax errors and common style/best-practice issues.")
@@ -30,6 +34,7 @@ internal static class LintCommand
             outputRootOption,
             pathOption,
             failOnOption,
+            configOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -40,8 +45,22 @@ internal static class LintCommand
             string[] paths = parseResult.GetValue(pathOption) is { Length: > 0 } explicitPaths
                 ? [.. explicitPaths.Select(Path.GetFullPath)]
                 : [SyncSqlPaths.Resolve(null, outputRoot, SyncSqlPaths.ObjectsRelativePath)];
-            string failOnRaw = parseResult.GetValue(failOnOption) ?? "error";
-            if (!Enum.TryParse(failOnRaw, ignoreCase: true, out TSqlLintSeverity failOn))
+            TSqlLintConfiguration configuration;
+            try
+            {
+                string? configPath = parseResult.GetValue(configOption);
+                configPath ??= File.Exists("config/sql-style.json") ? "config/sql-style.json" : null;
+                configuration = configPath is null ? TSqlLintConfiguration.Default : TSqlLintConfiguration.Load(configPath);
+            }
+            catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or JsonException)
+            {
+                logger.LogError("Invalid SQL style configuration: {Message}", exception.Message);
+                return 1;
+            }
+
+            string failOnRaw = parseResult.GetValue(failOnOption) ?? configuration.FailOn.ToString();
+            if (!(failOnRaw.Equals("warning", StringComparison.OrdinalIgnoreCase) || failOnRaw.Equals("error", StringComparison.OrdinalIgnoreCase)) ||
+                !Enum.TryParse(failOnRaw, ignoreCase: true, out TSqlLintSeverity failOn))
             {
                 logger.LogError("Invalid --fail-on value '{Value}' - expected 'warning' or 'error'.", failOnRaw);
                 return 1;
@@ -67,7 +86,7 @@ internal static class LintCommand
 
             files.Sort(StringComparer.Ordinal);
 
-            TSqlLinter linter = new();
+            TSqlLinter linter = new(configuration);
             int errorCount = 0;
             int warningCount = 0;
 

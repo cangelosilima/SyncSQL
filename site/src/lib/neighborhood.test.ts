@@ -49,6 +49,29 @@ describe('getEdgeColumns', () => {
 })
 
 describe('directional expansion and connecting paths', () => {
+  it.each(['LinkedServers', 'DatabaseLinks'])('shows one hop beyond %s on both sides, without unrelated branches', type => {
+    const linked = buildIndex(makeCatalog({
+      nodes: ['root', 'caller', 'target', 'callerParent', 'targetChild', 'sibling'].map(id => makeNode({ id })).concat([
+        makeNode({ id: 'incomingLink', type }), makeNode({ id: 'outgoingLink', type }),
+      ]),
+      edges: [makeEdge('callerParent', 'caller'), makeEdge('caller', 'incomingLink'), makeEdge('incomingLink', 'root'),
+        makeEdge('root', 'outgoingLink'), makeEdge('outgoingLink', 'target'), makeEdge('target', 'targetChild'),
+        makeEdge('incomingLink', 'sibling'), makeEdge('sibling', 'outgoingLink')],
+    }))
+    expect(getDirectionalNeighborhood(linked, 'root', 1, 1).sort()).toEqual(['caller', 'incomingLink', 'outgoingLink', 'root', 'target'])
+    expect(getDirectionalNeighborhood(linked, 'root', 1, 0).sort()).toEqual(['outgoingLink', 'root', 'target'])
+    expect(getDirectionalNeighborhood(linked, 'root', 0, 1).sort()).toEqual(['caller', 'incomingLink', 'root'])
+    expect(getDirectionalNeighborhood(linked, 'root', 0, 0)).toEqual(['root'])
+    expect(getDirectionalNeighborhood(linked, 'outgoingLink', 0, 0)).toEqual(['outgoingLink'])
+    expect(getDirectionalNeighborhood(linked, 'callerParent', 2, 0).sort()).toEqual(['caller', 'callerParent', 'incomingLink', 'root', 'sibling'])
+  })
+  it('keeps the extra hop bounded across consecutive links and cycles', () => {
+    const linked = buildIndex(makeCatalog({
+      nodes: ['root', 'a', 'b', 'c'].map(id => makeNode({ id, type: 'DatabaseLinks' })),
+      edges: [makeEdge('root', 'a'), makeEdge('a', 'root'), makeEdge('a', 'b'), makeEdge('b', 'c')],
+    }))
+    expect(getDirectionalNeighborhood(linked, 'root', 1, 0)).toEqual(['root', 'a', 'b'])
+  })
   const directed = buildIndex(makeCatalog({
     nodes: ['root', 'dep', 'far', 'user', 'caller', 'sibling'].map(id => makeNode({ id })),
     edges: [makeEdge('root', 'dep'), makeEdge('dep', 'far'), makeEdge('user', 'root'), makeEdge('caller', 'user'), makeEdge('sibling', 'dep'), makeEdge('far', 'root')],

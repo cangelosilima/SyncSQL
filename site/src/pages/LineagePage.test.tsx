@@ -165,6 +165,39 @@ describe('LineagePage', () => {
     expect(graphIds()).toContain('view')
     expect(screen.getByText(/1 connecting object kept outside the filters/)).toBeInTheDocument()
   })
+  it.each(['dependencies', 'dependents'] as const)('expands %s beyond six hops and restores deep shared views', async (direction) => {
+    const user = userEvent.setup()
+    const ids = Array.from({ length: 22 }, (_, i) => `node${i}`)
+    catalog = makeCatalog({
+      nodes: ids.map(id => makeNode({ id })),
+      edges: ids.slice(1).map((id, i) => direction === 'dependencies' ? makeEdge(ids[i], id) : makeEdge(id, ids[i])),
+    })
+    const otherDirection = direction === 'dependencies' ? 'dependents' : 'dependencies'
+    const label = direction === 'dependencies' ? 'Dependencies' : 'Dependents'
+    const view = renderAt(`/lineage?focus=node0&${direction}=6&${otherDirection}=0`)
+    expect(graphIds()).toHaveLength(7)
+    await user.click(screen.getByRole('button', { name: `Add ${direction} hop` }))
+    expect(graphIds()).toContain('node7')
+    expect(graphIds()).not.toContain('node8')
+    await user.selectOptions(screen.getByRole('combobox', { name: `${label} hops` }), '20')
+    expect(graphIds()).toHaveLength(21)
+    expect(graphIds()).toContain('node20')
+    expect(graphIds()).not.toContain('node21')
+    expect(screen.getByRole('button', { name: `Add ${direction} hop` })).toBeDisabled()
+    const url = screen.getByTestId('location').textContent!
+    expect(url).toContain(`${direction}=20`)
+    view.unmount()
+    renderAt(`/lineage${url}`)
+    expect(screen.getByRole('combobox', { name: `${label} hops` })).toHaveValue('20')
+    expect(graphIds()).toEqual(ids.slice(0, 21))
+  })
+
+  it('restores a legacy shared radius beyond six hops in both directions', () => {
+    renderAt('/lineage?focus=Order&hops=12')
+    expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('12')
+    expect(screen.getByRole('combobox', { name: 'Dependents hops' })).toHaveValue('12')
+  })
+
   it('validates hop limits and keeps old radius links working', () => {
     renderAt('/lineage?focus=Order&hops=3&dependencies=-1&dependents=100')
     expect(screen.getByRole('combobox', { name: 'Dependencies hops' })).toHaveValue('3')
