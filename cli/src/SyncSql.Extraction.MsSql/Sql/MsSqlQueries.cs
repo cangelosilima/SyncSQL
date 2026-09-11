@@ -444,7 +444,8 @@ internal static class MsSqlQueries
     public const string Replication = """
         IF OBJECT_ID('dbo.syspublications') IS NULL
         BEGIN
-            SELECT CAST(NULL AS sysname) AS PublicationName, CAST(NULL AS NVARCHAR(MAX)) AS Description, CAST(NULL AS NVARCHAR(MAX)) AS Articles WHERE 1 = 0;
+            SELECT CAST(NULL AS sysname) AS PublicationName, CAST(NULL AS NVARCHAR(MAX)) AS Description,
+                CAST(NULL AS NVARCHAR(MAX)) AS Articles, CAST(NULL AS NVARCHAR(MAX)) AS SourceDefinitions WHERE 1 = 0;
         END
         ELSE
         BEGIN
@@ -457,7 +458,13 @@ internal static class MsSqlQueries
                     WHERE a.pubid = p.pubid
                     ORDER BY a.name
                     FOR XML PATH(''), TYPE
-                ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS Articles
+                ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS Articles,
+                (SELECT 'EXEC sys.sp_addarticle @publication = N''' + REPLACE(p.name, '''', '''''')
+                    + ''', @article = N''' + REPLACE(a.name, '''', '''''')
+                    + ''', @source_owner = N''' + REPLACE(OBJECT_SCHEMA_NAME(a.objid), '''', '''''')
+                    + ''', @source_object = N''' + REPLACE(OBJECT_NAME(a.objid), '''', '''''') + ''';' + CHAR(10)
+                 FROM dbo.sysarticles a WHERE a.pubid = p.pubid ORDER BY a.name
+                 FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)') AS SourceDefinitions
             FROM dbo.syspublications p
             ORDER BY p.name;
         END

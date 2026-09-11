@@ -4,6 +4,24 @@ namespace SyncSql.Catalog.Tests;
 
 public class NodeIndexTests
 {
+    [Fact]
+    public void Broker_namespaces_are_distinct_and_do_not_resolve_in_another_database()
+    {
+        CatalogNode caller = Node("SQL", "App", "sales", "Send", "StoredProcedures");
+        CatalogNode message = Node("SQL", "App", null, "shared", "MessageTypes");
+        CatalogNode contract = Node("SQL", "App", null, "shared", "Contracts");
+        CatalogNode upperMessage = Node("SQL", "App", null, "SHARED", "MessageTypes");
+        CatalogNode table = Node("SQL", "App", "sales", "shared");
+        CatalogNode service = Node("SQL", "Other", null, "shared", "Services");
+        NodeIndex index = new([caller, message, upperMessage, contract, service, table]);
+        Assert.Equal(message.Id, index.Resolve(caller, new ObjectRef(null, "shared") { ObjectType = "MessageTypes" }).NodeId);
+        Assert.Equal(contract.Id, index.Resolve(caller, new ObjectRef(null, "shared") { ObjectType = "Contracts" }).NodeId);
+        Assert.Equal(upperMessage.Id, index.Resolve(caller, new ObjectRef(null, "SHARED") { ObjectType = "MessageTypes" }).NodeId);
+        Assert.Equal(table.Id, index.Resolve(caller, new ObjectRef(null, "shared")).NodeId);
+        Assert.Equal(ReferenceResolutionKind.System, index.Resolve(caller, new ObjectRef(null, "DEFAULT") { ObjectType = "Contracts" }).Kind);
+        Assert.Equal(ReferenceResolutionKind.NotFound, index.Resolve(caller, new ObjectRef(null, "shared") { ObjectType = "Services" }).Kind);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

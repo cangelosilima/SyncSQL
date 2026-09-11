@@ -60,7 +60,36 @@ internal sealed class HeterogeneousFleet
         string[] databases = [.. objects.Where(o => o.Database != "_ServerLevel").Select(o => o.Database).Distinct()];
         foreach (string database in databases)
         {
-            await ExecuteAsync(admin, $"IF DB_ID(N'{database}') IS NOT NULL BEGIN ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}]; END; CREATE DATABASE [{database}];", token);
+            if (Convert.ToInt32(await ScalarAsync(admin,
+                $"SELECT COUNT(*) FROM sys.databases WHERE name = N'{database}' AND is_published = 1", token), CultureInfo.InvariantCulture) != 0)
+            {
+                // Release any log-reader reservation acquired by sp_droppublication before
+                // sp_replicationdboption opens its own connection to the publishing database.
+                await using (DbConnection publicationConnection = await OpenAsync(server, database, null, token))
+                {
+                    await ExecuteAsync(publicationConnection, "EXEC sys.sp_droppublication @publication = N'all'; EXEC sys.sp_replflush;", token);
+                }
+                await ExecuteAsync(admin, $"EXEC sys.sp_replicationdboption @dbname = N'{database}', @optname = N'publish', @value = N'false';", token);
+            }
+            await ExecuteAsync(admin, $"IF DB_ID(N'{database}') IS NOT NULL BEGIN ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}]; END; CREATE DATABASE [{database}]; ALTER DATABASE [{database}] SET ENABLE_BROKER;", token);
+        }
+        if (objects.Any(o => o.Type == "Replication"))
+        {
+            await ExecuteAsync(admin, $"""
+                IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE is_distributor = 1)
+                    EXEC sys.sp_adddistributor @distributor = N'{server.Name}', @password = N'{SqlPassword}';
+                IF DB_ID(N'lineage_distribution') IS NULL
+                    EXEC sys.sp_adddistributiondb @database = N'lineage_distribution', @security_mode = 0,
+                        @login = N'sa', @password = N'{SqlPassword}';
+                IF NOT EXISTS (SELECT 1 FROM msdb.dbo.MSdistpublishers WHERE name = N'{server.Name}')
+                    EXEC sys.sp_adddistpublisher @publisher = N'{server.Name}', @distribution_db = N'lineage_distribution',
+                        @security_mode = 0, @login = N'sa', @password = N'{SqlPassword}',
+                        @working_directory = N'/var/opt/mssql/data';
+                """, token);
+            foreach (string database in objects.Where(o => o.Type == "Replication").Select(o => o.Database).Distinct())
+            {
+                await ExecuteAsync(admin, $"EXEC sys.sp_replicationdboption @dbname = N'{database}', @optname = N'publish', @value = N'true';", token);
+            }
         }
         foreach (ScenarioPrincipal user in Principals.Where(p => p.Server == server.Name))
         {
@@ -69,7 +98,7 @@ internal sealed class HeterogeneousFleet
         foreach (string database in databases)
         {
             await using DbConnection connection = await OpenAsync(server, database, null, token);
-            foreach (string schema in objects.Where(o => o.Database == database).Select(o => o.Schema!).Distinct())
+            foreach (string schema in objects.Where(o => o.Database == database && o.Schema is not null).Select(o => o.Schema!).Distinct())
             {
                 await ExecuteAsync(connection, $"CREATE SCHEMA [{schema}] AUTHORIZATION dbo;", token);
             }
@@ -151,6 +180,11 @@ internal sealed class HeterogeneousFleet
     private static int Phase(ExtractedObject obj) => obj.Type switch
     {
         "Tables" => 0,
+        "MessageTypes" => 0,
+        "Contracts" => 1,
+        "Queues" => 2,
+        "Services" => 3,
+        "Replication" => 9,
         "DatabaseLinks" => 1,
         "Views" when obj.Name == "V_ITEMS" => 2,
         "Views" => 3,

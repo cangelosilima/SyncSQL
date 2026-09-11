@@ -214,6 +214,29 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
             await ExtractReplicationAsync(connection, server, database, filters, objects);
         }
 
+        if (ServiceBrokerReader.ObjectTypes.Any(filters.ObjectTypes.Contains))
+        {
+            foreach (BrokerRow row in await ServiceBrokerReader.ReadAsync(connection))
+            {
+                if (!filters.ObjectTypes.Contains(row.Type) || !filters.ObjectNames.IsAllowed(row.Name)
+                    || (row.SchemaName is not null && !filters.Schemas.IsAllowed(row.SchemaName)))
+                {
+                    continue;
+                }
+                objects.Add(new ExtractedObject
+                {
+                    Server = server.Name,
+                    Database = database,
+                    Schema = row.SchemaName,
+                    Type = row.Type,
+                    Name = row.Name,
+                    Ddl = row.Ddl,
+                    Engine = DatabaseEngine.MsSql,
+                    Grants = row.Type == "Queues" ? grants.GetValueOrDefault($"{row.SchemaName}.{row.Name}") ?? [] : [],
+                });
+            }
+        }
+
         await AppendConfigurationAsync(connection, server.Name, database, objects, firstObject);
     }
 
@@ -372,7 +395,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                     Database = database,
                     Type = "Replication",
                     Name = row.PublicationName,
-                    Ddl = ReplicationDdlBuilder.Build(row.PublicationName, row.Description, row.Articles),
+                    Ddl = ReplicationDdlBuilder.Build(row.PublicationName, row.Description, row.Articles, row.SourceDefinitions),
                     Engine = DatabaseEngine.MsSql,
                 });
             }

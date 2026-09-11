@@ -12,6 +12,28 @@ namespace SyncSql.Samples.Benchmark.Tests;
 public sealed class HeterogeneousLineageTests
 {
     [Fact]
+    public void Contract_covers_publication_sources_and_four_local_Broker_flows()
+    {
+        HeterogeneousContract contract = HeterogeneousContract.Load();
+        Assert.Equal(2, contract.Nodes.Count(n => n.Type == "Replication"));
+        foreach (ScenarioNode publication in contract.Nodes.Where(n => n.Type == "Replication"))
+        {
+            ScenarioDependency[] articles = [.. contract.Dependencies.Where(d => d.From == publication.Id)];
+            Assert.Equal(2, articles.Length);
+            Assert.All(articles, article => Assert.Contains(contract.Nodes,
+                n => n.Id == article.To && n.Type == "Tables" && n.Name == "ITEMS" && n.Database == publication.Database));
+        }
+        foreach (var database in contract.Nodes.Where(n => n.Type == "Services").GroupBy(n => (n.Server, n.Database)))
+        {
+            Assert.Equal(2, database.Count());
+            Assert.Equal(2, contract.Nodes.Count(n => n.Type == "Queues" && (n.Server, n.Database) == database.Key));
+            Assert.Single(contract.Nodes, n => n.Type == "Contracts" && (n.Server, n.Database) == database.Key);
+            Assert.Single(contract.Nodes, n => n.Type == "MessageTypes" && (n.Server, n.Database) == database.Key);
+        }
+        Assert.Equal(4, contract.Nodes.Where(n => n.Type == "Services").Select(n => (n.Server, n.Database)).Distinct().Count());
+    }
+
+    [Fact]
     public void Gateway_routes_every_private_link_to_its_expected_SQL_database()
     {
         string root = Path.Combine(HeterogeneousContract.Root, "gateway");
@@ -59,7 +81,7 @@ public sealed class HeterogeneousLineageTests
                 Assert.True(contract.Nodes.Count(n => n.Scope == scope.Key) >= 10);
             }
         }
-        Assert.Equal(6, contract.Paths.Count);
+        Assert.Equal(16, contract.Paths.Count);
         Assert.Equal(2, contract.Paths.Count(p => p.Nodes[0] == p.Nodes[^1]));
         Assert.All(contract.Dependencies, d =>
         {

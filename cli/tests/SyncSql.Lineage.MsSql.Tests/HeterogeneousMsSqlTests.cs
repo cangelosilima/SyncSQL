@@ -8,6 +8,49 @@ public sealed class HeterogeneousMsSqlTests
 {
     private readonly MsSqlLineageAnalyzer _analyzer = new(NullLogger<MsSqlLineageAnalyzer>.Instance);
 
+    [Fact]
+    public void Broker_definitions_and_operations_preserve_their_namespaces()
+    {
+        var result = _analyzer.Analyze("""
+            CREATE CONTRACT [same.name] ([same.name] SENT BY INITIATOR);
+            CREATE SERVICE [same.name] ON QUEUE audit.Inbox ([same.name]);
+            DECLARE @h uniqueidentifier;
+            BEGIN DIALOG @h FROM SERVICE [same.name] TO SERVICE N'target' ON CONTRACT [same.name] WITH ENCRYPTION = OFF;
+            SEND ON CONVERSATION @h MESSAGE TYPE [same.name] (N'<item/>');
+            RECEIVE TOP (1) message_body FROM audit.Inbox;
+            """);
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "same.name", ObjectType: "MessageTypes", Schema: null });
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "same.name", ObjectType: "Contracts", Schema: null });
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "same.name", ObjectType: "Services", Schema: null });
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "target", ObjectType: "Services" });
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "Inbox", ObjectType: "Queues", Schema: "audit" });
+    }
+
+    [Fact]
+    public void Broker_variables_and_remote_instances_do_not_invent_local_targets()
+    {
+        var result = _analyzer.Analyze("""
+            DECLARE @h uniqueidentifier, @target nvarchar(128), @type nvarchar(128);
+            BEGIN DIALOG @h FROM SERVICE [sender] TO SERVICE @target ON CONTRACT [agreement];
+            BEGIN DIALOG @h FROM SERVICE [sender] TO SERVICE N'remote', N'11111111-1111-1111-1111-111111111111' ON CONTRACT [agreement];
+            SEND ON CONVERSATION @h MESSAGE TYPE @type (N'payload');
+            """);
+        Assert.DoesNotContain(result.ObjectRefs, r => r.Name is "remote" or "@target" or "@type" or "payload");
+        Assert.Contains(result.ObjectRefs, r => r is { Name: "sender", ObjectType: "Services" });
+    }
+
+    [Fact]
+    public void Publication_articles_reference_source_objects_not_article_aliases()
+    {
+        var result = _analyzer.Analyze("""
+            EXEC sys.sp_addarticle @publication = N'pub', @article = N'alias', @source_owner = N'sales', @source_object = N'Item''s';
+            EXEC app.sp_addarticle @source_owner = N'fake', @source_object = N'fake';
+            EXEC sys.sp_addarticle @source_owner = N'sales', @source_object = @unknown;
+            """);
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "sales", Name: "Item's" });
+        Assert.DoesNotContain(result.ObjectRefs, r => r.Name is "alias" or "fake" or "@unknown" or "pub");
+    }
+
     [Theory]
     [InlineData("BEGIN PROCUREMENT.PROCUREMENT_API.REFRESH; END;")]
     [InlineData("BEGIN PROCUREMENT.PROCUREMENT_API.REFRESH(); END;")]

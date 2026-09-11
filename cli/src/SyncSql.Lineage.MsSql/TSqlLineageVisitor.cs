@@ -82,6 +82,46 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
+    private void AddBrokerReference(TSqlFragment? fragment, string type)
+    {
+        string? name = fragment switch
+        {
+            Identifier identifier => identifier.Value,
+            StringLiteral literal => literal.Value,
+            IdentifierOrValueExpression expression => expression.Identifier?.Value ?? (expression.ValueExpression as StringLiteral)?.Value,
+            SchemaObjectName qualified => qualified.BaseIdentifier?.Value,
+            _ => null,
+        };
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            ObjectRefs.Add(new ObjectRef((fragment as SchemaObjectName)?.SchemaIdentifier?.Value, name) { ObjectType = type });
+        }
+    }
+
+    public override void Visit(ContractMessage node) => AddBrokerReference(node.Name, "MessageTypes");
+    public override void Visit(ServiceContract node) => AddBrokerReference(node.Name, "Contracts");
+    public override void Visit(CreateServiceStatement node) => AddBrokerReference(node.QueueName, "Queues");
+    public override void Visit(ReceiveStatement node) => AddBrokerReference(node.Queue, "Queues");
+    public override void Visit(SendStatement node) => AddBrokerReference(node.MessageTypeName, "MessageTypes");
+    public override void Visit(BeginDialogStatement node)
+    {
+        AddBrokerReference(node.InitiatorServiceName, "Services");
+        // A specified remote broker instance cannot be resolved as a local service.
+        if (node.InstanceSpec is null)
+        {
+            AddBrokerReference(node.TargetServiceName, "Services");
+        }
+        AddBrokerReference(node.ContractName, "Contracts");
+    }
+
+    public override void Visit(QueueProcedureOption node)
+    {
+        if (FromSchemaObjectName(node.OptionValue) is { } reference)
+        {
+            ObjectRefs.Add(reference);
+        }
+    }
+
     // WITH cte AS (...) - remembered so the analyzer can drop the "references" that reading the CTE back
     // produces. Overriding Visit still recurses into the CTE's own body, so real tables inside it are
     // collected as usual.
@@ -258,6 +298,18 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true) : TSqlFragmentV
         switch (specification.ExecutableEntity)
         {
             case ExecutableProcedureReference { ProcedureReference.ProcedureReference.Name: { } procedureName }:
+                if (procedureName.BaseIdentifier.Value.Equals("sp_addarticle", StringComparison.OrdinalIgnoreCase)
+                    && procedureName.SchemaIdentifier?.Value is "sys" or "dbo"
+                    && procedureName.DatabaseIdentifier is null && linkedServer is null)
+                {
+                    string? Parameter(string name) => specification.ExecutableEntity.Parameters
+                        .FirstOrDefault(p => string.Equals(p.Variable?.Name, name, StringComparison.OrdinalIgnoreCase))
+                        ?.ParameterValue is StringLiteral literal ? literal.Value : null;
+                    if (Parameter("@source_owner") is { } owner && Parameter("@source_object") is { } source)
+                    {
+                        ObjectRefs.Add(new ObjectRef(owner, source));
+                    }
+                }
                 if (FromSchemaObjectName(procedureName) is { } objRef)
                 {
                     ObjectRefs.Add(linkedServer is null ? objRef : objRef with { Server = linkedServer });
