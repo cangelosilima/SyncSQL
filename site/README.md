@@ -41,7 +41,7 @@ contents, raw logs and Oracle installation media are not part of the site.
 
 ## Publish
 
-[Publish catalog demo](../.github/workflows/catalog-demo.yml) tests and builds the
+[Site - deploy catalog demo](../.github/workflows/site-deploy.yml) tests and builds the
 committed snapshot on GitHub-hosted Linux, including the vendored browser AI model.
 Pull requests build for validation; main-branch changes deploy to GitHub Pages.
 It can also be run manually on `main`. Set repository **Settings → Pages → Source**

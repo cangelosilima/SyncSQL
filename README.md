@@ -2,7 +2,8 @@
 
 SQLineage is the database catalog and investigation app, formerly branded SyncSQL. The repository, CLI/project identifiers and deployment paths retain their existing names for compatibility.
 
-[![CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/ci.yml)
+[![CLI CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml)
+[![Site CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml)
 
 SQLineage extracts database objects — stored procedures, views, functions,
 triggers, tables (with foreign keys, check constraints and indexes), schemas,
@@ -424,19 +425,26 @@ is what makes the same steps runnable, and dry-runnable, from a workstation.
 
 ### GitHub Actions
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) covers the build-and-test
-half on GitHub, for pushes to `main`, pull requests, and manual runs:
+GitHub workflows are grouped into independent CLI and Site families:
 
-| Job                | What it runs |
-|--------------------|--------------|
-| `cli`              | `dotnet format --verify-no-changes`, `dotnet build`, `dotnet test` over `cli/SyncSql.slnx` (test results uploaded as a `.trx` artifact). |
-| `site`             | `npm ci`, browser/unit tests, strict verification of the Git LFS-backed local AI model, and the typechecked Vite build in `site/`. |
-| `publish-script`   | Parses `scripts/Publish-SyncSqlObjects.ps1` and checks it against PSScriptAnalyzer's Windows PowerShell 5.1 syntax rules. |
+| Workflow | What it runs |
+|----------|--------------|
+| [CLI - CI](.github/workflows/cli.yml) | .NET format, build, tests and coverage on Linux and Windows; gateway publishing guards and CLI workflow validation; publishing-script compatibility checks, including the actual Windows PowerShell 5.1 parser. |
+| [CLI - heterogeneous benchmark](.github/workflows/cli-benchmark.yml) | Provisions the sample databases, extracts objects and verifies lineage on relevant pull requests or manual runs. Manual runs can also enable the prepared Oracle gateway runner. |
+| [CLI - publish Oracle gateway to GHCR](.github/workflows/cli-publish-oracle-gateway.yml) | Manually validates and publishes the private gateway image from the default branch. |
+| [Site - CI](.github/workflows/site.yml) | Browser/unit tests and coverage, strict verification of the Git LFS-backed local AI model, and typechecked builds on Linux and Windows; site workflow validation. |
+| [Site - deploy catalog demo](.github/workflows/site-deploy.yml) | Checks the example catalog contract, tests and builds the demo, then deploys to GitHub Pages on `main`. Pull requests build without deploying. |
 
-It deliberately stops there: extraction, publishing to git, and the Pages
-deploy stay in GitLab CI, since those are the jobs that need database
-credentials, a push token, and a schedule. Nothing in this workflow touches
-a database, a credential, or a git remote.
+Both CI workflows support pushes to `main`, pull requests, and manual runs.
+Path filters keep CLI-only and site-only changes independent. Shared inputs,
+including `config/sql-style.json`, the example catalog contract and Git checkout
+attributes, trigger both families. Each family validates its own workflow files.
+Existing build/test job names are retained; path-filtered workflows should not
+be required unconditionally by branch protection, because unrelated changes
+skip them.
+
+Scheduled production extraction, publishing objects to git, and the production
+GitLab Pages deployment remain in the GitLab pipeline described above.
 
 ## The catalog / lineage site
 

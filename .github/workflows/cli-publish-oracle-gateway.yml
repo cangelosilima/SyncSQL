@@ -1,4 +1,4 @@
-name: Publish Oracle gateway to GHCR
+name: CLI - publish Oracle gateway to GHCR
 
 on:
   workflow_dispatch:
