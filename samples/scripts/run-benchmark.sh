@@ -15,6 +15,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 REUSE=0
 UPDATE_BASELINE=0
 FILTER=""
+SCENARIO="samples"
+GATEWAY=0
 
 usage() {
   cat <<'USAGE'
@@ -23,6 +25,8 @@ Usage: run-benchmark.sh [options]
   --reuse              Assert against the existing samples/output instead of re-extracting.
   --update-baseline    Re-record samples/expected/baseline.json from this run.
   --filter <expr>      Passed through to `dotnet test --filter`.
+  --scenario <id>      samples (default) or heterogeneous-lineage.
+  --gateway            Execute Oracle gateway tests for heterogeneous-lineage.
   -h, --help           This text.
 USAGE
 }
@@ -31,11 +35,23 @@ while (($# > 0)); do
   case "$1" in
     --reuse) REUSE=1; shift ;;
     --update-baseline) UPDATE_BASELINE=1; shift ;;
+    --scenario) SCENARIO="${2:?--scenario needs an id}"; shift 2 ;;
+    --gateway) GATEWAY=1; shift ;;
     --filter) FILTER="${2:?--filter needs an expression}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option '$1'. Try --help." ;;
   esac
 done
+
+if [[ "$SCENARIO" == "heterogeneous-lineage" ]]; then
+  (( REUSE == 0 && UPDATE_BASELINE == 0 )) && [[ -z "$FILTER" ]] || die "The heterogeneous scenario requires a fresh run; reuse/baseline/filter options are not supported."
+  if ((GATEWAY)); then
+    exec bash "$REPO_DIR/samples/scenarios/heterogeneous-lineage/run.sh" --gateway
+  fi
+  exec bash "$REPO_DIR/samples/scenarios/heterogeneous-lineage/run.sh"
+fi
+((GATEWAY == 0)) || die 'Gateway applies only to the heterogeneous-lineage scenario.'
+[[ "$SCENARIO" == "samples" ]] || die "Unknown scenario '$SCENARIO'."
 
 need_cmd dotnet "Install the .NET SDK pinned by global.json: https://dotnet.microsoft.com/download"
 load_env

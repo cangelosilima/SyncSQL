@@ -36,7 +36,7 @@ These widths are concrete review examples. Final CSS breakpoints require content
 
 ## States and edge cases
 
-[State specimens](https://www.figma.com/design/yAIbDoFO7bJd7Vm22nCc6p?node-id=101-2) cover catalog loading/error, object not found, no columns/history/grants/metrics, missing historical DDL, orphaned/system/remote references and oversized diff. Synthetic fixtures are labeled; actual reference specimens use dbo.ArchivedOrders, sp_executesql and the SIG remote function from the catalog. These are visual fragments with explanatory annotations, not final integrated screen copies or final product copy.
+[State specimens](https://www.figma.com/design/yAIbDoFO7bJd7Vm22nCc6p?node-id=101-2) cover catalog loading/error, object not found, no columns/history/grants/metrics, missing historical DDL, orphaned/system/remote references and oversized diff. Synthetic fixtures are labeled; actual reference specimens use dbo.ArchivedOrders, sp_executesql and the SQL_A remote function from the catalog. These are visual fragments with explanatory annotations, not final integrated screen copies or final product copy.
 
 Do not infer generic retry capability from these states. Preserve the actual catalog error and publication explanation. Missing historical DDL stays disabled. Loading does not show invented percentages. No extracted grant is not proof of no effective access.
 

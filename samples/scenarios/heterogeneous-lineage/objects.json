@@ -1,0 +1,3694 @@
+[
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE ORDER_ENTRY.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE ORDER_ENTRY.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE ORDER_ENTRY.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE ORDER_ENTRY.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW ORDER_ENTRY.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM ORDER_ENTRY.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW ORDER_ENTRY.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM ORDER_ENTRY.DETAILS d JOIN ORDER_ENTRY.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_READ AS SELECT ID, AMOUNT FROM ORDER_ENTRY.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_WRITE @ID int, @AMOUNT int AS INSERT INTO ORDER_ENTRY.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION ORDER_ENTRY.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM ORDER_ENTRY.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER ORDER_ENTRY.TR_AUDIT ON ORDER_ENTRY.ITEMS AFTER INSERT AS INSERT INTO ORDER_ENTRY.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE FULFILLMENT.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "FULFILLMENT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "FULFILLMENT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "FULFILLMENT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "FULFILLMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE FULFILLMENT.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE FULFILLMENT.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE FULFILLMENT.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW FULFILLMENT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM FULFILLMENT.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "FULFILLMENT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW FULFILLMENT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM FULFILLMENT.DETAILS d JOIN FULFILLMENT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE FULFILLMENT.P_READ AS SELECT ID, AMOUNT FROM FULFILLMENT.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "FULFILLMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE FULFILLMENT.P_WRITE @ID int, @AMOUNT int AS INSERT INTO FULFILLMENT.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "FULFILLMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION FULFILLMENT.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM FULFILLMENT.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "FULFILLMENT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER FULFILLMENT.TR_AUDIT ON FULFILLMENT.ITEMS AFTER INSERT AS INSERT INTO FULFILLMENT.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE ORDER_AUDIT.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "ORDER_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE ORDER_AUDIT.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE ORDER_AUDIT.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE ORDER_AUDIT.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW ORDER_AUDIT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM ORDER_AUDIT.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW ORDER_AUDIT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM ORDER_AUDIT.DETAILS d JOIN ORDER_AUDIT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE ORDER_AUDIT.P_READ AS SELECT ID, AMOUNT FROM ORDER_AUDIT.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE ORDER_AUDIT.P_WRITE @ID int, @AMOUNT int AS INSERT INTO ORDER_AUDIT.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION ORDER_AUDIT.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM ORDER_AUDIT.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_AUDIT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER ORDER_AUDIT.TR_AUDIT ON ORDER_AUDIT.ITEMS AFTER INSERT AS INSERT INTO ORDER_AUDIT.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE INVOICING.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "INVOICING_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "INVOICING_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "INVOICING_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "INVOICING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE INVOICING.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE INVOICING.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE INVOICING.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW INVOICING.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM INVOICING.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "INVOICING_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW INVOICING.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM INVOICING.DETAILS d JOIN INVOICING.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE INVOICING.P_READ AS SELECT ID, AMOUNT FROM INVOICING.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVOICING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE INVOICING.P_WRITE @ID int, @AMOUNT int AS INSERT INTO INVOICING.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVOICING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION INVOICING.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM INVOICING.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "INVOICING",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER INVOICING.TR_AUDIT ON INVOICING.ITEMS AFTER INSERT AS INSERT INTO INVOICING.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE SETTLEMENT.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "SETTLEMENT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "SETTLEMENT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "SETTLEMENT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "SETTLEMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE SETTLEMENT.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE SETTLEMENT.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE SETTLEMENT.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW SETTLEMENT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM SETTLEMENT.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "SETTLEMENT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW SETTLEMENT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM SETTLEMENT.DETAILS d JOIN SETTLEMENT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE SETTLEMENT.P_READ AS SELECT ID, AMOUNT FROM SETTLEMENT.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "SETTLEMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE SETTLEMENT.P_WRITE @ID int, @AMOUNT int AS INSERT INTO SETTLEMENT.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "SETTLEMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION SETTLEMENT.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM SETTLEMENT.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "SETTLEMENT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER SETTLEMENT.TR_AUDIT ON SETTLEMENT.ITEMS AFTER INSERT AS INSERT INTO SETTLEMENT.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE FINANCE_AUDIT.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "FINANCE_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE FINANCE_AUDIT.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE FINANCE_AUDIT.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE FINANCE_AUDIT.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW FINANCE_AUDIT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM FINANCE_AUDIT.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW FINANCE_AUDIT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM FINANCE_AUDIT.DETAILS d JOIN FINANCE_AUDIT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE FINANCE_AUDIT.P_READ AS SELECT ID, AMOUNT FROM FINANCE_AUDIT.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE FINANCE_AUDIT.P_WRITE @ID int, @AMOUNT int AS INSERT INTO FINANCE_AUDIT.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "FINANCE_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION FINANCE_AUDIT.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM FINANCE_AUDIT.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Receivables",
+    "schema": "FINANCE_AUDIT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER FINANCE_AUDIT.TR_AUDIT ON FINANCE_AUDIT.ITEMS AFTER INSERT AS INSERT INTO FINANCE_AUDIT.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE INVENTORY.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "INVENTORY_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "INVENTORY_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE INVENTORY.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE INVENTORY.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE INVENTORY.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW INVENTORY.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM INVENTORY.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "INVENTORY_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW INVENTORY.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM INVENTORY.DETAILS d JOIN INVENTORY.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE INVENTORY.P_READ AS SELECT ID, AMOUNT FROM INVENTORY.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE INVENTORY.P_WRITE @ID int, @AMOUNT int AS INSERT INTO INVENTORY.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION INVENTORY.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM INVENTORY.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER INVENTORY.TR_AUDIT ON INVENTORY.ITEMS AFTER INSERT AS INSERT INTO INVENTORY.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE DISPATCH.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "DISPATCH_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "DISPATCH_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "DISPATCH_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "DISPATCH_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE DISPATCH.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE DISPATCH.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE DISPATCH.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW DISPATCH.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM DISPATCH.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "DISPATCH_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW DISPATCH.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM DISPATCH.DETAILS d JOIN DISPATCH.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE DISPATCH.P_READ AS SELECT ID, AMOUNT FROM DISPATCH.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "DISPATCH_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE DISPATCH.P_WRITE @ID int, @AMOUNT int AS INSERT INTO DISPATCH.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "DISPATCH_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION DISPATCH.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM DISPATCH.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "DISPATCH",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER DISPATCH.TR_AUDIT ON DISPATCH.ITEMS AFTER INSERT AS INSERT INTO DISPATCH.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE STOCK_AUDIT.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "STOCK_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE STOCK_AUDIT.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE STOCK_AUDIT.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE STOCK_AUDIT.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW STOCK_AUDIT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM STOCK_AUDIT.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW STOCK_AUDIT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM STOCK_AUDIT.DETAILS d JOIN STOCK_AUDIT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE STOCK_AUDIT.P_READ AS SELECT ID, AMOUNT FROM STOCK_AUDIT.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE STOCK_AUDIT.P_WRITE @ID int, @AMOUNT int AS INSERT INTO STOCK_AUDIT.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "STOCK_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION STOCK_AUDIT.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM STOCK_AUDIT.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "STOCK_AUDIT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER STOCK_AUDIT.TR_AUDIT ON STOCK_AUDIT.ITEMS AFTER INSERT AS INSERT INTO STOCK_AUDIT.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE REPORTING.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "REPORTING_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "REPORTING_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "REPORTING_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "REPORTING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE REPORTING.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE REPORTING.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE REPORTING.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW REPORTING.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM REPORTING.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "REPORTING_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW REPORTING.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM REPORTING.DETAILS d JOIN REPORTING.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE REPORTING.P_READ AS SELECT ID, AMOUNT FROM REPORTING.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "REPORTING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE REPORTING.P_WRITE @ID int, @AMOUNT int AS INSERT INTO REPORTING.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "REPORTING_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION REPORTING.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM REPORTING.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORTING",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER REPORTING.TR_AUDIT ON REPORTING.ITEMS AFTER INSERT AS INSERT INTO REPORTING.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE ANALYTICS_ETL.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ANALYTICS_ETL_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "ANALYTICS_ETL_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "ANALYTICS_ETL_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "ANALYTICS_ETL_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE ANALYTICS_ETL.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE ANALYTICS_ETL.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE ANALYTICS_ETL.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW ANALYTICS_ETL.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM ANALYTICS_ETL.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ANALYTICS_ETL_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW ANALYTICS_ETL.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM ANALYTICS_ETL.DETAILS d JOIN ANALYTICS_ETL.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE ANALYTICS_ETL.P_READ AS SELECT ID, AMOUNT FROM ANALYTICS_ETL.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ANALYTICS_ETL_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE ANALYTICS_ETL.P_WRITE @ID int, @AMOUNT int AS INSERT INTO ANALYTICS_ETL.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ANALYTICS_ETL_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION ANALYTICS_ETL.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM ANALYTICS_ETL.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "ANALYTICS_ETL",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER ANALYTICS_ETL.TR_AUDIT ON ANALYTICS_ETL.ITEMS AFTER INSERT AS INSERT INTO ANALYTICS_ETL.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE REPORT_AUDIT.ITEMS (ID int NOT NULL PRIMARY KEY, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "DENY",
+        "grantee": "REPORT_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE REPORT_AUDIT.DETAILS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE REPORT_AUDIT.AUDIT_LOG (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE REPORT_AUDIT.SETTINGS (ID int, AMOUNT int);",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW REPORT_AUDIT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM REPORT_AUDIT.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW REPORT_AUDIT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM REPORT_AUDIT.DETAILS d JOIN REPORT_AUDIT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_READ",
+    "ddl": "CREATE PROCEDURE REPORT_AUDIT.P_READ AS SELECT ID, AMOUNT FROM REPORT_AUDIT.V_DETAILS;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "StoredProcedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE PROCEDURE REPORT_AUDIT.P_WRITE @ID int, @AMOUNT int AS INSERT INTO REPORT_AUDIT.ITEMS (ID, AMOUNT) VALUES (@ID, @AMOUNT);",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "REPORT_AUDIT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE FUNCTION REPORT_AUDIT.F_COUNT() RETURNS int AS BEGIN DECLARE @N int; SELECT @N = COUNT(*) FROM REPORT_AUDIT.ITEMS; RETURN @N; END;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Intelligence",
+    "schema": "REPORT_AUDIT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE TRIGGER REPORT_AUDIT.TR_AUDIT ON REPORT_AUDIT.ITEMS AFTER INSERT AS INSERT INTO REPORT_AUDIT.AUDIT_LOG (ID, AMOUNT) SELECT ID, AMOUNT FROM inserted;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE PROCUREMENT.ITEMS (ID NUMBER NOT NULL PRIMARY KEY, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE PROCUREMENT.DETAILS (ID NUMBER, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE PROCUREMENT.AUDIT_LOG (ID NUMBER, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE PROCUREMENT.SETTINGS (ID NUMBER, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW PROCUREMENT.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM PROCUREMENT.ITEMS i;",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW PROCUREMENT.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM PROCUREMENT.DETAILS d JOIN PROCUREMENT.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_READ",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_READ AS N NUMBER; BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.V_DETAILS; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_WRITE(P_ID NUMBER, P_AMOUNT NUMBER) AS BEGIN INSERT INTO PROCUREMENT.ITEMS (ID, AMOUNT) VALUES (P_ID, P_AMOUNT); END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE OR REPLACE FUNCTION PROCUREMENT.F_COUNT RETURN NUMBER AS N NUMBER; BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.ITEMS; RETURN N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE OR REPLACE TRIGGER PROCUREMENT.TR_AUDIT AFTER INSERT ON PROCUREMENT.ITEMS FOR EACH ROW BEGIN INSERT INTO PROCUREMENT.AUDIT_LOG (ID, AMOUNT) VALUES (:NEW.ID, :NEW.AMOUNT); END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Tables",
+    "name": "ITEMS",
+    "ddl": "CREATE TABLE COMPLIANCE.ITEMS (ID NUMBER NOT NULL PRIMARY KEY, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "INSERT",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      },
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "UPDATE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_WRITE",
+        "granteeType": null,
+        "column": "AMOUNT"
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Tables",
+    "name": "DETAILS",
+    "ddl": "CREATE TABLE COMPLIANCE.DETAILS (ID NUMBER, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Tables",
+    "name": "AUDIT_LOG",
+    "ddl": "CREATE TABLE COMPLIANCE.AUDIT_LOG (ID NUMBER, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Tables",
+    "name": "SETTINGS",
+    "ddl": "CREATE TABLE COMPLIANCE.SETTINGS (ID NUMBER, AMOUNT NUMBER);",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Views",
+    "name": "V_ITEMS",
+    "ddl": "CREATE VIEW COMPLIANCE.V_ITEMS AS SELECT i.ID, i.AMOUNT FROM COMPLIANCE.ITEMS i;",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Views",
+    "name": "V_DETAILS",
+    "ddl": "CREATE VIEW COMPLIANCE.V_DETAILS AS SELECT d.ID, d.AMOUNT FROM COMPLIANCE.DETAILS d JOIN COMPLIANCE.V_ITEMS i ON i.ID = d.ID;",
+    "engine": "oracle",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "NUMBER"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "NUMBER"
+      }
+    ],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Procedures",
+    "name": "P_READ",
+    "ddl": "CREATE OR REPLACE PROCEDURE COMPLIANCE.P_READ AS N NUMBER; BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.V_DETAILS; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Procedures",
+    "name": "P_WRITE",
+    "ddl": "CREATE OR REPLACE PROCEDURE COMPLIANCE.P_WRITE(P_ID NUMBER, P_AMOUNT NUMBER) AS BEGIN INSERT INTO COMPLIANCE.ITEMS (ID, AMOUNT) VALUES (P_ID, P_AMOUNT); END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Functions",
+    "name": "F_COUNT",
+    "ddl": "CREATE OR REPLACE FUNCTION COMPLIANCE.F_COUNT RETURN NUMBER AS N NUMBER; BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.ITEMS; RETURN N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Triggers",
+    "name": "TR_AUDIT",
+    "ddl": "CREATE OR REPLACE TRIGGER COMPLIANCE.TR_AUDIT AFTER INSERT ON COMPLIANCE.ITEMS FOR EACH ROW BEGIN INSERT INTO COMPLIANCE.AUDIT_LOG (ID, AMOUNT) VALUES (:NEW.ID, :NEW.AMOUNT); END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Packages",
+    "name": "PROCUREMENT_API",
+    "ddl": "CREATE OR REPLACE PACKAGE PROCUREMENT.PROCUREMENT_API AS\n  FUNCTION F01 RETURN NUMBER;\n  FUNCTION F02 RETURN NUMBER;\n  FUNCTION F03 RETURN NUMBER;\n  FUNCTION F04 RETURN NUMBER;\n  FUNCTION F05 RETURN NUMBER;\n  FUNCTION F06 RETURN NUMBER;\n  FUNCTION F07 RETURN NUMBER;\n  FUNCTION F08 RETURN NUMBER;\n  FUNCTION F09 RETURN NUMBER;\n  FUNCTION F10 RETURN NUMBER;\nEND PROCUREMENT_API;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "PackageBodies",
+    "name": "PROCUREMENT_API",
+    "ddl": "CREATE OR REPLACE PACKAGE BODY PROCUREMENT.PROCUREMENT_API AS\n  FUNCTION F01 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.ITEMS; RETURN N; END;\n  FUNCTION F02 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.V_DETAILS; RETURN N; END;\n  FUNCTION F03 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.ITEMS; RETURN N; END;\n  FUNCTION F04 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.V_DETAILS; RETURN N; END;\n  FUNCTION F05 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.ITEMS; RETURN N; END;\n  FUNCTION F06 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.V_DETAILS; RETURN N; END;\n  FUNCTION F07 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.ITEMS; RETURN N; END;\n  FUNCTION F08 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.V_DETAILS; RETURN N; END;\n  FUNCTION F09 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.ITEMS; RETURN N; END;\n  FUNCTION F10 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM PROCUREMENT.V_DETAILS; RETURN N; END;\nEND PROCUREMENT_API;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Packages",
+    "name": "COMPLIANCE_API",
+    "ddl": "CREATE OR REPLACE PACKAGE COMPLIANCE.COMPLIANCE_API AS\n  FUNCTION F01 RETURN NUMBER;\n  FUNCTION F02 RETURN NUMBER;\n  FUNCTION F03 RETURN NUMBER;\n  FUNCTION F04 RETURN NUMBER;\n  FUNCTION F05 RETURN NUMBER;\n  FUNCTION F06 RETURN NUMBER;\n  FUNCTION F07 RETURN NUMBER;\n  FUNCTION F08 RETURN NUMBER;\n  FUNCTION F09 RETURN NUMBER;\n  FUNCTION F10 RETURN NUMBER;\nEND COMPLIANCE_API;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "PackageBodies",
+    "name": "COMPLIANCE_API",
+    "ddl": "CREATE OR REPLACE PACKAGE BODY COMPLIANCE.COMPLIANCE_API AS\n  FUNCTION F01 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.ITEMS; RETURN N; END;\n  FUNCTION F02 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.V_DETAILS; RETURN N; END;\n  FUNCTION F03 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.ITEMS; RETURN N; END;\n  FUNCTION F04 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.V_DETAILS; RETURN N; END;\n  FUNCTION F05 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.ITEMS; RETURN N; END;\n  FUNCTION F06 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.V_DETAILS; RETURN N; END;\n  FUNCTION F07 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.ITEMS; RETURN N; END;\n  FUNCTION F08 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.V_DETAILS; RETURN N; END;\n  FUNCTION F09 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.ITEMS; RETURN N; END;\n  FUNCTION F10 RETURN NUMBER AS N NUMBER;\n  BEGIN SELECT COUNT(*) INTO N FROM COMPLIANCE.V_DETAILS; RETURN N; END;\nEND COMPLIANCE_API;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_READ",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_WRITE",
+        "granteeType": null,
+        "column": null
+      },
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PKG_COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "_ServerLevel",
+    "schema": null,
+    "type": "LinkedServers",
+    "name": "MERIDIAN_SQL",
+    "ddl": "EXEC master.dbo.sp_addlinkedserver @server = N'MERIDIAN_SQL', @srvproduct = N'', @provider = N'MSOLEDBSQL', @datasrc = N'MERIDIAN_SQL', @catalog = N'Distribution';",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "_ServerLevel",
+    "schema": null,
+    "type": "LinkedServers",
+    "name": "HELIOS_ORACLE",
+    "ddl": "EXEC master.dbo.sp_addlinkedserver @server = N'HELIOS_ORACLE', @srvproduct = N'Oracle', @provider = N'OraOLEDB.Oracle', @datasrc = N'HELIOS_ORACLE', @catalog = N'FREEPDB1';",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "_ServerLevel",
+    "schema": null,
+    "type": "LinkedServers",
+    "name": "ATLAS_SQL",
+    "ddl": "EXEC master.dbo.sp_addlinkedserver @server = N'ATLAS_SQL', @srvproduct = N'', @provider = N'MSOLEDBSQL', @datasrc = N'ATLAS_SQL', @catalog = N'Commerce';",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "_ServerLevel",
+    "schema": null,
+    "type": "LinkedServers",
+    "name": "HELIOS_ORACLE",
+    "ddl": "EXEC master.dbo.sp_addlinkedserver @server = N'HELIOS_ORACLE', @srvproduct = N'Oracle', @provider = N'OraOLEDB.Oracle', @datasrc = N'HELIOS_ORACLE', @catalog = N'FREEPDB1';",
+    "engine": "mssql",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "DatabaseLinks",
+    "name": "REMOTE",
+    "ddl": "CREATE DATABASE LINK REMOTE CONNECT TO \"bridge_user\" IDENTIFIED BY \"__BENCH_PASSWORD__\" USING 'ATLAS_SQL';",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "DatabaseLinks",
+    "name": "SECONDARY",
+    "ddl": "CREATE DATABASE LINK SECONDARY CONNECT TO \"bridge_user\" IDENTIFIED BY \"__BENCH_PASSWORD__\" USING 'MERIDIAN_SQL';",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "DatabaseLinks",
+    "name": "REMOTE",
+    "ddl": "CREATE DATABASE LINK REMOTE CONNECT TO \"bridge_user\" IDENTIFIED BY \"__BENCH_PASSWORD__\" USING 'MERIDIAN_SQL';",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "DatabaseLinks",
+    "name": "SECONDARY",
+    "ddl": "CREATE DATABASE LINK SECONDARY CONNECT TO \"bridge_user\" IDENTIFIED BY \"__BENCH_PASSWORD__\" USING 'ATLAS_SQL';",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_ONE",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_ONE AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ORDER_ENTRY.ITEMS@REMOTE' INTO N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_TWO",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_TWO AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ORDER_ENTRY.ITEMS@REMOTE' INTO N; EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM INVENTORY.ITEMS@SECONDARY' INTO N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Procedures",
+    "name": "P_ONE",
+    "ddl": "CREATE OR REPLACE PROCEDURE COMPLIANCE.P_ONE AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM INVENTORY.ITEMS@REMOTE' INTO N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_CHAIN",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_CHAIN AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'BEGIN ORDER_ENTRY.P_CHAIN@REMOTE; END;'; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_SCHEMA",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_SCHEMA AS N NUMBER; BEGIN COMPLIANCE.P_READ; N := COMPLIANCE.COMPLIANCE_API.F01(); END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_CIRCLE",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_CIRCLE AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'BEGIN ORDER_ENTRY.P_CIRCLE@REMOTE; END;'; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Procedures",
+    "name": "P_CIRCLE",
+    "ddl": "CREATE OR REPLACE PROCEDURE COMPLIANCE.P_CIRCLE AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'BEGIN INVENTORY.P_CIRCLE@REMOTE; END;'; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_CHAIN",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_CHAIN AS EXEC(N'EXEC MERIDIAN_SQL.Distribution.INVENTORY.P_ORACLE;');",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "StoredProcedures",
+    "name": "P_ORACLE",
+    "ddl": "CREATE PROCEDURE INVENTORY.P_ORACLE AS EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT ID, AMOUNT FROM COMPLIANCE.V_ITEMS'');');",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_ONE",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_ONE AS EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT ID, AMOUNT FROM PROCUREMENT.V_ITEMS'');'); EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT PROCUREMENT.PROCUREMENT_API.F01() FROM DUAL'');');",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_TWO",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_TWO AS EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT ID, AMOUNT FROM PROCUREMENT.V_ITEMS'');'); EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT ID, AMOUNT FROM COMPLIANCE.V_ITEMS'');'); EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT PROCUREMENT.PROCUREMENT_API.F01() FROM DUAL'');'); EXEC(N'SELECT * FROM OPENQUERY(HELIOS_ORACLE, ''SELECT COMPLIANCE.COMPLIANCE_API.F01() FROM DUAL'');');",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_SCHEMA",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_SCHEMA AS EXEC (N'BEGIN PROCUREMENT.P_SCHEMA; END;') AT HELIOS_ORACLE;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "StoredProcedures",
+    "name": "P_CIRCLE",
+    "ddl": "CREATE PROCEDURE ORDER_ENTRY.P_CIRCLE AS EXEC (N'BEGIN PROCUREMENT.P_CIRCLE; END;') AT HELIOS_ORACLE;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "StoredProcedures",
+    "name": "P_CIRCLE",
+    "ddl": "CREATE PROCEDURE INVENTORY.P_CIRCLE AS EXEC (N'BEGIN COMPLIANCE.P_CIRCLE; END;') AT HELIOS_ORACLE;",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "MERIDIAN_SQL",
+    "database": "Distribution",
+    "schema": "INVENTORY",
+    "type": "StoredProcedures",
+    "name": "P_LINK_CHAIN",
+    "ddl": "CREATE PROCEDURE INVENTORY.P_LINK_CHAIN AS EXEC(N'EXEC ATLAS_SQL.Commerce.ORDER_ENTRY.P_CHAIN;');",
+    "engine": "mssql",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "INVENTORY_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Views",
+    "name": "V_BILLING",
+    "ddl": "CREATE VIEW ORDER_ENTRY.V_BILLING AS SELECT i.ID, i.AMOUNT FROM Receivables.INVOICING.ITEMS i;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "DatabaseLinks",
+    "name": "RECEIVABLES",
+    "ddl": "CREATE DATABASE LINK RECEIVABLES CONNECT TO \"bridge_user\" IDENTIFIED BY \"__BENCH_PASSWORD__\" USING 'ATLAS_SQL.Receivables';",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "DatabaseLinks",
+    "name": "INTELLIGENCE",
+    "ddl": "CREATE DATABASE LINK INTELLIGENCE CONNECT TO \"bridge_user\" IDENTIFIED BY \"__BENCH_PASSWORD__\" USING 'MERIDIAN_SQL.Intelligence';",
+    "engine": "oracle",
+    "columns": [],
+    "grants": []
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_RECEIVABLES",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_RECEIVABLES AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM INVOICING.ITEMS@RECEIVABLES' INTO N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "COMPLIANCE",
+    "type": "Procedures",
+    "name": "P_INTELLIGENCE",
+    "ddl": "CREATE OR REPLACE PROCEDURE COMPLIANCE.P_INTELLIGENCE AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM REPORTING.ITEMS@INTELLIGENCE' INTO N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "COMPLIANCE_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "HELIOS_ORACLE",
+    "database": "FREEPDB1",
+    "schema": "PROCUREMENT",
+    "type": "Procedures",
+    "name": "P_STOCK",
+    "ddl": "CREATE OR REPLACE PROCEDURE PROCUREMENT.P_STOCK AS N NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ORDER_ENTRY.V_REMOTE_STOCK@REMOTE' INTO N; END;",
+    "engine": "oracle",
+    "columns": [],
+    "grants": [
+      {
+        "permission": "EXECUTE",
+        "state": "GRANT",
+        "grantee": "PROCUREMENT_EXEC",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  },
+  {
+    "server": "ATLAS_SQL",
+    "database": "Commerce",
+    "schema": "ORDER_ENTRY",
+    "type": "Views",
+    "name": "V_REMOTE_STOCK",
+    "ddl": "CREATE VIEW ORDER_ENTRY.V_REMOTE_STOCK AS SELECT ID, AMOUNT FROM MERIDIAN_SQL.Distribution.INVENTORY.ITEMS;",
+    "engine": "mssql",
+    "columns": [
+      {
+        "name": "ID",
+        "dataType": "int"
+      },
+      {
+        "name": "AMOUNT",
+        "dataType": "int"
+      }
+    ],
+    "grants": [
+      {
+        "permission": "SELECT",
+        "state": "GRANT",
+        "grantee": "ORDER_ENTRY_READ",
+        "granteeType": null,
+        "column": null
+      }
+    ]
+  }
+]

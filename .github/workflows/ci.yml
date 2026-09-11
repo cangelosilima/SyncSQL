@@ -24,6 +24,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gateway-publishing-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test private-package publishing guards
+        run: node --test .github/scripts/gateway-package.test.cjs
+      - name: Validate gateway workflows
+        run: >-
+          docker run --rm --volume "$PWD/.github:/repo/.github:ro" --workdir /repo
+          rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          -ignore 'label "oracle-gateway" is unknown'
+          .github/workflows/publish-oracle-gateway.yml
+          .github/workflows/heterogeneous-benchmark.yml
+          .github/workflows/ci.yml
+
   # Matrixed over Linux and Windows because the CLI's on-disk formats are
   # platform-sensitive in ways a single-OS pipeline cannot see: line endings
   # (Environment.NewLine), path separators, the default console encoding a

@@ -168,8 +168,10 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
         OracleConnection connection, ServerConfig server, string serviceName, EffectiveFilters filters,
         List<ExtractedObject> objects, CancellationToken cancellationToken)
     {
-        List<(string Owner, string DbLink)> links = await OracleCommandRunner.QueryAsync(
-            connection, OracleQueries.DatabaseLinks, r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK")), cancellationToken);
+        // ALL_DB_LINKS cannot expose another owner's private links.
+        List<(string Owner, string DbLink)> links = await OracleCommandRunner.QueryDictionaryAsync(
+            connection, OracleQueries.AllDatabaseLinks, OracleQueries.DatabaseLinks,
+            r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK")), cancellationToken);
 
         foreach ((string owner, string dbLink) in links)
         {
@@ -206,8 +208,8 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
     {
         Dictionary<string, List<GrantEntry>> index = new(StringComparer.OrdinalIgnoreCase);
 
-        List<(string Grantee, string TableName, string Privilege)> objectGrants = await OracleCommandRunner.QueryAsync(
-            connection, OracleQueries.ObjectGrants,
+        List<(string Grantee, string TableName, string Privilege)> objectGrants = await OracleCommandRunner.QueryDictionaryAsync(
+            connection, OracleQueries.AllObjectGrants, OracleQueries.ObjectGrants,
             r => (r.GetStringOrEmpty("GRANTEE"), r.GetStringOrEmpty("TABLE_NAME"), r.GetStringOrEmpty("PRIVILEGE")),
             cancellationToken, ("owner", owner));
         foreach ((string grantee, string tableName, string privilege) in objectGrants)
@@ -215,8 +217,8 @@ public sealed class OracleObjectExtractor(ILogger<OracleObjectExtractor> logger,
             Add(index, $"{owner}.{tableName}", new GrantEntry(privilege, GrantState.Grant, grantee, null, null));
         }
 
-        List<(string Grantee, string TableName, string ColumnName, string Privilege)> columnGrants = await OracleCommandRunner.QueryAsync(
-            connection, OracleQueries.ColumnGrants,
+        List<(string Grantee, string TableName, string ColumnName, string Privilege)> columnGrants = await OracleCommandRunner.QueryDictionaryAsync(
+            connection, OracleQueries.AllColumnGrants, OracleQueries.ColumnGrants,
             r => (r.GetStringOrEmpty("GRANTEE"), r.GetStringOrEmpty("TABLE_NAME"), r.GetStringOrEmpty("COLUMN_NAME"), r.GetStringOrEmpty("PRIVILEGE")),
             cancellationToken, ("owner", owner));
         foreach ((string grantee, string tableName, string columnName, string privilege) in columnGrants)

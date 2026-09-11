@@ -24,6 +24,9 @@ public enum ReferenceOrigin
 /// </summary>
 public sealed record ObjectRef(string? Schema, string Name)
 {
+    /// <summary>True for a callable reference, allowing a remote dialect to interpret package-member names.</summary>
+    public bool IsRoutine { get; init; }
+
     /// <summary>The database part of a 3-/4-part T-SQL name, when the DDL spelled one out. Null for an unqualified reference.</summary>
     public string? Database { get; init; }
 

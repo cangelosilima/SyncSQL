@@ -10,6 +10,22 @@ namespace SyncSql.Extraction.Oracle;
 /// </summary>
 internal static class OracleCommandRunner
 {
+    /// <summary>Privileged fleet extraction sees all owners; ordinary schema credentials retain their visible scope.</summary>
+    public static async Task<List<T>> QueryDictionaryAsync<T>(
+        OracleConnection connection, string allOwnersSql, string visibleSql,
+        Func<OracleDataReader, T> map, CancellationToken cancellationToken,
+        params (string Name, object Value)[] parameters)
+    {
+        try
+        {
+            return await QueryAsync(connection, allOwnersSql, map, cancellationToken, parameters);
+        }
+        catch (OracleException ex) when (ex.Number is 942 or 1031 or 41900)
+        {
+            return await QueryAsync(connection, visibleSql, map, cancellationToken, parameters);
+        }
+    }
+
     public static async Task<List<T>> QueryAsync<T>(
         OracleConnection connection,
         string sql,

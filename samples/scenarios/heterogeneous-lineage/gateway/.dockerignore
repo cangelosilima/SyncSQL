@@ -1,0 +1,5 @@
+*
+!install.sh
+!.cache
+.cache/*
+!.cache/LINUX.X64_193000_gateways.zip

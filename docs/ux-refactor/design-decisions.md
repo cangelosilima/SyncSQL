@@ -56,7 +56,7 @@ These accepted decisions supersede the earlier interaction choices where they co
 | D-022 | Add Alerts between Lineage and AI | Explicit new-feature authorization: consolidate existing anomaly/orphan signals, shareable category/search and investigation links; no backend/monitoring additions |
 | D-023 | Correct AI column-reference intent using existing evidence | Resolve exact known object/column; block ambiguity/unsupported clauses; preserve literal DDL search and local execution |
 | D-024 | Overview metrics as separate matching cards; remove Investigate all alerts link | Alerts stays in primary navigation. Existing Overview preview information remains |
-| D-025 | UI/fixture corrections | Metrics table containment, column panel top border, single search focus outline, badge spacing, remove server badges, rename demo SIG linked server to REMOTE2 |
+| D-025 | UI/fixture corrections | Metrics table containment, column panel top border, single search focus outline, badge spacing, remove server badges, rename demo SQL_A linked server to REMOTE2 |
 
 The earlier Gate 6 “none approved” statement describes the original proposal review. D-022 now authorizes the specific Alerts scope; it does not approve unrelated enrichment or a quantified metric-coverage feature.
 

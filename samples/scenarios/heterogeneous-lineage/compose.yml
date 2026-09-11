@@ -1,0 +1,64 @@
+name: syncsql-heterogeneous-lineage
+
+services:
+  atlas:
+    image: mcr.microsoft.com/mssql/server:2022-CU26-ubuntu-22.04
+    hostname: ATLAS_SQL
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${BENCH_PASSWORD:?set BENCH_PASSWORD}
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    ports: ["127.0.0.1:14431:1433"]
+    networks:
+      default:
+        aliases: [ATLAS_SQL]
+    volumes: [atlas-data:/var/opt/mssql]
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/1433'"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  meridian:
+    image: mcr.microsoft.com/mssql/server:2022-CU26-ubuntu-22.04
+    hostname: MERIDIAN_SQL
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${BENCH_PASSWORD:?set BENCH_PASSWORD}
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    ports: ["127.0.0.1:14432:1433"]
+    networks:
+      default:
+        aliases: [MERIDIAN_SQL]
+    volumes: [meridian-data:/var/opt/mssql]
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/1433'"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  helios:
+    image: gvenzl/oracle-free:23-slim
+    hostname: HELIOS_ORACLE
+    environment:
+      ORACLE_PASSWORD: ${BENCH_PASSWORD:?set BENCH_PASSWORD}
+    ports: ["127.0.0.1:15231:1521"]
+    networks:
+      default:
+        aliases: [HELIOS_ORACLE]
+    volumes: [helios-data:/opt/oracle/oradata]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 90
+      start_period: 60s
+
+volumes:
+  atlas-data:
+  meridian-data:
+  helios-data:

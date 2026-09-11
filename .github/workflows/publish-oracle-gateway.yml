@@ -1,0 +1,138 @@
+name: Publish Oracle gateway to GHCR
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_image:
+        description: Existing local image on the oracle-gateway runner
+        required: true
+        default: syncsql-oracle-gateway:19.3
+        type: string
+      tag:
+        description: GHCR version tag
+        required: true
+        default: '19.3'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: [self-hosted, linux, x64, oracle-gateway]
+    timeout-minutes: 45
+    concurrency:
+      group: oracle-gateway-fleet
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SOURCE_IMAGE: ${{ inputs.source_image }}
+      PUBLISH_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Isolate registry credentials for this job
+        id: docker-config
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/gateway-publish-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Resolve publication target and check existing package
+        id: package
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { imageNames, requirePrivatePackage } = require('./.github/scripts/gateway-package.cjs');
+            const names = imageNames(context.repo.owner, process.env.PUBLISH_TAG);
+            const exists = await requirePrivatePackage(github, context.repo.owner,
+              context.payload.repository.owner.type, { allowMissing: true });
+            core.setOutput('image', names.image);
+            core.setOutput('exists', exists);
+      - name: Pin the local image used by validation and publication
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_IMAGE" =~ ^[a-z0-9][a-zA-Z0-9._/:@-]*$ ]] || { echo 'Invalid local image reference.' >&2; exit 1; }
+          image_id="$(docker image inspect "$SOURCE_IMAGE" --format '{{.Id}}')"
+          platform="$(docker image inspect "$image_id" --format '{{.Os}}/{{.Architecture}}')"
+          [[ "$platform" == 'linux/amd64' ]] || { echo "Expected linux/amd64, got $platform" >&2; exit 1; }
+          test_image="syncsql-gateway-publish:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker tag "$image_id" "$test_image"
+          echo "image=$test_image" >> "$GITHUB_OUTPUT"
+          echo "id=$image_id" >> "$GITHUB_OUTPUT"
+      - name: Verify the built image against the complete gateway benchmark
+        env:
+          ORACLE_GATEWAY_IMAGE: ${{ steps.source.outputs.image }}
+        run: bash samples/scenarios/heterogeneous-lineage/run.sh --gateway
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Create a private package with an empty image on first publication
+        if: steps.package.outputs.exists == 'false'
+        env:
+          TARGET_IMAGE: ${{ steps.package.outputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bootstrap="${TARGET_IMAGE%:*}:visibility-check-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'FROM scratch\nLABEL org.opencontainers.image.source="%s/%s"\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" | docker build --tag "$bootstrap" -
+          docker push "$bootstrap"
+      - name: Require private visibility before uploading Oracle layers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { requirePrivatePackage } = require('./.github/scripts/gateway-package.cjs');
+            await requirePrivatePackage(github, context.repo.owner,
+              context.payload.repository.owner.type, { attempts: 6 });
+      - name: Publish the verified gateway image and record its digest
+        env:
+          SOURCE_ID: ${{ steps.source.outputs.id }}
+          TARGET_IMAGE: ${{ steps.package.outputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker tag "$SOURCE_ID" "$TARGET_IMAGE"
+          docker push "$TARGET_IMAGE"
+          docker pull "$TARGET_IMAGE" | tee "$RUNNER_TEMP/gateway-pull.log"
+          [[ "$(docker image inspect "$TARGET_IMAGE" --format '{{.Id}}')" == "$SOURCE_ID" ]] || { echo 'Registry image differs from the tested image.' >&2; exit 1; }
+          digest="$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' "$RUNNER_TEMP/gateway-pull.log")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Registry did not return a manifest digest.' >&2; exit 1; }
+          {
+            # shellcheck disable=SC2016
+            printf 'Published private Oracle gateway image: `%s`\n\n' "$TARGET_IMAGE"
+            # shellcheck disable=SC2016
+            printf 'Set the repository variable `ORACLE_GATEWAY_IMAGE` to:\n\n```text\n%s@%s\n```\n' "${TARGET_IMAGE%:*}" "$digest"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify package remained private
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { requirePrivatePackage } = require('./.github/scripts/gateway-package.cjs');
+            await requirePrivatePackage(github, context.repo.owner, context.payload.repository.owner.type);
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-gateway-publication-report
+          include-hidden-files: true
+          path: |
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/benchmark.json
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/pipeline.log
+            cli/tests/SyncSql.Samples.Benchmark.Tests/TestResults/*.trx
+      - name: Stop benchmark containers
+        if: always() && steps.source.outcome == 'success'
+        run: docker compose --env-file samples/scenarios/heterogeneous-lineage/.env.example -f samples/scenarios/heterogeneous-lineage/compose.yml -f samples/scenarios/heterogeneous-lineage/compose.gateway.yml down -v
+      - name: Remove temporary local image tag
+        if: always() && steps.source.outcome == 'success'
+        env:
+          TEST_IMAGE: ${{ steps.source.outputs.image }}
+        run: docker image rm "$TEST_IMAGE"
+      - name: Clear registry credentials
+        if: always() && steps.docker-config.outcome == 'success'
+        run: docker logout ghcr.io

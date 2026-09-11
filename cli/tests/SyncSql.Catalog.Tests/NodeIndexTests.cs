@@ -4,6 +4,31 @@ namespace SyncSql.Catalog.Tests;
 
 public class NodeIndexTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Resolve_RemoteOraclePackage_UsesKnownEngineRegardlessOfLegacyNodeOrder(bool legacyFirst)
+    {
+        CatalogNode legacy = Node("helios_oracle", "FREEPDB1", "PROCUREMENT", "ORDERS");
+        CatalogNode package = Node("HELIOS_ORACLE", "FREEPDB1", "PROCUREMENT", "PROCUREMENT_API", "Packages", DatabaseEngine.Oracle);
+        CatalogNode caller = Node("ATLAS_SQL", "Commerce", "sales", "RefreshOrders", "StoredProcedures", DatabaseEngine.MsSql);
+        CatalogNode link = LinkNode("ATLAS_SQL", "HELIOS_ORACLE", "HELIOS_ORACLE", "FREEPDB1");
+        CatalogNode[] nodes = legacyFirst ? [legacy, package, caller, link] : [package, legacy, caller, link];
+        NodeIndex index = new(nodes, LinkedServerMap.FromNodes(nodes));
+
+        ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("PROCUREMENT_API", "REFRESH")
+        {
+            Server = "HELIOS_ORACLE",
+            Database = "PROCUREMENT",
+            IsRoutine = true,
+            Origin = ReferenceOrigin.Dynamic,
+        });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(package.Id, resolution.NodeId);
+        Assert.Equal(link.Id, resolution.ViaLink?.NodeId);
+    }
+
     private static CatalogNode Node(string server, string database, string? schema, string name, string type = "Tables", DatabaseEngine? engine = null) => new()
     {
         Id = $"{server}/{database}/{type}/{(schema is null ? "" : schema + "/")}{name}",

@@ -137,7 +137,7 @@ public sealed class AdvancedSqlLineageTests
             END;
             """);
 
-        Assert.Contains(new ObjectRef("ops", "process_orders") { Server = "ops_link" }, result.ObjectRefs);
+        Assert.Contains(new ObjectRef("ops", "process_orders") { Server = "ops_link", IsRoutine = true }, result.ObjectRefs);
     }
 
     [Fact]
@@ -174,10 +174,8 @@ public sealed class AdvancedSqlLineageTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void Analyze_ExecuteImmediate_CurrentLimitationRetainsOnlyStaticDependencies(bool dynamicSql)
+    public void Analyze_ExecuteImmediate_RespectsDynamicSqlOption(bool dynamicSql)
     {
-        // Characterization of the documented limitation, not a claim of dynamic PL/SQL support.
-        // Replace this expectation when Oracle gains a dynamic SQL scanner.
         LineageAnalysisResult result = _analyzer.Analyze("""
             CREATE OR REPLACE PROCEDURE app.refresh_report(p_id NUMBER) AS
             BEGIN
@@ -187,7 +185,7 @@ public sealed class AdvancedSqlLineageTests
             """, new LineageAnalysisOptions { DynamicSql = dynamicSql });
 
         Assert.Contains(new ObjectRef("app", "audit_log"), result.ObjectRefs);
-        Assert.DoesNotContain(result.ObjectRefs, r => r is { Schema: "archive", Name: "orders" });
-        Assert.DoesNotContain(result.ObjectRefs, r => r.Origin == ReferenceOrigin.Dynamic);
+        Assert.Equal(dynamicSql, result.ObjectRefs.Any(r =>
+            r is { Schema: "archive", Name: "orders", Origin: ReferenceOrigin.Dynamic }));
     }
 }

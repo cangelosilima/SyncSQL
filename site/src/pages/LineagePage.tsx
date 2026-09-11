@@ -1,9 +1,8 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
 import LineageGraph, { type EdgeColumnData } from '../components/LineageGraph'
 import FilterBar, { useFilteredNodes } from '../components/FilterBar'
-import ContentSearchBar from '../components/ContentSearchBar'
 import TypeBadge from '../components/TypeBadge'
 import CsvExportButton from '../components/CsvExportButton'
 import HelpButton from '../components/HelpButton'
@@ -11,13 +10,10 @@ import InspectorPanel from '../components/InspectorPanel'
 import RelatedObjects from '../components/RelatedObjects'
 import { colorForType } from '../lib/typeColors'
 import { getDirectionalNeighborhood, retainConnectingPaths } from '../lib/neighborhood'
-import { findObjectsForGrantee, getSuggestedGrantees } from '../lib/grants'
-import { filterByContent } from '../lib/contentSearch'
-import { useDebouncedValue } from '../lib/useDebouncedValue'
 import { groupRelated, type GroupBy } from '../lib/grouping'
 import { csvFileName } from '../lib/csv'
 import { objectGrantColumns, type ObjectGrantRow } from '../lib/catalogCsv'
-import { decodeTokensFromUrl, encodeTokensForUrl, newTokenId, type FilterToken } from '../lib/filters'
+import { decodeTokensFromUrl, encodeTokensForUrl, matchingGrants, newTokenId, type FilterToken } from '../lib/filters'
 import type { CatalogNode } from '../types'
 
 const GRAPH_CAP = 300
@@ -26,74 +22,41 @@ function parseHops(value: string | null, fallback = 1): number {
   const number = value === null ? fallback : Number(value)
   return Number.isInteger(number) && number >= 0 && number <= 6 ? number : fallback
 }
-type Mode = 'browse' | 'access'
 
 export default function LineagePage() {
   const { index } = useCatalog()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialFocus = searchParams.get('focus') ?? undefined
-  const initialGrantee = searchParams.get('grantee') ?? ''
   const initialFilterParam = searchParams.get('filter')
   const initialHops = parseHops(searchParams.get('hops'))
-  const [mode, setMode] = useState<Mode>(searchParams.get('tab') === 'access' || initialGrantee ? 'access' : 'browse')
   const [copied, setCopied] = useState(false)
   const [edgeEvidence, setEdgeEvidence] = useState<EdgeColumnData | null>(null)
 
-  // Browse-mode state. A ?filter=<encoded tokens> param (from a copied
-  // shareable link - see the URL-sync effect below) is the only thing that
-  // seeds tokens now.
-  //
-  // Arriving with ?focus=<id> deliberately seeds *no* token. It used to seed
-  // "Name is <that object>", which read sensibly on its own but made every
-  // filter added afterwards nonsense: the tokens are ANDed, so adding "Type
-  // is StoredProcedures" while looking at a table asked for an object that is
-  // both, and the graph emptied. Navigation identity belongs in focusStack;
-  // clearFocus() seeds that name token at the moment focus is released, which
-  // is what the seeding was actually for - not dumping the reader back into
-  // the whole unfiltered catalog.
-  const [tokens, setTokens] = useState<FilterToken[]>(() => decodeTokensFromUrl(initialFilterParam))
+  // Migrate old access and DDL URLs into the same chip model as object filters.
+  const [tokens, setTokens] = useState<FilterToken[]>(() => {
+    const initial = decodeTokensFromUrl(initialFilterParam)
+    const grantee = searchParams.get('grantee')?.trim()
+    const content = searchParams.get('q')?.trim()
+    if (grantee) initial.push({ id: newTokenId(), attribute: 'grantee', operator: searchParams.get('exact') === '1' ? 'is' : 'contains', values: [grantee] })
+    if (content) initial.push({ id: newTokenId(), attribute: 'ddl', operator: 'contains', values: [content] })
+    return initial
+  })
   const [focusStack, setFocusStack] = useState<string[]>(initialFocus ? [initialFocus] : [])
   const [dependencyHops, setDependencyHops] = useState(() => parseHops(searchParams.get('dependencies'), initialHops))
   const [dependentHops, setDependentHops] = useState(() => parseHops(searchParams.get('dependents'), initialHops))
   const [groupIntermediate, setGroupIntermediate] = useState(searchParams.get('group') === 'intermediate')
-  const [contentQuery, setContentQuery] = useState(searchParams.get('q') ?? '')
-  const debouncedContentQuery = useDebouncedValue(contentQuery, 150)
-
-  // Access-mode state (merged from the standalone Access page - "what can
-  // this grantee touch", now visualized in the same lineage graph).
-  const [granteeQuery, setGranteeQuery] = useState(initialGrantee)
-  const [exact, setExact] = useState(searchParams.get('exact') === '1')
-  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
-  const [activeSuggestion, setActiveSuggestion] = useState(0)
-  const suggestionsId = useId()
-  const debouncedGrantee = useDebouncedValue(granteeQuery, 120)
-
   const allNodes = index?.catalog.nodes ?? []
-  const attrFiltered = useFilteredNodes(allNodes, tokens)
-  const filtered = useMemo(() => filterByContent(attrFiltered, debouncedContentQuery), [attrFiltered, debouncedContentQuery])
+  const filtered = useFilteredNodes(allNodes, tokens)
+  const hasGranteeFilter = tokens.some(token => token.attribute === 'grantee')
   const currentFocus = focusStack[focusStack.length - 1]
-  useEffect(() => { setEdgeEvidence(null) }, [currentFocus, mode])
+  useEffect(() => { setEdgeEvidence(null) }, [currentFocus])
 
   const neighborhoodIds = useMemo(() => {
     if (!index || !currentFocus) return []
     return getDirectionalNeighborhood(index, currentFocus, dependencyHops, dependentHops)
   }, [index, currentFocus, dependencyHops, dependentHops])
 
-  const grantSuggestions = useMemo(
-    () => (granteeQuery.trim() ? getSuggestedGrantees(allNodes, granteeQuery, 20) : []),
-    [allNodes, granteeQuery],
-  )
-  const grantMatches = useMemo(
-    () => (mode === 'access' ? findObjectsForGrantee(allNodes, debouncedGrantee, exact) : []),
-    [allNodes, debouncedGrantee, exact, mode],
-  )
-  const totalGrants = grantMatches.reduce((sum, m) => sum + m.grants.length, 0)
-  const grantRows = useMemo<ObjectGrantRow[]>(
-    () => grantMatches.flatMap(({ node, grants }) => grants.map((grant) => ({ node, grant }))),
-    [grantMatches],
-  )
-
-  const baseIds = mode === 'access' ? grantMatches.map((m) => m.node.id) : filtered.map((n) => n.id)
+  const baseIds = filtered.map(node => node.id)
 
   // While navigating a specific object, filters narrow *what is around it*
   // rather than re-selecting from the whole catalog. That is what someone
@@ -104,27 +67,21 @@ export default function LineagePage() {
   // the graph never renders rootless no matter how narrow the filter is.
   const nodeIds = useMemo(() => {
     if (!currentFocus) return baseIds
-    if (mode !== 'browse') return neighborhoodIds
     const allowed = new Set(filtered.map((n) => n.id))
     return index ? retainConnectingPaths(index, currentFocus, neighborhoodIds, allowed) : []
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, currentFocus, mode, neighborhoodIds, filtered, baseIds.join(',')])
+  }, [index, currentFocus, neighborhoodIds, filtered, baseIds.join(',')])
 
   const connectorIds = useMemo(() => {
     const matchingIds = new Set(filtered.map(node => node.id))
-    return currentFocus && mode === 'browse' ? nodeIds.filter(id => id !== currentFocus && !matchingIds.has(id)) : []
-  }, [currentFocus, mode, nodeIds, filtered])
+    return currentFocus ? nodeIds.filter(id => id !== currentFocus && !matchingIds.has(id)) : []
+  }, [currentFocus, nodeIds, filtered])
 
   /** How much of the focused object's neighborhood the current filters are hiding. */
   const narrowedFrom = currentFocus ? neighborhoodIds.length : 0
 
-  // Keeps the URL a live, shareable snapshot of the current Browse-mode
-  // view (filter tokens, drill-down focus, hop radius, content search) -
-  // copying the address bar reproduces this exact filtered graph for
-  // incident write-ups or design docs. Access mode manages its own params
-  // (tab/grantee) directly where it changes them.
+  // One URL captures every filter and navigation setting.
   useEffect(() => {
-    if (mode !== 'browse') return
     const params: Record<string, string> = {}
     if (tokens.length > 0) params.filter = encodeTokensForUrl(tokens)
     if (currentFocus) params.focus = currentFocus
@@ -135,10 +92,17 @@ export default function LineagePage() {
       params.dependents = String(dependentHops)
     }
     if (groupIntermediate) params.group = 'intermediate'
-    if (debouncedContentQuery.trim()) params.q = debouncedContentQuery
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, tokens, currentFocus, dependencyHops, dependentHops, groupIntermediate, debouncedContentQuery])
+  }, [tokens, currentFocus, dependencyHops, dependentHops, groupIntermediate])
+
+  // Permission rows share the graph's selection, but omit retained connectors
+  // and focus nodes that do not satisfy the active filters.
+  const visibleIds = new Set(nodeIds)
+  const grantMatches = hasGranteeFilter ? filtered.filter(node => visibleIds.has(node.id))
+    .map(node => ({ node, grants: matchingGrants(node, tokens) })) : []
+  const grantRows: ObjectGrantRow[] = grantMatches.flatMap(({ node, grants }) => grants.map(grant => ({ node, grant })))
+  const totalGrants = grantRows.length
 
   function copyShareableLink() {
     navigator.clipboard
@@ -173,18 +137,6 @@ export default function LineagePage() {
     setFocusStack([])
   }
 
-  function switchMode(next: Mode) {
-    setMode(next)
-    setFocusStack([])
-    setSearchParams(next === 'access' ? { tab: 'access', ...(granteeQuery ? { grantee: granteeQuery } : {}), ...(exact ? { exact: '1' } : {}) } : {}, { replace: true })
-  }
-
-  function pickGrantee(value: string) {
-    setGranteeQuery(value)
-    setSearchParams({ tab: 'access', grantee: value, ...(exact ? { exact: '1' } : {}) }, { replace: true })
-    setSuggestionsOpen(false)
-  }
-
   return (
     <div className="page page--wide lineage-page">
       <div className="lineage-header-row">
@@ -197,111 +149,14 @@ export default function LineagePage() {
         </button>
       </div>
 
-      <div className="lineage-mode-tabs">
-        <button type="button" aria-pressed={mode === 'browse'} className={mode === 'browse' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('browse')}>
-          Browse
-        </button>
-        <button type="button" aria-pressed={mode === 'access'} className={mode === 'access' ? 'lineage-mode-tab active' : 'lineage-mode-tab'} onClick={() => switchMode('access')}>
-          Access
-        </button>
-      </div>
+      <section aria-label="Lineage filters">
+        <FilterBar nodes={allNodes} tokens={tokens} onChange={setTokens}
+          placeholder={currentFocus ? 'Filter what surrounds this object... (including grantee or DDL content)' : 'Filter the graph... (server, database, schema, type, name, grantee or DDL content)'} />
+        <p className="muted">Combine object, grantee and DDL content filters. Use Grantee is for an exact user, role or group; Grantee contains for a partial name.</p>
+      </section>
 
-      {mode === 'browse' ? (
-        <>
-          {/* Filters no longer clear the focus: while navigating an object they
-              narrow its neighborhood, which is what someone filtering a
-              drilled-into graph is asking for. The placeholder says which of
-              the two is happening. */}
-          <FilterBar
-            nodes={allNodes}
-            tokens={tokens}
-            onChange={setTokens}
-            placeholder={
-              currentFocus
-                ? 'Filter what surrounds this object... (server, database, schema, type, name)'
-                : 'Filter the graph... (server, database, schema, type, name)'
-            }
-          />
-          <ContentSearchBar value={contentQuery} onChange={setContentQuery} />
-        </>
-      ) : (
-        <>
-          <p className="muted" style={{ margin: '0.5rem 0' }}>
-            Search by grantee (user, role or group) to see every object they have a GRANT or DENY permission on - down
-            to the column when scoped that way - and how those objects relate to each other.
-          </p>
-          <div className="access-search">
-            <div className="filter-bar" style={{ margin: 0, flex: 1 }}>
-              <div className="filter-bar-input-row">
-                <input
-                  type="text"
-                  className="filter-bar-input"
-                  placeholder="Search grantee (user, role, group)..."
-                  aria-label="Search grantee (user, role, group)"
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-expanded={suggestionsOpen && grantSuggestions.length > 0}
-                  aria-controls={suggestionsId}
-                  aria-activedescendant={suggestionsOpen && grantSuggestions[activeSuggestion] ? `${suggestionsId}-${activeSuggestion}` : undefined}
-                  value={granteeQuery}
-                  onChange={(e) => {
-                    setGranteeQuery(e.target.value)
-                    setSuggestionsOpen(true)
-                    setActiveSuggestion(0)
-                    setFocusStack([])
-                    setSearchParams({ tab: 'access', ...(e.target.value ? { grantee: e.target.value } : {}), ...(exact ? { exact: '1' } : {}) }, { replace: true })
-                  }}
-                  onFocus={() => setSuggestionsOpen(true)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') { setSuggestionsOpen(false); return }
-                    if (!grantSuggestions.length) return
-                    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                      event.preventDefault(); setSuggestionsOpen(true)
-                      setActiveSuggestion(i => (i + (event.key === 'ArrowDown' ? 1 : -1) + grantSuggestions.length) % grantSuggestions.length)
-                    } else if (event.key === 'Enter' && suggestionsOpen && grantSuggestions[activeSuggestion]) {
-                      event.preventDefault(); pickGrantee(grantSuggestions[activeSuggestion])
-                    }
-                  }}
-                  onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
-                />
-              </div>
-              {suggestionsOpen && grantSuggestions.length > 0 && (
-                <ul className="filter-suggestions" role="listbox" id={suggestionsId} aria-label="Grantees">
-                  {grantSuggestions.map((s, i) => (
-                    <li
-                      key={s}
-                      role="option"
-                      id={`${suggestionsId}-${i}`}
-                      aria-selected={i === activeSuggestion}
-                      className="filter-suggestion"
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        pickGrantee(s)
-                      }}
-                    >
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <label className="access-exact-toggle">
-              <input type="checkbox" checked={exact} onChange={(e) => {
-                setExact(e.target.checked)
-                setSearchParams({ tab: 'access', ...(granteeQuery ? { grantee: granteeQuery } : {}), ...(e.target.checked ? { exact: '1' } : {}) }, { replace: true })
-              }} />
-              Exact match
-            </label>
-          </div>
-
-          {debouncedGrantee.trim() && (
-            <p className="muted" style={{ margin: '0.75rem 0 0.25rem' }}>
-              {grantMatches.length === 0
-                ? `No grants found for "${debouncedGrantee}".`
-                : `${totalGrants} grant${totalGrants === 1 ? '' : 's'} across ${grantMatches.length} object${grantMatches.length === 1 ? '' : 's'} matching "${debouncedGrantee}" - shown below and in the graph.`}
-            </p>
-          )}
-
+      {hasGranteeFilter && <section aria-label="Matching permissions">
+          <p className="muted">{totalGrants} grant{totalGrants === 1 ? '' : 's'} across {grantMatches.length} object{grantMatches.length === 1 ? '' : 's'} matching all filters. Recorded permissions include GRANT and DENY; connecting graph objects do not imply access.</p>
           {grantMatches.length > 0 && (
             <>
             <div className="lineage-header-row" style={{ margin: '0.5rem 0' }}>
@@ -309,7 +164,7 @@ export default function LineagePage() {
               <CsvExportButton
                 rows={grantRows}
                 columns={objectGrantColumns}
-                filename={csvFileName('syncsql-access', debouncedGrantee)}
+                filename={csvFileName('syncsql-access', 'filtered')}
               />
             </div>
             <div className="explorer-table-wrap" style={{ marginBottom: '0.75rem' }}>
@@ -355,8 +210,7 @@ export default function LineagePage() {
             </div>
             </>
           )}
-        </>
-      )}
+      </section>}
 
       {currentFocus ? (
         <div className="lineage-nav">
@@ -425,8 +279,7 @@ export default function LineagePage() {
       ) : (
         <p className="muted" style={{ margin: '0.5rem 0' }}>
           {nodeIds.length} object(s) shown.{' '}
-          {mode === 'browse' && tokens.length === 0 && 'Start typing to narrow this down by server, database, schema or type. '}
-          {mode === 'access' && !debouncedGrantee.trim() && 'Start typing a grantee name to search. '}
+          {tokens.length === 0 && 'Start typing to narrow this down by server, database, schema or type. '}
           {nodeIds.length > 0 && 'Click any node to drill into its own dependencies/dependents; double-click to open its full detail page.'}
         </p>
       )}
@@ -438,20 +291,15 @@ export default function LineagePage() {
       {nodeIds.length > GRAPH_CAP ? (
         <SelectionBreakdown
           nodes={nodeIds.map((id) => index.byId.get(id)).filter((n): n is CatalogNode => Boolean(n))}
-          onNarrow={
-            // Access mode's selection comes from the grantee search, not from
-            // filter tokens, so there'd be nothing for a click to narrow there.
-            mode === 'browse'
-              ? (attribute, value) => {
-                  setTokens([...tokens, { id: newTokenId(), attribute, operator: 'is', values: [value] }])
-                }
-              : undefined
-          }
+          onNarrow={(attribute, value) => {
+            setTokens([...tokens, { id: newTokenId(), attribute, operator: 'is', values: [value] }])
+          }}
         />
       ) : (
         <>
-        <details className="lineage-legend" open>
-          <summary>Graph legend</summary>
+        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} onEdgeInspect={setEdgeEvidence} groupIntermediate={groupIntermediate} connectorIds={connectorIds} />
+        <details className="lineage-legend">
+          <summary><span>Graph legend</span><span className="legend-reminder">→ References · dashed = dynamic SQL</span></summary>
           <ul>
             <li><span className="legend-arrow" aria-hidden="true">→</span>Referencing object → referenced object</li>
             <li><span className="legend-line" aria-hidden="true" />Reference</li>
@@ -467,7 +315,7 @@ export default function LineagePage() {
             ))}
           </ul>
         </details>
-        <LineageGraph nodeIds={nodeIds} focusId={currentFocus} height="70vh" onNodeActivate={drillInto} onEdgeInspect={setEdgeEvidence} groupIntermediate={groupIntermediate} connectorIds={connectorIds} />
+
         </>
       )}
       </div>
@@ -486,11 +334,11 @@ export default function LineagePage() {
           <Link to={`/object/${currentFocus}`}>Open object workbench →</Link>
           <RelatedObjects title="Depends on" rootId={currentFocus} ids={index.outgoing.get(currentFocus) ?? []} direction="outgoing" />
           <RelatedObjects title="Used by" rootId={currentFocus} ids={index.incoming.get(currentFocus) ?? []} direction="incoming" />
-          {mode === 'access' && <><h3>Recorded permissions</h3>
+          {hasGranteeFilter && <><h3>Recorded permissions</h3>
             <p className="muted">Current object grants, not an effective-access calculation.</p>
             {index.byId.get(currentFocus)!.grants.length === 0 && <p>No grants recorded.</p>}
             <ul className="permission-list">{index.byId.get(currentFocus)!.grants.map((grant, i) => <li key={i}>
-              <button type="button" className="breadcrumb-link" onClick={() => { setFocusStack([]); pickGrantee(grant.grantee) }}>{grant.grantee}</button>
+              <button type="button" className="breadcrumb-link" onClick={() => { setFocusStack([]); setTokens([...tokens.filter(token => token.attribute !== 'grantee'), { id: newTokenId(), attribute: 'grantee', operator: 'is', values: [grant.grantee] }]) }}>{grant.grantee}</button>
               <span className={`grant-state grant-state--${grant.state === 'DENY' ? 'deny' : 'grant'}`}>{grant.state}</span> {grant.permission} · {grant.column ?? 'whole object'}
             </li>)}</ul></>}
         </> : <p className="empty-state">Drill into a graph node to inspect its identity and relationships. Edge details appear beside the selected relationship in the graph.</p>}

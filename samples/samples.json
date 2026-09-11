@@ -1,6 +1,16 @@
 {
   "$comment": "Single source of truth for samples/. Read by samples/scripts/setup-databases.{sh,ps1} to provision, and by cli/tests/SyncSql.Samples.Benchmark.Tests to know what should have been extracted. Every path under 'upstream' is relative to that source's checkout in samples/.cache/sources/<source>/; every path under 'local' is relative to the sample's own folder.",
   "version": 1,
+  "benchmarkScenarios": [
+    {
+      "id": "heterogeneous-lineage",
+      "path": "scenarios/heterogeneous-lineage",
+      "description": "Three servers, four SQL Server databases, two Oracle schemas, two packages, 48 workload users, cross-engine lineage and cycles.",
+      "runner": "scenarios/heterogeneous-lineage/run.ps1",
+      "bashRunner": "scenarios/heterogeneous-lineage/run.sh",
+      "expectedCatalog": "scenarios/heterogeneous-lineage/expected-catalog.json"
+    }
+  ],
   "sources": {
     "sql-server-samples": {
       "repo": "https://github.com/microsoft/sql-server-samples",

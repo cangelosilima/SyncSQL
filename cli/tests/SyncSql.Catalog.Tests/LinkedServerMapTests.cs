@@ -4,6 +4,31 @@ namespace SyncSql.Catalog.Tests;
 
 public class LinkedServerMapTests
 {
+    [Fact]
+    public void Private_links_are_scoped_to_the_service_and_owner()
+    {
+        CatalogNode procurement = Link("HELIOS", "REMOTE", "CREATE DATABASE LINK REMOTE USING 'ATLAS'", "DatabaseLinks") with
+        {
+            Id = "procurement-link",
+            Database = "APP_PDB",
+            Schema = "PROCUREMENT",
+        };
+        CatalogNode compliance = procurement with
+        {
+            Id = "compliance-link",
+            Schema = "COMPLIANCE",
+            Ddl = "CREATE DATABASE LINK REMOTE USING 'MERIDIAN'",
+        };
+        LinkedServerMap map = LinkedServerMap.FromNodes([
+            procurement, compliance, Table("ATLAS", "Commerce", "ITEMS"), Table("MERIDIAN", "Distribution", "ITEMS")]);
+        Assert.Equal("ATLAS", map.Resolve("HELIOS", "REMOTE", "APP_PDB", "PROCUREMENT")?.TargetServer);
+        Assert.Equal("MERIDIAN", map.Resolve("HELIOS", "REMOTE.WORLD", "APP_PDB", "COMPLIANCE")?.TargetServer);
+        Assert.Null(map.Resolve("HELIOS", "REMOTE"));
+        Assert.Null(map.Resolve("HELIOS", "REMOTE", "OTHER_PDB", "PROCUREMENT"));
+        Assert.Null(map.Resolve("HELIOS", "REMOTE", "APP_PDB", "REPORTING"));
+        Assert.Null(map.LinkTo("HELIOS", "MERIDIAN", "APP_PDB", "PROCUREMENT"));
+    }
+
     private static CatalogNode Link(string server, string name, string ddl, string type = "LinkedServers") => new()
     {
         Id = $"{server}/_ServerLevel/{type}/{name}",

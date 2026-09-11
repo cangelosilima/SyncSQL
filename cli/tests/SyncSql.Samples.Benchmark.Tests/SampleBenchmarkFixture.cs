@@ -14,7 +14,7 @@ namespace SyncSql.Samples.Benchmark.Tests;
 /// </summary>
 public sealed class SampleBenchmarkFixture : IAsyncLifetime
 {
-    private Catalog? _catalog;
+    private Core.Domain.Catalog? _catalog;
     private SampleExpectations? _expectations;
 
     /// <summary>Everything the CLI printed, so a failing assertion can show what the run actually did.</summary>
@@ -22,7 +22,7 @@ public sealed class SampleBenchmarkFixture : IAsyncLifetime
 
     public string OutputRoot => SampleFleet.OutputRoot;
 
-    public Catalog Catalog => _catalog
+    public Core.Domain.Catalog Catalog => _catalog
         ?? throw new InvalidOperationException("The catalog was not loaded - the fixture did not initialize.");
 
     public SampleExpectations Expectations => _expectations
@@ -58,7 +58,7 @@ public sealed class SampleBenchmarkFixture : IAsyncLifetime
     private static bool ShouldExtract() =>
         !SampleFleet.ReuseExistingOutput || !File.Exists(SampleFleet.CatalogPath);
 
-    private static Catalog LoadCatalog()
+    private static Core.Domain.Catalog LoadCatalog()
     {
         if (!File.Exists(SampleFleet.CatalogPath))
         {
@@ -68,7 +68,7 @@ public sealed class SampleBenchmarkFixture : IAsyncLifetime
         }
 
         using FileStream stream = File.OpenRead(SampleFleet.CatalogPath);
-        return JsonSerializer.Deserialize<Catalog>(stream, SyncSqlJsonOptions.Default)
+        return JsonSerializer.Deserialize<Core.Domain.Catalog>(stream, SyncSqlJsonOptions.Default)
             ?? throw new InvalidOperationException($"{SampleFleet.CatalogPath} deserialized to null.");
     }
 

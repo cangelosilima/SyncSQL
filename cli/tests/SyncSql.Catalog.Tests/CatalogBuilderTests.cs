@@ -680,28 +680,28 @@ public sealed class CatalogBuilderTests : IDisposable
     /// <summary>
     /// The reported scenario, end to end: a function reaching a remote function through OPENQUERY inside
     /// dynamically-built SQL. MsSqlLineageAnalyzerTests proves the analyzer recovers that reference with
-    /// Server = "SIG"; this proves what the catalog then does with it - a real hop through the link, and
+    /// Server = "SQL_A"; this proves what the catalog then does with it - a real hop through the link, and
     /// no orphaned reference anywhere.
     /// </summary>
     [Fact]
     public async Task BuildAsync_DynamicReferenceAcrossALinkedServer_DrawsTheHopAndListsItOnTheLink()
     {
-        WriteObjectFile("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SIG", LinkedServerDdl("SIG", "SQLPROD02", "SigDb"));
-        WriteObjectFile("SQLPROD02", "SigDb", "Functions", "dbo", "fns_Sig_Open_GetTransactionCode",
-            "CREATE FUNCTION dbo.fns_Sig_Open_GetTransactionCode() RETURNS VARCHAR(50) AS BEGIN RETURN ''; END");
-        WriteObjectFile("SQLPROD01", "AppDb", "Functions", "dbo", "fns_Opn_Sig_GetTransactionCode",
-            "CREATE FUNCTION dbo.fns_Opn_Sig_GetTransactionCode() RETURNS VARCHAR(50) AS BEGIN RETURN ''; END");
-        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("fns_Opn_Sig", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>())
+        WriteObjectFile("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SQL_A", LinkedServerDdl("SQL_A", "SQLPROD02", "ServerADb"));
+        WriteObjectFile("SQLPROD02", "ServerADb", "Functions", "dbo", "fns_GetOrderId",
+            "CREATE FUNCTION dbo.fns_GetOrderId() RETURNS VARCHAR(50) AS BEGIN RETURN ''; END");
+        WriteObjectFile("SQLPROD01", "AppDb", "Functions", "dbo", "fns_GetRemoteOrderId",
+            "CREATE FUNCTION dbo.fns_GetRemoteOrderId() RETURNS VARCHAR(50) AS BEGIN RETURN ''; END");
+        _mssqlAnalyzer.Analyze(Arg.Is<string>(s => s.Contains("fns_GetRemoteOrderId", StringComparison.Ordinal)), Arg.Any<LineageAnalysisOptions?>())
             .Returns(Refs(
-                new ObjectRef("dbo", "fns_Sig_Open_GetTransactionCode") { Server = "SIG", Origin = ReferenceOrigin.Dynamic },
+                new ObjectRef("dbo", "fns_GetOrderId") { Server = "SQL_A", Origin = ReferenceOrigin.Dynamic },
                 new ObjectRef(null, "sp_executesql")));
 
         CatalogBuilder builder = CreateBuilder();
         Core.Domain.Catalog catalog = await builder.BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
 
-        string callerId = NodeId("SQLPROD01", "AppDb", "Functions", "dbo", "fns_Opn_Sig_GetTransactionCode");
-        string linkId = NodeId("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SIG");
-        string remoteId = NodeId("SQLPROD02", "SigDb", "Functions", "dbo", "fns_Sig_Open_GetTransactionCode");
+        string callerId = NodeId("SQLPROD01", "AppDb", "Functions", "dbo", "fns_GetRemoteOrderId");
+        string linkId = NodeId("SQLPROD01", "_ServerLevel", "LinkedServers", null, "SQL_A");
+        string remoteId = NodeId("SQLPROD02", "ServerADb", "Functions", "dbo", "fns_GetOrderId");
 
         Assert.Contains(catalog.Edges, e => e.From == callerId && e.To == linkId);
         Assert.Contains(catalog.Edges, e => e.From == linkId && e.To == remoteId);

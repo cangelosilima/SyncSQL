@@ -1,0 +1,107 @@
+name: benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateway:
+        description: Run dg4msql execution tests on a prepared oracle-gateway runner
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'cli/**'
+      - 'samples/scenarios/heterogeneous-lineage/**'
+      - '.github/workflows/heterogeneous-benchmark.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: heterogeneous-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway:
+    if: github.event_name == 'workflow_dispatch' && inputs.gateway
+    runs-on: [self-hosted, linux, x64, oracle-gateway]
+    timeout-minutes: 35
+    concurrency:
+      group: oracle-gateway-fleet
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolate registry credentials for this job
+        id: docker-config
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/gateway-benchmark-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Select gateway image
+        uses: actions/github-script@v7
+        env:
+          CONFIGURED_IMAGE: ${{ vars.ORACLE_GATEWAY_IMAGE }}
+        with:
+          script: |
+            const { imageNames } = require('./.github/scripts/gateway-package.cjs');
+            core.exportVariable('ORACLE_GATEWAY_IMAGE', process.env.CONFIGURED_IMAGE || imageNames(context.repo.owner, '19.3').image);
+      - name: Authenticate to GHCR
+        if: startsWith(env.ORACLE_GATEWAY_IMAGE, 'ghcr.io/')
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Pull the published gateway image
+        if: startsWith(env.ORACLE_GATEWAY_IMAGE, 'ghcr.io/')
+        run: docker pull "$ORACLE_GATEWAY_IMAGE"
+      - name: Provision gateway, execute remote reads, extract and verify
+        run: bash samples/scenarios/heterogeneous-lineage/run.sh --gateway
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: heterogeneous-gateway-benchmark
+          include-hidden-files: true
+          path: |
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/benchmark.json
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/pipeline.log
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/lineage-index.json
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/extracted/**
+            cli/tests/SyncSql.Samples.Benchmark.Tests/TestResults/*.trx
+      - name: Stop gateway scenario containers
+        if: always()
+        run: docker compose --env-file samples/scenarios/heterogeneous-lineage/.env.example -f samples/scenarios/heterogeneous-lineage/compose.yml -f samples/scenarios/heterogeneous-lineage/compose.gateway.yml down -v
+      - name: Clear registry credentials
+        if: always() && steps.docker-config.outcome == 'success'
+        run: docker logout ghcr.io
+
+  lineage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Provision, extract and verify
+        run: bash samples/scenarios/heterogeneous-lineage/run.sh
+      - name: Capture container diagnostics
+        if: always()
+        run: |
+          mkdir -p samples/scenarios/heterogeneous-lineage/.cache
+          docker compose --env-file samples/scenarios/heterogeneous-lineage/.env.example -f samples/scenarios/heterogeneous-lineage/compose.yml logs --no-color > samples/scenarios/heterogeneous-lineage/.cache/containers.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: heterogeneous-benchmark
+          include-hidden-files: true
+          path: |
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/benchmark.json
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/pipeline.log
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/lineage-index.json
+            samples/scenarios/heterogeneous-lineage/.cache/runs/**/extracted/**
+            samples/scenarios/heterogeneous-lineage/.cache/containers.log
+            cli/tests/SyncSql.Samples.Benchmark.Tests/TestResults/*.trx
+      - name: Stop scenario containers
+        if: always()
+        run: docker compose --env-file samples/scenarios/heterogeneous-lineage/.env.example -f samples/scenarios/heterogeneous-lineage/compose.yml down -v

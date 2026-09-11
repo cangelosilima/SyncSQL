@@ -1,0 +1,102 @@
+{
+  "defaults": {
+    "databases": {
+      "include": [
+        ".*"
+      ],
+      "exclude": [
+        "^master$",
+        "^tempdb$",
+        "^model$",
+        "^msdb$"
+      ]
+    },
+    "schemas": {
+      "include": [
+        ".*"
+      ],
+      "exclude": [
+        "^sys$",
+        "^INFORMATION_SCHEMA$"
+      ]
+    },
+    "objectNames": {
+      "include": [
+        ".*"
+      ],
+      "exclude": []
+    },
+    "objectTypes": [
+      "Tables",
+      "Views",
+      "StoredProcedures",
+      "Functions",
+      "Triggers",
+      "LinkedServers"
+    ]
+  },
+  "discovery": {
+    "linkedServers": {
+      "enabled": false
+    }
+  },
+  "servers": [
+    {
+      "name": "ATLAS_SQL",
+      "type": "mssql",
+      "host": "127.0.0.1",
+      "port": 14431,
+      "encrypt": true,
+      "trustServerCertificate": true,
+      "credentialsVariablePrefix": "LINEAGE_ATLAS",
+      "databases": {
+        "include": [
+          "^Commerce$",
+          "^Receivables$"
+        ],
+        "exclude": []
+      }
+    },
+    {
+      "name": "MERIDIAN_SQL",
+      "type": "mssql",
+      "host": "127.0.0.1",
+      "port": 14432,
+      "encrypt": true,
+      "trustServerCertificate": true,
+      "credentialsVariablePrefix": "LINEAGE_MERIDIAN",
+      "databases": {
+        "include": [
+          "^Distribution$",
+          "^Intelligence$"
+        ],
+        "exclude": []
+      }
+    },
+    {
+      "name": "HELIOS_ORACLE",
+      "type": "oracle",
+      "host": "127.0.0.1",
+      "port": 15231,
+      "serviceName": "FREEPDB1",
+      "credentialsVariablePrefix": "LINEAGE_HELIOS",
+      "schemas": {
+        "include": [
+          "^PROCUREMENT$",
+          "^COMPLIANCE$"
+        ],
+        "exclude": []
+      },
+      "objectTypes": [
+        "Tables",
+        "Views",
+        "Procedures",
+        "Functions",
+        "Triggers",
+        "Packages",
+        "PackageBodies",
+        "DatabaseLinks"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+services:
+  gateway:
+    image: ${ORACLE_GATEWAY_IMAGE:-syncsql-oracle-gateway:19.3}
+    build:
+      context: ./gateway
+    hostname: HERMES_GATEWAY
+    platform: linux/amd64
+    environment:
+      ORACLE_HOME: /opt/oracle/product/19c/gateway
+    volumes:
+      - ./gateway/network:/opt/syncsql/network:ro
+      - ./gateway/entrypoint.sh:/opt/syncsql/entrypoint.sh:ro
+    entrypoint: ["bash", "/opt/syncsql/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "$$ORACLE_HOME/bin/lsnrctl status LISTENER >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      default:
+        aliases: [HERMES_GATEWAY]
+
+  helios:
+    volumes:
+      - ./gateway/oracle:/opt/syncsql/gateway:ro

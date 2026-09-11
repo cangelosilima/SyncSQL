@@ -77,7 +77,7 @@ The explicit request “Show all references to column id from Orders” previous
 
 ## Fixture and small corrections
 
-The demo linked server SIG was renamed REMOTE2 in `site/public/data/catalog.json`, including its ID, DDL and references. This was a fixture edit, not SQL executed against a server. The actual remote hostname/database and function identifiers were not renamed. Related-name/type/dynamic badges have explicit spacing. Search containers supply one focus outline rather than duplicate inner and outer outlines.
+The demo linked server SQL_A was renamed REMOTE2 in `site/public/data/catalog.json`, including its ID, DDL and references. This was a fixture edit, not SQL executed against a server. The actual remote hostname/database and function identifiers were not renamed. Related-name/type/dynamic badges have explicit spacing. Search containers supply one focus outline rather than duplicate inner and outer outlines.
 
 ## Validation and remaining work
 

@@ -11,7 +11,7 @@ namespace SyncSql.Lineage.Oracle;
 /// VisitChildren(context) - so every override here that still wants its subtree walked must explicitly
 /// call VisitChildren(context) itself, or traversal silently stops there.
 /// </summary>
-internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
+internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? analyzeDynamic = null) : PlSqlParserBaseVisitor<object?>
 {
     public List<ObjectRef> ObjectRefs { get; } = [];
     public Dictionary<string, ObjectRef> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -110,8 +110,8 @@ internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
             return new ObjectRef(null, first) { Server = link };
         }
 
-        string? schema = rest.Length >= 2 ? GetIdentifierText(rest[^2]) : first;
-        return new ObjectRef(schema, GetIdentifierText(rest[^1])) { Server = link };
+        // OWNER.PACKAGE.MEMBER depends on OWNER.PACKAGE, not a standalone member.
+        return new ObjectRef(first, GetIdentifierText(rest[0])) { Server = link, IsRoutine = true };
     }
 
     // Standalone procedure-call statements (app.other_proc();) use a dedicated call_statement/
@@ -174,7 +174,13 @@ internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
         {
             if (!string.IsNullOrEmpty(lastName))
             {
-                ObjectRefs.Add(new ObjectRef(qualifier, lastName));
+                string? owner = parts.Length >= 3
+                    ? GetIdentifierText(parts[^3].id_expression())
+                    : parts.Length == 2 ? GetLastPartName(context.general_element())
+                    : GetLastPartName(context.general_element()?.general_element());
+                ObjectRefs.Add(owner is not null
+                    ? new ObjectRef(owner, qualifier!) { IsRoutine = true }
+                    : new ObjectRef(qualifier, lastName) { IsRoutine = true });
             }
         }
         else if (!string.IsNullOrEmpty(qualifier) && !string.IsNullOrEmpty(lastName))
@@ -183,6 +189,38 @@ internal sealed class PlSqlLineageVisitor : PlSqlParserBaseVisitor<object?>
         }
 
         return VisitChildren(context);
+    }
+
+    public override object? VisitExecute_immediate(PlSqlParser.Execute_immediateContext context)
+    {
+        // Only a single literal is known exactly. Variables and concatenations remain
+        // unknown; strings passed to logging procedures are never scanned.
+        PlSqlParser.ExpressionContext expression = context.expression();
+        if (analyzeDynamic is not null && expression.Start.TokenIndex == expression.Stop.TokenIndex)
+        {
+            string text = expression.GetText();
+            string? sql = DecodeLiteral(text);
+            if (sql is not null)
+            {
+                ObjectRefs.AddRange(analyzeDynamic(sql).ObjectRefs.Select(r => r with { Origin = ReferenceOrigin.Dynamic }));
+            }
+        }
+        return VisitChildren(context);
+    }
+
+    private static string? DecodeLiteral(string text)
+    {
+        if (text.Length >= 2 && text[0] == '\'' && text[^1] == '\'')
+        {
+            return text[1..^1].Replace("''", "'", StringComparison.Ordinal);
+        }
+
+        if (text.Length >= 5 && (text[0] is 'q' or 'Q') && text[1] == '\'' && text[^1] == '\'')
+        {
+            return text[3..^2];
+        }
+
+        return null;
     }
 
     private static string? GetLastPartName(PlSqlParser.General_elementContext? context)

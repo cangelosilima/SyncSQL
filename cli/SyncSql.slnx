@@ -13,6 +13,7 @@
     <Project Path="tests/SyncSql.Cli.Tests/SyncSql.Cli.Tests.csproj" />
     <Project Path="tests/SyncSql.Catalog.Tests/SyncSql.Catalog.Tests.csproj" />
     <Project Path="tests/SyncSql.Core.Tests/SyncSql.Core.Tests.csproj" />
+    <Project Path="tests/SyncSql.Extraction.MsSql.IntegrationTests/SyncSql.Extraction.MsSql.IntegrationTests.csproj" />
     <Project Path="tests/SyncSql.Extraction.MsSql.Tests/SyncSql.Extraction.MsSql.Tests.csproj" />
     <Project Path="tests/SyncSql.Extraction.Oracle.Tests/SyncSql.Extraction.Oracle.Tests.csproj" />
     <Project Path="tests/SyncSql.Lineage.MsSql.Tests/SyncSql.Lineage.MsSql.Tests.csproj" />
