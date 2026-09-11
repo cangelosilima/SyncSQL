@@ -69,6 +69,28 @@ jobs:
       - name: Test
         run: npm run test:coverage
 
+      - uses: actions/setup-dotnet@v4
+        if: ${{ !cancelled() && hashFiles('site/coverage/lcov.info') != '' }}
+        with:
+          global-json-file: global.json
+
+      - name: Generate detailed Site coverage report
+        if: ${{ !cancelled() && hashFiles('site/coverage/lcov.info') != '' }}
+        uses: danielpalme/ReportGenerator-GitHub-Action@049f7ec958c672fd31d5cc1cb01622dc8d2e23ab # 5.5.10
+        with:
+          reports: 'site/coverage/lcov.info'
+          sourcedirs: site
+          targetdir: site/coverage/report
+          reporttypes: 'Html;MarkdownSummaryGithub;JsonSummary'
+          license: ${{ secrets.REPORTGENERATOR_LICENSE }}
+          title: Site coverage
+          customSettings: 'settings:defaultAssemblyName=Site'
+
+      - name: Publish Site coverage summary
+        if: ${{ !cancelled() && hashFiles('site/coverage/report/SummaryGithub.md') != '' }}
+        shell: bash
+        run: cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload site coverage
         if: always()
         uses: actions/upload-artifact@v4

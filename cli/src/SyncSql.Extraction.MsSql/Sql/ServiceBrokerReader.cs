@@ -1,5 +1,5 @@
 ﻿using Dapper;
-using Microsoft.Data.SqlClient;
+using System.Data.Common;
 
 namespace SyncSql.Extraction.MsSql.Sql;
 
@@ -8,7 +8,9 @@ internal static class ServiceBrokerReader
 {
     public static readonly string[] ObjectTypes = ["MessageTypes", "Contracts", "Queues", "Services"];
 
-    public static Task<IEnumerable<BrokerRow>> ReadAsync(SqlConnection connection) => connection.QueryAsync<BrokerRow>("""
+    public static Task<IEnumerable<BrokerRow>> ReadAsync(DbConnection connection) => connection.QueryAsync<BrokerRow>(Query);
+
+    internal const string Query = """
         SELECT 'MessageTypes' AS Type, CAST(NULL AS sysname) AS SchemaName, m.name COLLATE DATABASE_DEFAULT AS Name,
             CAST('CREATE MESSAGE TYPE ' + QUOTENAME(m.name COLLATE DATABASE_DEFAULT) + ' AUTHORIZATION ' + QUOTENAME(USER_NAME(m.principal_id))
             + ' VALIDATION = ' + CASE m.validation WHEN 'N' THEN 'NONE' WHEN 'E' THEN 'EMPTY'
@@ -51,7 +53,7 @@ internal static class ServiceBrokerReader
         FROM sys.services s JOIN sys.service_queues q ON q.object_id = s.service_queue_id
         WHERE s.service_id > 65535 AND q.is_ms_shipped = 0
         ORDER BY Type, SchemaName, Name;
-        """);
+        """;
 }
 
 internal sealed class BrokerRow

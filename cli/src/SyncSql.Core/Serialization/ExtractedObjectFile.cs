@@ -307,8 +307,8 @@ public static class ExtractedObjectFile
 
                 string stateText = match.Groups[2].Value;
                 GrantState state = string.Equals(stateText, "DENY", StringComparison.OrdinalIgnoreCase) ? GrantState.Deny : GrantState.Grant;
-                string? granteeType = match.Groups[4].Value is { Length: > 0 } gt ? gt : null;
-                string? column = match.Groups[5].Value is { Length: > 0 } col ? col : null;
+                string? granteeType = match.Groups[4].Value.Length > 0 ? match.Groups[4].Value : null;
+                string? column = match.Groups[5].Value.Length > 0 ? match.Groups[5].Value : null;
                 grants.Add(new GrantEntry(match.Groups[1].Value, state, match.Groups[3].Value, granteeType, column));
             }
         }

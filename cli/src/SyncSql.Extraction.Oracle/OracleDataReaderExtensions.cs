@@ -1,5 +1,6 @@
-﻿using System.Globalization;
-using Oracle.ManagedDataAccess.Client;
+﻿using System.Data.Common;
+using System.Globalization;
+
 
 namespace SyncSql.Extraction.Oracle;
 
@@ -9,13 +10,13 @@ namespace SyncSql.Extraction.Oracle;
 /// </summary>
 internal static class OracleDataReaderExtensions
 {
-    public static string GetStringOrEmpty(this OracleDataReader reader, string column)
+    public static string GetStringOrEmpty(this DbDataReader reader, string column)
     {
         int ordinal = reader.GetOrdinal(column);
         return reader.IsDBNull(ordinal) ? string.Empty : reader.GetString(ordinal);
     }
 
-    public static string? GetNullableString(this OracleDataReader reader, string column)
+    public static string? GetNullableString(this DbDataReader reader, string column)
     {
         int ordinal = reader.GetOrdinal(column);
         return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
@@ -26,13 +27,13 @@ internal static class OracleDataReaderExtensions
     /// long, ...), so the conversion goes through Convert - explicitly invariant, because the value is a
     /// machine number from a catalog view, not something formatted for a human in the runner's locale.
     /// </summary>
-    public static long? GetNullableInt64(this OracleDataReader reader, string column)
+    public static long? GetNullableInt64(this DbDataReader reader, string column)
     {
         int ordinal = reader.GetOrdinal(column);
         return reader.IsDBNull(ordinal) ? null : Convert.ToInt64(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
     }
 
-    public static DateTime? GetNullableDateTime(this OracleDataReader reader, string column)
+    public static DateTime? GetNullableDateTime(this DbDataReader reader, string column)
     {
         int ordinal = reader.GetOrdinal(column);
         return reader.IsDBNull(ordinal) ? null : reader.GetDateTime(ordinal);

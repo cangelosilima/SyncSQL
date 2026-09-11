@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="../../../config/sql-style.json" LogicalName="SyncSql.SqlStyle.json" />
+    <InternalsVisibleTo Include="SyncSql.Lineage.MsSql.Tests" />
   </ItemGroup>
 
 </Project>

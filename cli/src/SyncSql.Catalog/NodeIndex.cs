@@ -346,11 +346,7 @@ internal sealed class NodeIndex
             return null;
         }
 
-        return matches.Count switch
-        {
-            1 => ReferenceResolution.Found(matches[0]),
-            > 1 => ReferenceResolution.Ambiguous,
-            _ => null,
-        };
+        // Entries are created only when adding their first node, so every stored list is nonempty.
+        return matches.Count == 1 ? ReferenceResolution.Found(matches[0]) : ReferenceResolution.Ambiguous;
     }
 }

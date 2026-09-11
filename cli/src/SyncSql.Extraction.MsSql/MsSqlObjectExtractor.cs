@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;
@@ -16,8 +16,38 @@ namespace SyncSql.Extraction.MsSql;
 /// servers, and a best-effort replication publication snapshot. A direct port of
 /// SyncSql.MsSql.psm1's Export-SyncSqlMsSqlServer.
 /// </summary>
-public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, TimeProvider timeProvider) : IDatabaseObjectExtractor
+public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
 {
+    private readonly ILogger<MsSqlObjectExtractor> _logger;
+    private readonly TimeProvider _timeProvider;
+    private readonly Func<ServerConfig, string, DatabaseCredentials, DbConnection> _createConnection;
+
+    public MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, TimeProvider timeProvider)
+        : this(logger, timeProvider, MsSqlConnectionFactory.Create) { }
+
+    internal MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, TimeProvider timeProvider,
+        Func<ServerConfig, string, DatabaseCredentials, DbConnection> createConnection)
+    {
+        _logger = logger;
+        _timeProvider = timeProvider;
+        _createConnection = createConnection;
+    }
+
+    private async Task<DbConnection> OpenAsync(ServerConfig server, string database, DatabaseCredentials credentials, CancellationToken cancellationToken)
+    {
+        DbConnection connection = _createConnection(server, database, credentials);
+        try
+        {
+            await connection.OpenAsync(cancellationToken);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+            throw;
+        }
+    }
+
     private static readonly IReadOnlyDictionary<string, string> TypeCodeMap = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["P"] = "StoredProcedures",
@@ -42,7 +72,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         // the caller may want to follow up on (see LinkedServerFollowUpPlanner).
         if (filters.ObjectTypes.Contains("LinkedServers") || options.DiscoverLinkedServers)
         {
-            await using SqlConnection masterConnection = await MsSqlConnectionFactory.OpenAsync(server, "master", options.Credentials, cancellationToken);
+            await using DbConnection masterConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken);
             IReadOnlyList<IGrouping<string, LinkedServerRow>> linkedServers =
                 [.. (await MsSqlCatalogReader.GetLinkedServersAsync(masterConnection)).GroupBy(r => r.LinkedServerName, StringComparer.OrdinalIgnoreCase)];
 
@@ -57,7 +87,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
             }
         }
 
-        await using SqlConnection dbListConnection = await MsSqlConnectionFactory.OpenAsync(server, "master", options.Credentials, cancellationToken);
+        await using DbConnection dbListConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken);
         IEnumerable<string> databases = await MsSqlCatalogReader.GetDatabasesAsync(dbListConnection);
 
         foreach (string database in databases)
@@ -67,8 +97,8 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                 continue;
             }
 
-            logger.LogInformation("[{Server}/{Database}] Extracting", server.Name, database);
-            await using SqlConnection connection = await MsSqlConnectionFactory.OpenAsync(server, database, options.Credentials, cancellationToken);
+            _logger.LogInformation("[{Server}/{Database}] Extracting", server.Name, database);
+            await using DbConnection connection = await OpenAsync(server, database, options.Credentials, cancellationToken);
             await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
         }
 
@@ -128,7 +158,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
     }
 
     private async Task ExtractDatabaseAsync(
-        SqlConnection connection,
+        DbConnection connection,
         ServerConfig server,
         string database,
         EffectiveFilters filters,
@@ -249,7 +279,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
     }
 
     private static async Task ExtractModuleObjectsAsync(
-        SqlConnection connection, ServerConfig server, string database, EffectiveFilters filters,
+        DbConnection connection, ServerConfig server, string database, EffectiveFilters filters,
         IReadOnlyDictionary<string, bool> allowedSchemas,
         IReadOnlyDictionary<string, ExtendedPropertiesEntry> extendedProperties,
         IReadOnlyDictionary<string, List<GrantEntry>> grants,
@@ -289,7 +319,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
     }
 
     private async Task ExtractTablesAsync(
-        SqlConnection connection, ServerConfig server, string database, EffectiveFilters filters, ExtractionOptions options,
+        DbConnection connection, ServerConfig server, string database, EffectiveFilters filters, ExtractionOptions options,
         IReadOnlyDictionary<string, bool> allowedSchemas,
         IReadOnlyDictionary<string, ExtendedPropertiesEntry> extendedProperties,
         IReadOnlyDictionary<string, List<GrantEntry>> grants,
@@ -356,7 +386,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
     }
 
     private static async Task ExtractSynonymsAsync(
-        SqlConnection connection, ServerConfig server, string database, EffectiveFilters filters,
+        DbConnection connection, ServerConfig server, string database, EffectiveFilters filters,
         IReadOnlyDictionary<string, bool> allowedSchemas, IReadOnlyDictionary<string, List<GrantEntry>> grants,
         List<ExtractedObject> objects)
     {
@@ -386,7 +416,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         }
     }
 
-    private async Task ExtractReplicationAsync(SqlConnection connection, ServerConfig server, string database, EffectiveFilters filters, List<ExtractedObject> objects)
+    private async Task ExtractReplicationAsync(DbConnection connection, ServerConfig server, string database, EffectiveFilters filters, List<ExtractedObject> objects)
     {
         try
         {
@@ -408,17 +438,17 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
                 });
             }
         }
-        catch (SqlException ex)
+        catch (DbException ex)
         {
-            logger.LogWarning("[{Server}/{Database}] Replication extraction failed (continuing without it): {Message}", server.Name, database, ex.Message);
+            _logger.LogWarning("[{Server}/{Database}] Replication extraction failed (continuing without it): {Message}", server.Name, database, ex.Message);
         }
     }
 
     // --- Optional/best-effort indexes: each degrades independently to empty on failure. ---
 
-    private async Task AppendConfigurationAsync(SqlConnection connection, string server, string database, List<ExtractedObject> objects, int firstObject)
+    private async Task AppendConfigurationAsync(DbConnection connection, string server, string database, List<ExtractedObject> objects, int firstObject)
     {
-        (string Title, Func<SqlConnection, Task<IEnumerable<ConfigurationRow>>> Read)[] readers =
+        (string Title, Func<DbConnection, Task<IEnumerable<ConfigurationRow>>> Read)[] readers =
         [
             ("Ownership", MsSqlCatalogReader.GetOwnershipAsync),
             ("Permissions", MsSqlCatalogReader.GetPermissionsAsync),
@@ -443,7 +473,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         }
     }
 
-    private static async Task<Dictionary<string, ExtendedPropertiesEntry>> LoadExtendedPropertiesAsync(SqlConnection connection)
+    private static async Task<Dictionary<string, ExtendedPropertiesEntry>> LoadExtendedPropertiesAsync(DbConnection connection)
     {
         Dictionary<string, string> objectDescriptions = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, Dictionary<string, string>> columnDescriptions = new(StringComparer.OrdinalIgnoreCase);
@@ -485,7 +515,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         return result;
     }
 
-    private static async Task<Dictionary<string, List<GrantEntry>>> LoadGrantsAsync(SqlConnection connection)
+    private static async Task<Dictionary<string, List<GrantEntry>>> LoadGrantsAsync(DbConnection connection)
     {
         Dictionary<string, List<GrantEntry>> index = new(StringComparer.OrdinalIgnoreCase);
         foreach (GrantRow row in await MsSqlCatalogReader.GetGrantsAsync(connection))
@@ -504,7 +534,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         return index;
     }
 
-    private static async Task<Dictionary<string, List<ExtractedColumn>>> LoadColumnListAsync(SqlConnection connection)
+    private static async Task<Dictionary<string, List<ExtractedColumn>>> LoadColumnListAsync(DbConnection connection)
     {
         Dictionary<string, List<ExtractedColumn>> index = new(StringComparer.OrdinalIgnoreCase);
         foreach (ColumnListRow row in await MsSqlCatalogReader.GetColumnListAsync(connection))
@@ -522,7 +552,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         return index;
     }
 
-    private static async Task<Dictionary<string, List<string>>> LoadTableSectionAsync(Func<SqlConnection, Task<IEnumerable<TableSectionRow>>> query, SqlConnection connection)
+    private static async Task<Dictionary<string, List<string>>> LoadTableSectionAsync(Func<DbConnection, Task<IEnumerable<TableSectionRow>>> query, DbConnection connection)
     {
         Dictionary<string, List<string>> index = new(StringComparer.OrdinalIgnoreCase);
         foreach (TableSectionRow row in await query(connection))
@@ -540,7 +570,7 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         return index;
     }
 
-    private static async Task<Dictionary<string, List<string>>> LoadIndexSectionAsync(SqlConnection connection)
+    private static async Task<Dictionary<string, List<string>>> LoadIndexSectionAsync(DbConnection connection)
     {
         Dictionary<string, List<string>> index = new(StringComparer.OrdinalIgnoreCase);
         foreach (IndexRow row in await MsSqlCatalogReader.GetIndexesAsync(connection))
@@ -565,9 +595,9 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
     /// often doesn't have. Loading them as one unit meant a denied DMV threw away the volume metrics
     /// too; now a permissions gap costs only the part it actually covers.
     /// </summary>
-    private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(SqlConnection connection, string serverName, string database)
+    private async Task<Dictionary<string, MetricsSnapshot>> LoadMetricsSnapshotsAsync(DbConnection connection, string serverName, string database)
     {
-        DateTimeOffset capturedAt = timeProvider.GetUtcNow();
+        DateTimeOffset capturedAt = _timeProvider.GetUtcNow();
         Dictionary<string, MetricsSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
 
         List<TableVolumeRow> volumeRows = await TryLoadAsync(
@@ -682,9 +712,9 @@ public sealed class MsSqlObjectExtractor(ILogger<MsSqlObjectExtractor> logger, T
         {
             return await load();
         }
-        catch (SqlException ex)
+        catch (DbException ex)
         {
-            logger.LogWarning("[{Server}/{Database}] {Section} extraction failed (continuing without it): {Message}", serverName, database, sectionName, ex.Message);
+            _logger.LogWarning("[{Server}/{Database}] {Section} extraction failed (continuing without it): {Message}", serverName, database, sectionName, ex.Message);
             return new T();
         }
     }

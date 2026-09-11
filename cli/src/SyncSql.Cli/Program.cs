@@ -6,7 +6,7 @@ using SyncSql.Cli.Commands;
 using SyncSql.Cli.Composition;
 using System.CommandLine;
 
-IHost host = Host.CreateDefaultBuilder(args)
+using IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();

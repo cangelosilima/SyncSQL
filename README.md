@@ -482,9 +482,14 @@ successful analysis job means the scan completed. CodeQL and dependency review
 require the corresponding GitHub security features to be enabled (and GitHub
 Code Security for private repositories).
 
-Coverage minimums are 70% CLI lines (excluding tests and generated grammar),
+Coverage minimums are 100% CLI lines, branches, methods, and full methods
+(excluding tests and generated grammar),
 and 80% site lines/statements, 75% functions, and 70% branches. The existing 100%
 packaging-script threshold is retained. Reports are uploaded even on test failures.
+CLI and Site coverage use ReportGenerator for detailed CI summaries and browsable
+HTML reports, including per-file breakdowns. Site reports are published in both
+Quality and Site CI jobs. The CLI gate also checks raw counts so rounded percentages
+cannot hide uncovered code.
 The CLI and Site percentage badges show measured line coverage from the latest
 successful Quality run on `main`. CI extracts the values from ReportGenerator and
 Vitest, validates them on pull requests, and publishes the two small JSON files to

@@ -27,7 +27,13 @@ public static class TSqlParserFactory
             return _cachedParser;
         }
 
-        Type parserType = typeof(TSqlFragmentVisitor).Assembly.GetTypes()
+        _cachedParser = CreateParser(typeof(TSqlFragmentVisitor).Assembly.GetTypes());
+        return _cachedParser;
+    }
+
+    internal static TSqlParser CreateParser(IEnumerable<Type> availableTypes)
+    {
+        Type parserType = availableTypes
             .Where(t => t is { IsPublic: true } && ParserTypeNamePattern.IsMatch(t.Name))
             .OrderByDescending(t => int.Parse(ParserTypeNamePattern.Match(t.Name).Groups[1].Value, CultureInfo.InvariantCulture))
             .FirstOrDefault()
@@ -36,7 +42,6 @@ public static class TSqlParserFactory
         // Activator.CreateInstance(Type, bool) is NOT "invoke the (bool) constructor" - that overload
         // means "use a non-public constructor if needed" and requires a parameterless one to exist.
         // The (Type, object?[]?) overload is the one that actually passes constructor arguments.
-        _cachedParser = (TSqlParser)Activator.CreateInstance(parserType, [true])!;
-        return _cachedParser;
+        return (TSqlParser)Activator.CreateInstance(parserType, [true])!;
     }
 }

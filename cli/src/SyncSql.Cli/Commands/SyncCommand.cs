@@ -279,8 +279,8 @@ internal static class SyncCommand
         List<ICredentialProvider> layers = [];
 
         ExplicitCredentialProvider parameterCredentials = ExplicitCredentialProvider.FromArguments(
-            parseResult.GetValue(dbUserOption) ?? [],
-            parseResult.GetValue(dbPasswordOption) ?? []);
+            parseResult.GetValue(dbUserOption)!,
+            parseResult.GetValue(dbPasswordOption)!);
         if (!parameterCredentials.IsEmpty)
         {
             layers.Add(parameterCredentials);

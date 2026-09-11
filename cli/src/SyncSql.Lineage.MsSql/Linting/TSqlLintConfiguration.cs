@@ -58,9 +58,12 @@ public sealed record TSqlLintConfiguration(TSqlLintSeverity FailOn, IReadOnlyDic
         _ => throw new InvalidDataException($"Invalid {field} severity '{value}': expected 'warning', 'error' or 'off'."),
     };
 
-    private static TSqlLintConfiguration LoadDefault()
+    private static TSqlLintConfiguration LoadDefault() =>
+        LoadDefault(typeof(TSqlLintConfiguration).Assembly.GetManifestResourceStream("SyncSql.SqlStyle.json"));
+
+    internal static TSqlLintConfiguration LoadDefault(Stream? resource)
     {
-        using Stream stream = typeof(TSqlLintConfiguration).Assembly.GetManifestResourceStream("SyncSql.SqlStyle.json")
+        using Stream stream = resource
             ?? throw new InvalidOperationException("The packaged SQL style configuration is missing.");
         using StreamReader reader = new(stream);
         return Parse(reader.ReadToEnd());
