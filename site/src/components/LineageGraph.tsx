@@ -3,7 +3,7 @@ import { ReactFlow, Background, Controls, Panel, useReactFlow, type Node, type E
 import '@xyflow/react/dist/style.css'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
-import { useTheme } from '../lib/ThemeContext'
+import { isLinkNode } from '../lib/catalog'
 import { layoutGraph } from '../lib/layout'
 import { colorForType } from '../lib/typeColors'
 import { buildLineageGraphSvg, downloadPng, downloadSvg } from '../lib/graphExport'
@@ -49,7 +49,6 @@ const NO_CONNECTORS: string[] = []
 
 export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeActivate, onEdgeInspect, maxNodes = DEFAULT_MAX_NODES, groupIntermediate = false, connectorIds = NO_CONNECTORS }: LineageGraphProps) {
   const { index } = useCatalog()
-  const { theme } = useTheme()
   const navigate = useNavigate()
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [openBundleId, setOpenBundleId] = useState<string | null>(null)
@@ -72,11 +71,16 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
       .map((node) => {
         const isFocus = node.id === focusId
         const color = colorForType(node.type)
+        // Link names are local to the owning server (and database for Oracle).
+        // The same remote name on two servers represents two distinct links.
+        const label = isLinkNode(node)
+          ? `${node.qualifiedName} (on ${node.server}${node.type === 'DatabaseLinks' ? ` / ${node.database}` : ''})`
+          : node.qualifiedName
         return {
           id: node.id,
           className: isFocus ? 'lineage-node--focus' : undefined,
-          ariaLabel: `${node.qualifiedName}, ${node.type}${isFocus ? ', current focus' : ''}`,
-          data: { label: `${node.qualifiedName}${connectorIds.includes(node.id) ? ' (connecting object)' : ''}`, objectType: node.type },
+          ariaLabel: `${label}, ${node.type}${isFocus ? ', current focus' : ''}`,
+          data: { label: `${label}${connectorIds.includes(node.id) ? ' (connecting object)' : ''}`, objectType: node.type },
           position: { x: 0, y: 0 },
           style: {
             background: isFocus ? 'var(--selected)' : 'var(--surface)',
@@ -223,7 +227,7 @@ export default function LineageGraph({ nodeIds, focusId, height = 560, onNodeAct
             setOpenBundleId(null)
           }}
           fitView
-          colorMode={theme}
+          colorMode="light"
           proOptions={{ hideAttribution: true }}
         >
           <Background />

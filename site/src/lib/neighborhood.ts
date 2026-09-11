@@ -26,28 +26,57 @@ export function getNeighborhoodIds(index: CatalogIndex, rootId: string, hops: nu
   return [...seen]
 }
 
-/** Independent traversals, with one extra step past links at the hop boundary. */
+interface TraversalStep {
+  id: string
+  /** Object through which this connection was reached; absent for ordinary nodes and the focus. */
+  via?: string
+}
+
+/** Independent traversals, preserving caller/target attribution through shared connections. */
 export function getDirectionalNeighborhood(index: CatalogIndex, rootId: string, dependencies: number, dependents: number): string[] {
   const ids = new Set([rootId])
-  for (const [adjacency, limit] of [[index.outgoing, dependencies], [index.incoming, dependents]] as const) {
-    const seen = new Set([rootId])
-    let frontier = [rootId]
+  const isLink = (id: string) => {
+    const node = index.byId.get(id)
+    return node !== undefined && isLinkNode(node)
+  }
+  // A connection can be reached through several objects, each with different
+  // remote references. Deduplicating only by node id would lose those paths.
+  const key = ({ id, via }: TraversalStep) => JSON.stringify([id, via])
+  for (const [direction, limit] of [['outgoing', dependencies], ['incoming', dependents]] as const) {
+    const adjacency = index[direction]
+    function neighbors({ id, via }: TraversalStep): string[] {
+      const adjacent = adjacency.get(id) ?? []
+      if (via === undefined) return adjacent
+      const attributed = new Set<string>()
+      for (const ref of index.linkedServerRefsByLink.get(id) ?? []) {
+        if (direction === 'outgoing' && ref.from === via && ref.to !== null) attributed.add(ref.to)
+        if (direction === 'incoming' && ref.to === via) attributed.add(ref.from)
+      }
+      // Without attribution, keep the connection visible but do not infer
+      // that every caller references every target (including older catalogs).
+      return adjacent.filter(neighbor => attributed.has(neighbor))
+    }
+    const root: TraversalStep = { id: rootId }
+    const seen = new Set([key(root)])
+    let frontier = [root]
     for (let hop = 0; hop < limit && frontier.length; hop++) {
-      const next: string[] = []
-      for (const id of frontier) for (const neighbor of adjacency.get(id) ?? []) {
-        if (seen.has(neighbor) || !index.byId.has(neighbor)) continue
-        seen.add(neighbor)
+      const next: TraversalStep[] = []
+      for (const step of frontier) for (const neighbor of neighbors(step)) {
+        if (!index.byId.has(neighbor)) continue
+        const nextStep = { id: neighbor, via: isLink(neighbor) ? step.id : undefined }
+        const nextKey = key(nextStep)
+        if (seen.has(nextKey)) continue
+        seen.add(nextKey)
         ids.add(neighbor)
-        next.push(neighbor)
+        next.push(nextStep)
       }
       frontier = next
     }
     // Show the remote target or caller beyond a connection, without turning onto
     // its unrelated branches or expanding a direction explicitly set to zero.
-    if (limit > 0) for (const id of frontier) {
-      const node = index.byId.get(id)
-      if (!node || !isLinkNode(node)) continue
-      for (const neighbor of adjacency.get(id) ?? []) {
+    if (limit > 0) for (const step of frontier) {
+      if (!isLink(step.id)) continue
+      for (const neighbor of neighbors(step)) {
         if (index.byId.has(neighbor)) ids.add(neighbor)
       }
     }

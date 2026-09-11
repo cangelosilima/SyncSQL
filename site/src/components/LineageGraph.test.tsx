@@ -21,7 +21,6 @@ vi.mock('@xyflow/react', () => ({
   useReactFlow: () => ({ getNodes: () => graph.nodes, getEdges: () => graph.edges }),
 }))
 vi.mock('../lib/CatalogContext', () => ({ useCatalog: () => context }))
-vi.mock('../lib/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }))
 vi.mock('../lib/graphExport', () => ({ buildLineageGraphSvg: vi.fn(() => '<svg/>'), downloadSvg: vi.fn(), downloadPng: vi.fn() }))
 
 describe('graph integration retained in inspector layout', () => {

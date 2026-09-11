@@ -151,27 +151,6 @@ a {
   box-shadow: 0 0 5px color-mix(in srgb, var(--chrome-accent) 70%, transparent);
 }
 
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: var(--chrome-surface);
-  border: 1px solid var(--chrome-border);
-  border-radius: 2px;
-  color: var(--chrome-text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 0.25rem 0.6rem;
-  cursor: pointer;
-}
-
-.theme-toggle:hover {
-  border-color: var(--chrome-accent);
-  color: var(--chrome-text);
-}
-
 .body {
   display: flex;
   flex: 1;
@@ -561,7 +540,7 @@ a {
 }
 
 .code-block {
-  /* Syntax tokens keep the code surface dark in either application theme. */
+  /* Syntax tokens use the dedicated SQL code palette. */
   background: var(--code-bg);
   color: var(--code-text);
   padding: 1rem;

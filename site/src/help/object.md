@@ -33,8 +33,7 @@ The extracted DDL. Any appended sections the extractor writes - Foreign
 Keys, Check Constraints, Indexes - are rendered as their own collapsible
 panels rather than buried in the script.
 
-Code blocks always use the Midnight palette regardless of the site theme, so
-SQL keeps one consistent look in both light and dark.
+Code blocks use the Midnight palette for consistent SQL syntax highlighting.
 
 ## Metrics
 

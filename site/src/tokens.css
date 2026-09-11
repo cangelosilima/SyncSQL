@@ -41,7 +41,7 @@
   --line-height-body: 20px;
   --control-height: 36px;
 
-  /* Code remains a dark surface in both application themes. */
+  /* SQL code uses a dedicated dark syntax-highlighting surface. */
   --code-bg: #292824;
   --code-text: #f8f8f2;
   --code-border: #918576;
@@ -53,23 +53,4 @@
   --code-name: #ff5555;
   --code-symbol: #50fa7b;
   color-scheme: light;
-}
-
-:root[data-theme='dark'] {
-  --bg: #211f1b;
-  --surface: #2b2823;
-  --surface-alt: #38332b;
-  --text: #f5efe4;
-  --text-muted: #c5baa8;
-  --border: #958875;
-  --accent: #98cebb;
-  --accent-contrast: #211f1b;
-  --selected: #344a40;
-  --hover: #3c372e;
-  --focus: #b2e0cc;
-  --disabled: #b3a995;
-  --ok: #81d3a8;
-  --warn: #ffd18a;
-  --error: #ffabb4;
-  color-scheme: dark;
 }

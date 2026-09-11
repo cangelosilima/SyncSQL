@@ -119,6 +119,11 @@ export default function LineagePage() {
   if (!index) return null
 
   function drillInto(id: string) {
+    // Catalog object filters locate a starting object; carrying them into its
+    // neighborhood can hide every caller and target (for example Type is
+    // LinkedServers). Keep content/access investigations and filters explicitly
+    // applied while already navigating a neighborhood.
+    if (!currentFocus) setTokens(prev => prev.filter(token => token.attribute === 'grantee' || token.attribute === 'ddl'))
     setFocusStack((prev) => (prev[prev.length - 1] === id ? prev : [...prev, id]))
   }
 
@@ -264,6 +269,11 @@ export default function LineagePage() {
       )}
 
       {connectorIds.length > 0 && <p className="muted lineage-connector-hint">{connectorIds.length} connecting object{connectorIds.length === 1 ? '' : 's'} kept outside the filters to preserve paths to matching objects.</p>}
+
+      {currentFocus && nodeIds.length === 1 && narrowedFrom > 1 && <p className="muted">
+        Filters hide all surrounding objects.{' '}
+        <button type="button" className="lineage-nav-back" onClick={() => setTokens([])}>Show full neighborhood</button>
+      </p>}
 
       <div className="investigation-layout">
       <div className="workspace-content graph-workspace">

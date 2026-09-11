@@ -10,13 +10,18 @@ searches object details and SQL; use **DDL content contains** for SQL-only searc
 Remove any chip independently to broaden the results.
 
 - **Click** a node to drill into that object's own neighborhood *in place*.
+  Opening a search result clears the object filters used to locate it, so its
+  callers and targets become visible. Grantee and DDL content filters remain.
   A breadcrumb trail and a **Back** button walk you out again.
 - **Double-click** a node to open its full detail page.
 - **View options** sets **Dependencies** (objects the focus references) and
   **Dependents** (objects that reference the focus) independently, from 0 to 20
   hops. Use **+ Add hop** to expand one direction; 0 hides that side.
   When a hop ends at a linked server or database link, the graph includes one
-  extra hop in that direction to show its callers or remote targets. Object
+  extra hop in that direction to show callers or remote targets recorded for
+  that object flow. Sharing a connection does not make unrelated objects part
+  of the flow. Focusing the connection itself shows all its uses. When a catalog
+  lacks caller-to-target records, expansion stops at the connection. Object
   detail graphs use this same context on both sides.
 - **Group intermediate layers** combines intermediate objects of the same type,
   direction and hop into counted nodes. The focus and outer objects stay visible.
@@ -36,6 +41,9 @@ procedures around it, rather than asking for something that is both. The
 focused object always stays on screen, and the line under the breadcrumb says
 how much of its neighborhood is being hidden. Connecting objects outside the
 filters are retained and labeled so matches farther away keep a path to the focus.
+If filters hide every surrounding object, **Show full neighborhood** clears them
+while keeping the current focus and hop settings. Filters added while navigating
+remain active when you focus another nearby object.
 
 **Clear focus** converts the navigation into a real name filter as it
 releases it, so you land on that one object rather than the whole catalog.
@@ -73,7 +81,7 @@ cross-server dependency is visible rather than hidden inside an edge.
 
 **Export SVG** and **Export PNG** render the currently visible graph as a
 standalone image, built from node positions rather than by rasterizing the
-page - it renders correctly outside the site and matches the active theme.
+page - it renders correctly outside the site and matches the site's light theme.
 PNG exports use higher resolution, the page's loaded font, full wrapped object
 names, curved edges and the same dashed references and focus highlight.
 Both formats always include the full graph legend beneath the diagram, including
@@ -84,6 +92,7 @@ the object types shown, even when the on-screen legend is collapsed.
 References are read off a real parse tree per engine (T-SQL ScriptDom for
 MSSQL, an ANTLR4 PL/SQL grammar for Oracle), not by text matching - so
 identifiers inside strings and comments are not mistaken for references.
-But dynamic SQL and anything assembled at runtime are still invisible, and
-traversals stop one hop past a linked-server boundary. Treat the graph as a
+Dynamic SQL that cannot be recovered from the extracted definitions remains
+invisible. Cross-server paths require recorded caller-to-target references;
+sharing a linked server alone does not establish a path. Treat the graph as a
 very good map, not a certified lineage report.

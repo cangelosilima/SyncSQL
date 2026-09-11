@@ -110,10 +110,6 @@ in `site/src/help/` and are bundled with the site.
 
 ![Explorer page guide](docs/screenshots/help-panel.png)
 
-**Light and dark themes** — a toggle in the top right, persisted per browser.
-
-![Dark mode](docs/screenshots/dark-mode.png)
-
 ## How it works
 
 ```mermaid
@@ -442,8 +438,8 @@ a database, a credential, or a git remote.
 
 `site/` is a React + TypeScript + Vite app (source checked into this repo,
 built fresh by the `pages` job on every scheduled run), with dense results,
-balanced object details and a warm light/dark theme (light is the default -
-see "Theme" below). Every page carries a **?** next to its heading that
+balanced object details and a warm light theme (see "Theme" below).
+Every page carries a **?** next to its heading that
 opens that page's own Markdown guide without leaving the view (see
 "In-app help" below).
 
@@ -529,7 +525,7 @@ Primary navigation is **Overview → Explorer → Lineage → Alerts → AI → 
   column list for that edge. **Export SVG**/**Export PNG** render the
   currently visible graph to a standalone image (built directly from node
   positions rather than rasterizing the live page, so it renders correctly
-  outside the site and matches whichever theme is active) for dropping into
+  outside the site and matches the site's light theme) for dropping into
   an incident write-up or design doc.
 - **History** — a global commit timeline of everything the pipeline has
   changed, expandable per commit.
@@ -689,16 +685,11 @@ and the `helpGuides` map in `site/src/help/index.ts`, and render
 
 ### Theme
 
-A light/dark toggle lives in the top right of every page
-(`lib/ThemeContext.tsx`) and persists to `localStorage`. Light is the default:
-warm ivory surfaces, charcoal text, restrained teal accents and soft borders.
-Dark uses warm charcoal surfaces with pale teal accents. Dense tables and
-balanced object details retain technical depth in both themes. SQL viewers
-keep a dark syntax-highlighting surface; the Lineage graph follows the
-selected site theme. Shared colors and spacing live in `site/src/tokens.css`.
+The site uses a light theme: warm ivory surfaces, charcoal text, restrained
+teal accents and soft borders. SQL viewers use a dedicated dark
+syntax-highlighting surface; the Lineage graph uses the site's light theme.
+Shared colors and spacing live in `site/src/tokens.css`.
 The SQLineage database-and-relationships icon is used in the header and favicon.
-
-![Lineage graph in the dark theme](docs/screenshots/dark-mode-lineage.png)
 
 ### Grant mapping
 

@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { CatalogProvider, useCatalog } from './lib/CatalogContext'
-import { useTheme } from './lib/ThemeContext'
 import Home from './pages/Home'
 import ObjectPage from './pages/ObjectPage'
 import LineagePage from './pages/LineagePage'
@@ -11,7 +10,6 @@ import AiPage from './pages/AiPage'
 import Alerts from './pages/Alerts'
 import { AiProvider, useAi } from './ai/AiContext'
 import pkg from '../package.json'
-import Button from './components/Button'
 import CatalogSidebar from './components/CatalogSidebar'
 
 export default function App() {
@@ -87,7 +85,6 @@ function Shell() {
           <span className="status-pill" title="Catalog data is a static snapshot published by the analyze-catalog CI job">
             Snapshot · {index && new Date(index.catalog.generatedAt).toLocaleString()}
           </span>
-          <ThemeToggle />
         </div>
       </header>
       <div className="body">
@@ -105,14 +102,5 @@ function Shell() {
         </main>
       </div>
     </div>
-  )
-}
-
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
-  return (
-    <Button className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
-      {theme === 'light' ? '☀ Light' : '☾ Dark'}
-    </Button>
   )
 }
