@@ -1,0 +1,4257 @@
+{
+  "version": 1,
+  "name": "heterogeneous-lineage",
+  "description": "Engine-independent identities, dependencies and explicit privileges. 48 workload users; engine administrators and the two Oracle schema owners are not workload users. Each package has ten callable functions.",
+  "scopes": [
+    {
+      "key": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "engine": "mssql"
+    },
+    {
+      "key": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "engine": "mssql"
+    },
+    {
+      "key": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "engine": "mssql"
+    },
+    {
+      "key": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "engine": "mssql"
+    },
+    {
+      "key": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "engine": "mssql"
+    },
+    {
+      "key": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "engine": "mssql"
+    },
+    {
+      "key": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "engine": "mssql"
+    },
+    {
+      "key": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "engine": "mssql"
+    },
+    {
+      "key": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "engine": "mssql"
+    },
+    {
+      "key": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "engine": "mssql"
+    },
+    {
+      "key": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "engine": "mssql"
+    },
+    {
+      "key": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "engine": "mssql"
+    },
+    {
+      "key": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "engine": "oracle"
+    },
+    {
+      "key": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "engine": "oracle"
+    },
+    {
+      "key": "PKG_PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "engine": "oracle",
+      "package": "PROCUREMENT_API"
+    },
+    {
+      "key": "PKG_COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "engine": "oracle",
+      "package": "COMPLIANCE_API"
+    }
+  ],
+  "users": [
+    {
+      "name": "ORDER_ENTRY_READ",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "ORDER_ENTRY_WRITE",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "ORDER_ENTRY_EXEC",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "FULFILLMENT_READ",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "FULFILLMENT_WRITE",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "FULFILLMENT_EXEC",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "ORDER_AUDIT_READ",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "ORDER_AUDIT_WRITE",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "ORDER_AUDIT_EXEC",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce"
+    },
+    {
+      "name": "INVOICING_READ",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "INVOICING_WRITE",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "INVOICING_EXEC",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "SETTLEMENT_READ",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "SETTLEMENT_WRITE",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "SETTLEMENT_EXEC",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "FINANCE_AUDIT_READ",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "FINANCE_AUDIT_WRITE",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "FINANCE_AUDIT_EXEC",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables"
+    },
+    {
+      "name": "INVENTORY_READ",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "INVENTORY_WRITE",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "INVENTORY_EXEC",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "DISPATCH_READ",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "DISPATCH_WRITE",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "DISPATCH_EXEC",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "STOCK_AUDIT_READ",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "STOCK_AUDIT_WRITE",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "STOCK_AUDIT_EXEC",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution"
+    },
+    {
+      "name": "REPORTING_READ",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "REPORTING_WRITE",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "REPORTING_EXEC",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "ANALYTICS_ETL_READ",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "ANALYTICS_ETL_WRITE",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "ANALYTICS_ETL_EXEC",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "REPORT_AUDIT_READ",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "REPORT_AUDIT_WRITE",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "REPORT_AUDIT_EXEC",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence"
+    },
+    {
+      "name": "PROCUREMENT_READ",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PROCUREMENT_WRITE",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PROCUREMENT_EXEC",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "COMPLIANCE_READ",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "COMPLIANCE_WRITE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "COMPLIANCE_EXEC",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PKG_PROCUREMENT_READ",
+      "scope": "PKG_PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PKG_PROCUREMENT_WRITE",
+      "scope": "PKG_PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PKG_PROCUREMENT_EXEC",
+      "scope": "PKG_PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PKG_COMPLIANCE_READ",
+      "scope": "PKG_COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PKG_COMPLIANCE_WRITE",
+      "scope": "PKG_COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    },
+    {
+      "name": "PKG_COMPLIANCE_EXEC",
+      "scope": "PKG_COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/DETAILS",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/AUDIT_LOG",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/SETTINGS",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_ITEMS",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_DETAILS",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_READ",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_WRITE",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Functions/ORDER_ENTRY/F_COUNT",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Triggers/ORDER_ENTRY/TR_AUDIT",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/DETAILS",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/AUDIT_LOG",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/SETTINGS",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_ITEMS",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_DETAILS",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/FULFILLMENT/P_READ",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/FULFILLMENT/P_WRITE",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Functions/FULFILLMENT/F_COUNT",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Triggers/FULFILLMENT/TR_AUDIT",
+      "scope": "FULFILLMENT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "FULFILLMENT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/DETAILS",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/AUDIT_LOG",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/SETTINGS",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_ITEMS",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_DETAILS",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_READ",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_WRITE",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Functions/ORDER_AUDIT/F_COUNT",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Triggers/ORDER_AUDIT/TR_AUDIT",
+      "scope": "ORDER_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_AUDIT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/INVOICING/DETAILS",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/INVOICING/AUDIT_LOG",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/INVOICING/SETTINGS",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Views/INVOICING/V_ITEMS",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Views/INVOICING/V_DETAILS",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_READ",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_WRITE",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Functions/INVOICING/F_COUNT",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Triggers/INVOICING/TR_AUDIT",
+      "scope": "INVOICING",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "INVOICING",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/DETAILS",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/AUDIT_LOG",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/SETTINGS",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_ITEMS",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_DETAILS",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/SETTLEMENT/P_READ",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/SETTLEMENT/P_WRITE",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Functions/SETTLEMENT/F_COUNT",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Triggers/SETTLEMENT/TR_AUDIT",
+      "scope": "SETTLEMENT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "SETTLEMENT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/DETAILS",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/AUDIT_LOG",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/SETTINGS",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_ITEMS",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_DETAILS",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_READ",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_WRITE",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Functions/FINANCE_AUDIT/F_COUNT",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Receivables/Triggers/FINANCE_AUDIT/TR_AUDIT",
+      "scope": "FINANCE_AUDIT",
+      "server": "ATLAS_SQL",
+      "database": "Receivables",
+      "schema": "FINANCE_AUDIT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/DETAILS",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/AUDIT_LOG",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/SETTINGS",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_ITEMS",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_DETAILS",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_READ",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_WRITE",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Functions/INVENTORY/F_COUNT",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Triggers/INVENTORY/TR_AUDIT",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/DETAILS",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/AUDIT_LOG",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/SETTINGS",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_ITEMS",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_DETAILS",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/DISPATCH/P_READ",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/DISPATCH/P_WRITE",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Functions/DISPATCH/F_COUNT",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Triggers/DISPATCH/TR_AUDIT",
+      "scope": "DISPATCH",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "DISPATCH",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/DETAILS",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/AUDIT_LOG",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/SETTINGS",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_ITEMS",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_DETAILS",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_READ",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_WRITE",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Functions/STOCK_AUDIT/F_COUNT",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/Triggers/STOCK_AUDIT/TR_AUDIT",
+      "scope": "STOCK_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "STOCK_AUDIT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/DETAILS",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/AUDIT_LOG",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/SETTINGS",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_ITEMS",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_DETAILS",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_READ",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_WRITE",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Functions/REPORTING/F_COUNT",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Triggers/REPORTING/TR_AUDIT",
+      "scope": "REPORTING",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORTING",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/DETAILS",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/AUDIT_LOG",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/SETTINGS",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_ITEMS",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_DETAILS",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/ANALYTICS_ETL/P_READ",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/ANALYTICS_ETL/P_WRITE",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Functions/ANALYTICS_ETL/F_COUNT",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Triggers/ANALYTICS_ETL/TR_AUDIT",
+      "scope": "ANALYTICS_ETL",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "ANALYTICS_ETL",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/DETAILS",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/AUDIT_LOG",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/SETTINGS",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_ITEMS",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_DETAILS",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_READ",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_WRITE",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "StoredProcedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Functions/REPORT_AUDIT/F_COUNT",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Intelligence/Triggers/REPORT_AUDIT/TR_AUDIT",
+      "scope": "REPORT_AUDIT",
+      "server": "MERIDIAN_SQL",
+      "database": "Intelligence",
+      "schema": "REPORT_AUDIT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/DETAILS",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/AUDIT_LOG",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/SETTINGS",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_DETAILS",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_READ",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_WRITE",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Functions/PROCUREMENT/F_COUNT",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Triggers/PROCUREMENT/TR_AUDIT",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Tables",
+      "name": "ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/DETAILS",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Tables",
+      "name": "DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/AUDIT_LOG",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Tables",
+      "name": "AUDIT_LOG",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/SETTINGS",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Tables",
+      "name": "SETTINGS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Views",
+      "name": "V_ITEMS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_DETAILS",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Views",
+      "name": "V_DETAILS",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_READ",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Procedures",
+      "name": "P_READ",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_WRITE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Procedures",
+      "name": "P_WRITE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Functions/COMPLIANCE/F_COUNT",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Functions",
+      "name": "F_COUNT",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Triggers/COMPLIANCE/TR_AUDIT",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Triggers",
+      "name": "TR_AUDIT",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "scope": "PKG_PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Packages",
+      "name": "PROCUREMENT_API",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "scope": "PKG_PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "PackageBodies",
+      "name": "PROCUREMENT_API",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "scope": "PKG_COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Packages",
+      "name": "COMPLIANCE_API",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "scope": "PKG_COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "PackageBodies",
+      "name": "COMPLIANCE_API",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/_ServerLevel/LinkedServers/MERIDIAN_SQL",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "_ServerLevel",
+      "schema": null,
+      "type": "LinkedServers",
+      "name": "MERIDIAN_SQL",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "_ServerLevel",
+      "schema": null,
+      "type": "LinkedServers",
+      "name": "HELIOS_ORACLE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/_ServerLevel/LinkedServers/ATLAS_SQL",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "_ServerLevel",
+      "schema": null,
+      "type": "LinkedServers",
+      "name": "ATLAS_SQL",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "_ServerLevel",
+      "schema": null,
+      "type": "LinkedServers",
+      "name": "HELIOS_ORACLE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/REMOTE",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "DatabaseLinks",
+      "name": "REMOTE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/SECONDARY",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "DatabaseLinks",
+      "name": "SECONDARY",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/COMPLIANCE/REMOTE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "DatabaseLinks",
+      "name": "REMOTE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/COMPLIANCE/SECONDARY",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "DatabaseLinks",
+      "name": "SECONDARY",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_ONE",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_ONE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_TWO",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_TWO",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_ONE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Procedures",
+      "name": "P_ONE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CHAIN",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_CHAIN",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_CHAIN",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_ORACLE",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_ORACLE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_ONE",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_ONE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_TWO",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_SCHEMA",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_SCHEMA",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SCHEMA",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_SCHEMA",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CIRCLE",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_CIRCLE",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CIRCLE",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "StoredProcedures",
+      "name": "P_CIRCLE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_CIRCLE",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_CIRCLE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_CIRCLE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Procedures",
+      "name": "P_CIRCLE",
+      "columns": []
+    },
+    {
+      "id": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_LINK_CHAIN",
+      "scope": "INVENTORY",
+      "server": "MERIDIAN_SQL",
+      "database": "Distribution",
+      "schema": "INVENTORY",
+      "type": "StoredProcedures",
+      "name": "P_LINK_CHAIN",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_BILLING",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Views",
+      "name": "V_BILLING",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/RECEIVABLES",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "DatabaseLinks",
+      "name": "RECEIVABLES",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/COMPLIANCE/INTELLIGENCE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "DatabaseLinks",
+      "name": "INTELLIGENCE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_RECEIVABLES",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_RECEIVABLES",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_INTELLIGENCE",
+      "scope": "COMPLIANCE",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "COMPLIANCE",
+      "type": "Procedures",
+      "name": "P_INTELLIGENCE",
+      "columns": []
+    },
+    {
+      "id": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_STOCK",
+      "scope": "PROCUREMENT",
+      "server": "HELIOS_ORACLE",
+      "database": "FREEPDB1",
+      "schema": "PROCUREMENT",
+      "type": "Procedures",
+      "name": "P_STOCK",
+      "columns": []
+    },
+    {
+      "id": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+      "scope": "ORDER_ENTRY",
+      "server": "ATLAS_SQL",
+      "database": "Commerce",
+      "schema": "ORDER_ENTRY",
+      "type": "Views",
+      "name": "V_REMOTE_STOCK",
+      "columns": [
+        "ID",
+        "AMOUNT"
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_ITEMS",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_DETAILS",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_DETAILS",
+      "to": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_READ",
+      "to": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_WRITE",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Functions/ORDER_ENTRY/F_COUNT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Triggers/ORDER_ENTRY/TR_AUDIT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Triggers/ORDER_ENTRY/TR_AUDIT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_ITEMS",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_DETAILS",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_DETAILS",
+      "to": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/FULFILLMENT/P_READ",
+      "to": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/FULFILLMENT/P_WRITE",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Functions/FULFILLMENT/F_COUNT",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Triggers/FULFILLMENT/TR_AUDIT",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Triggers/FULFILLMENT/TR_AUDIT",
+      "to": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_ITEMS",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_DETAILS",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_DETAILS",
+      "to": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_READ",
+      "to": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_WRITE",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Functions/ORDER_AUDIT/F_COUNT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Triggers/ORDER_AUDIT/TR_AUDIT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Triggers/ORDER_AUDIT/TR_AUDIT",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/INVOICING/V_ITEMS",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/INVOICING/V_DETAILS",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/INVOICING/V_DETAILS",
+      "to": "ATLAS_SQL/Receivables/Views/INVOICING/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_READ",
+      "to": "ATLAS_SQL/Receivables/Views/INVOICING/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_WRITE",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Functions/INVOICING/F_COUNT",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Triggers/INVOICING/TR_AUDIT",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Triggers/INVOICING/TR_AUDIT",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_ITEMS",
+      "to": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_DETAILS",
+      "to": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_DETAILS",
+      "to": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/SETTLEMENT/P_READ",
+      "to": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/SETTLEMENT/P_WRITE",
+      "to": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Functions/SETTLEMENT/F_COUNT",
+      "to": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Triggers/SETTLEMENT/TR_AUDIT",
+      "to": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Triggers/SETTLEMENT/TR_AUDIT",
+      "to": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_ITEMS",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_DETAILS",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_DETAILS",
+      "to": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_READ",
+      "to": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_WRITE",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Functions/FINANCE_AUDIT/F_COUNT",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Triggers/FINANCE_AUDIT/TR_AUDIT",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Receivables/Triggers/FINANCE_AUDIT/TR_AUDIT",
+      "to": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_ITEMS",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_DETAILS",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_DETAILS",
+      "to": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_READ",
+      "to": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_WRITE",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Functions/INVENTORY/F_COUNT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Triggers/INVENTORY/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Triggers/INVENTORY/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_ITEMS",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_DETAILS",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_DETAILS",
+      "to": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/DISPATCH/P_READ",
+      "to": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/DISPATCH/P_WRITE",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Functions/DISPATCH/F_COUNT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Triggers/DISPATCH/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Triggers/DISPATCH/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_ITEMS",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_DETAILS",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_DETAILS",
+      "to": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_READ",
+      "to": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_WRITE",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Functions/STOCK_AUDIT/F_COUNT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Triggers/STOCK_AUDIT/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/Triggers/STOCK_AUDIT/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_ITEMS",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_DETAILS",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_DETAILS",
+      "to": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_READ",
+      "to": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_WRITE",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Functions/REPORTING/F_COUNT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Triggers/REPORTING/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Triggers/REPORTING/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_ITEMS",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_DETAILS",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_DETAILS",
+      "to": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/ANALYTICS_ETL/P_READ",
+      "to": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/ANALYTICS_ETL/P_WRITE",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Functions/ANALYTICS_ETL/F_COUNT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Triggers/ANALYTICS_ETL/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Triggers/ANALYTICS_ETL/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_ITEMS",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_DETAILS",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_DETAILS",
+      "to": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_READ",
+      "to": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_WRITE",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Functions/REPORT_AUDIT/F_COUNT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Triggers/REPORT_AUDIT/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "MERIDIAN_SQL/Intelligence/Triggers/REPORT_AUDIT/TR_AUDIT",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_DETAILS",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_DETAILS",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_READ",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_WRITE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Functions/PROCUREMENT/F_COUNT",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Triggers/PROCUREMENT/TR_AUDIT",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Triggers/PROCUREMENT/TR_AUDIT",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_DETAILS",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_DETAILS",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_READ",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_WRITE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Functions/COMPLIANCE/F_COUNT",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Triggers/COMPLIANCE/TR_AUDIT",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Triggers/COMPLIANCE/TR_AUDIT",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/AUDIT_LOG",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "to": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "to": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "to": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_DETAILS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_ONE",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_TWO",
+      "to": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_TWO",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/SECONDARY",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_ONE",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/COMPLIANCE/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CHAIN",
+      "to": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+      "to": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_ORACLE",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/MERIDIAN_SQL",
+      "dynamic": true
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_ORACLE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+      "via": "MERIDIAN_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_ONE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_ONE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
+      "to": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
+      "to": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
+      "to": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_SCHEMA",
+      "to": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_READ",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_SCHEMA",
+      "to": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SCHEMA",
+      "to": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_SCHEMA",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CIRCLE",
+      "to": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CIRCLE",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CIRCLE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CIRCLE",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_CIRCLE",
+      "to": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_CIRCLE",
+      "via": "MERIDIAN_SQL/_ServerLevel/LinkedServers/HELIOS_ORACLE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_CIRCLE",
+      "to": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_CIRCLE",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/COMPLIANCE/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_LINK_CHAIN",
+      "to": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+      "via": "MERIDIAN_SQL/_ServerLevel/LinkedServers/ATLAS_SQL",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_BILLING",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": null,
+      "dynamic": false
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_RECEIVABLES",
+      "to": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/RECEIVABLES",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_INTELLIGENCE",
+      "to": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/COMPLIANCE/INTELLIGENCE",
+      "dynamic": true
+    },
+    {
+      "from": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_STOCK",
+      "to": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+      "via": "HELIOS_ORACLE/FREEPDB1/DatabaseLinks/PROCUREMENT/REMOTE",
+      "dynamic": true
+    },
+    {
+      "from": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+      "to": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "via": "ATLAS_SQL/_ServerLevel/LinkedServers/MERIDIAN_SQL",
+      "dynamic": false
+    }
+  ],
+  "grants": [
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "user": "ORDER_ENTRY_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_ITEMS",
+      "user": "ORDER_ENTRY_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "user": "ORDER_ENTRY_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "user": "ORDER_ENTRY_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_READ",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_WRITE",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_ENTRY/ITEMS",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "user": "FULFILLMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Views/FULFILLMENT/V_ITEMS",
+      "user": "FULFILLMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "user": "FULFILLMENT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "user": "FULFILLMENT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/FULFILLMENT/P_READ",
+      "user": "FULFILLMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/FULFILLMENT/P_WRITE",
+      "user": "FULFILLMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/FULFILLMENT/ITEMS",
+      "user": "FULFILLMENT_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "user": "ORDER_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Views/ORDER_AUDIT/V_ITEMS",
+      "user": "ORDER_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "user": "ORDER_AUDIT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "user": "ORDER_AUDIT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_READ",
+      "user": "ORDER_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_AUDIT/P_WRITE",
+      "user": "ORDER_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Tables/ORDER_AUDIT/ITEMS",
+      "user": "ORDER_AUDIT_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "user": "INVOICING_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Views/INVOICING/V_ITEMS",
+      "user": "INVOICING_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "user": "INVOICING_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "user": "INVOICING_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_READ",
+      "user": "INVOICING_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/INVOICING/P_WRITE",
+      "user": "INVOICING_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/INVOICING/ITEMS",
+      "user": "INVOICING_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "user": "SETTLEMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Views/SETTLEMENT/V_ITEMS",
+      "user": "SETTLEMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "user": "SETTLEMENT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "user": "SETTLEMENT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/SETTLEMENT/P_READ",
+      "user": "SETTLEMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/SETTLEMENT/P_WRITE",
+      "user": "SETTLEMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/SETTLEMENT/ITEMS",
+      "user": "SETTLEMENT_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "user": "FINANCE_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Views/FINANCE_AUDIT/V_ITEMS",
+      "user": "FINANCE_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "user": "FINANCE_AUDIT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "user": "FINANCE_AUDIT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_READ",
+      "user": "FINANCE_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/StoredProcedures/FINANCE_AUDIT/P_WRITE",
+      "user": "FINANCE_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Receivables/Tables/FINANCE_AUDIT/ITEMS",
+      "user": "FINANCE_AUDIT_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "user": "INVENTORY_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Views/INVENTORY/V_ITEMS",
+      "user": "INVENTORY_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "user": "INVENTORY_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "user": "INVENTORY_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_READ",
+      "user": "INVENTORY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_WRITE",
+      "user": "INVENTORY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS",
+      "user": "INVENTORY_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "user": "DISPATCH_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Views/DISPATCH/V_ITEMS",
+      "user": "DISPATCH_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "user": "DISPATCH_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "user": "DISPATCH_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/DISPATCH/P_READ",
+      "user": "DISPATCH_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/DISPATCH/P_WRITE",
+      "user": "DISPATCH_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/DISPATCH/ITEMS",
+      "user": "DISPATCH_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "user": "STOCK_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Views/STOCK_AUDIT/V_ITEMS",
+      "user": "STOCK_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "user": "STOCK_AUDIT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "user": "STOCK_AUDIT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_READ",
+      "user": "STOCK_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/STOCK_AUDIT/P_WRITE",
+      "user": "STOCK_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/Tables/STOCK_AUDIT/ITEMS",
+      "user": "STOCK_AUDIT_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "user": "REPORTING_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Views/REPORTING/V_ITEMS",
+      "user": "REPORTING_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "user": "REPORTING_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "user": "REPORTING_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_READ",
+      "user": "REPORTING_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORTING/P_WRITE",
+      "user": "REPORTING_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORTING/ITEMS",
+      "user": "REPORTING_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "user": "ANALYTICS_ETL_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Views/ANALYTICS_ETL/V_ITEMS",
+      "user": "ANALYTICS_ETL_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "user": "ANALYTICS_ETL_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "user": "ANALYTICS_ETL_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/ANALYTICS_ETL/P_READ",
+      "user": "ANALYTICS_ETL_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/ANALYTICS_ETL/P_WRITE",
+      "user": "ANALYTICS_ETL_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/ANALYTICS_ETL/ITEMS",
+      "user": "ANALYTICS_ETL_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "user": "REPORT_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Views/REPORT_AUDIT/V_ITEMS",
+      "user": "REPORT_AUDIT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "user": "REPORT_AUDIT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "user": "REPORT_AUDIT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_READ",
+      "user": "REPORT_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/StoredProcedures/REPORT_AUDIT/P_WRITE",
+      "user": "REPORT_AUDIT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Intelligence/Tables/REPORT_AUDIT/ITEMS",
+      "user": "REPORT_AUDIT_EXEC",
+      "permission": "SELECT",
+      "state": "DENY",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "user": "PROCUREMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Views/PROCUREMENT/V_ITEMS",
+      "user": "PROCUREMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "user": "PROCUREMENT_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "user": "PROCUREMENT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_READ",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_WRITE",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "user": "COMPLIANCE_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+      "user": "COMPLIANCE_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "user": "COMPLIANCE_WRITE",
+      "permission": "INSERT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "user": "COMPLIANCE_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_READ",
+      "user": "COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_WRITE",
+      "user": "COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "user": "PKG_PROCUREMENT_READ",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "user": "PKG_PROCUREMENT_WRITE",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Packages/PROCUREMENT/PROCUREMENT_API",
+      "user": "PKG_PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "user": "PKG_COMPLIANCE_READ",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "user": "PKG_COMPLIANCE_WRITE",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+      "user": "PKG_COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "user": "PKG_PROCUREMENT_READ",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "user": "PKG_PROCUREMENT_WRITE",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/PackageBodies/PROCUREMENT/PROCUREMENT_API",
+      "user": "PKG_PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "user": "PKG_PROCUREMENT_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/PROCUREMENT/ITEMS",
+      "user": "PKG_PROCUREMENT_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "user": "PKG_COMPLIANCE_READ",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "user": "PKG_COMPLIANCE_WRITE",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+      "user": "PKG_COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "user": "PKG_COMPLIANCE_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS",
+      "user": "PKG_COMPLIANCE_WRITE",
+      "permission": "UPDATE",
+      "state": "GRANT",
+      "column": "AMOUNT"
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_ONE",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_TWO",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_ONE",
+      "user": "COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CHAIN",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_ORACLE",
+      "user": "INVENTORY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_ONE",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_TWO",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_SCHEMA",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SCHEMA",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CIRCLE",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CIRCLE",
+      "user": "ORDER_ENTRY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_CIRCLE",
+      "user": "INVENTORY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_CIRCLE",
+      "user": "COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_LINK_CHAIN",
+      "user": "INVENTORY_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_BILLING",
+      "user": "ORDER_ENTRY_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_RECEIVABLES",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_INTELLIGENCE",
+      "user": "COMPLIANCE_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_STOCK",
+      "user": "PROCUREMENT_EXEC",
+      "permission": "EXECUTE",
+      "state": "GRANT",
+      "column": null
+    },
+    {
+      "object": "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+      "user": "ORDER_ENTRY_READ",
+      "permission": "SELECT",
+      "state": "GRANT",
+      "column": null
+    }
+  ],
+  "paths": [
+    {
+      "name": "Oracle > MSSQL > linked server > Oracle",
+      "nodes": [
+        "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CHAIN",
+        "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+        "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_ORACLE",
+        "HELIOS_ORACLE/FREEPDB1/Views/COMPLIANCE/V_ITEMS",
+        "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS"
+      ]
+    },
+    {
+      "name": "linked server > linked server",
+      "nodes": [
+        "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_LINK_CHAIN",
+        "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CHAIN",
+        "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_ORACLE"
+      ]
+    },
+    {
+      "name": "MSSQL > Oracle schema > Oracle schema > package",
+      "nodes": [
+        "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_SCHEMA",
+        "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_SCHEMA",
+        "HELIOS_ORACLE/FREEPDB1/Packages/COMPLIANCE/COMPLIANCE_API",
+        "HELIOS_ORACLE/FREEPDB1/PackageBodies/COMPLIANCE/COMPLIANCE_API",
+        "HELIOS_ORACLE/FREEPDB1/Tables/COMPLIANCE/ITEMS"
+      ]
+    },
+    {
+      "name": "Oracle > MSSQL > Oracle cycle",
+      "nodes": [
+        "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CIRCLE",
+        "ATLAS_SQL/Commerce/StoredProcedures/ORDER_ENTRY/P_CIRCLE",
+        "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_CIRCLE"
+      ]
+    },
+    {
+      "name": "MSSQL > Oracle > MSSQL cycle",
+      "nodes": [
+        "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_CIRCLE",
+        "HELIOS_ORACLE/FREEPDB1/Procedures/COMPLIANCE/P_CIRCLE",
+        "MERIDIAN_SQL/Distribution/StoredProcedures/INVENTORY/P_CIRCLE"
+      ]
+    },
+    {
+      "name": "Executable Oracle gateway to SQL Server linked-server read",
+      "nodes": [
+        "HELIOS_ORACLE/FREEPDB1/Procedures/PROCUREMENT/P_STOCK",
+        "ATLAS_SQL/Commerce/Views/ORDER_ENTRY/V_REMOTE_STOCK",
+        "MERIDIAN_SQL/Distribution/Tables/INVENTORY/ITEMS"
+      ]
+    }
+  ]
+}

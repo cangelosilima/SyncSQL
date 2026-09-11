@@ -16,6 +16,15 @@ vi.mock('../components/LineageGraph', () => ({ default: ({ nodeIds, onNodeActiva
 function Location() { return <span data-testid="location">{useLocation().search}</span> }
 
 describe('Access investigation', () => {
+  it('restores exact user lookup from a shared benchmark link and preserves it while searching', () => {
+    render(<MemoryRouter initialEntries={['/lineage?tab=access&grantee=app_reader&exact=1']}><LineagePage /><Location /></MemoryRouter>)
+    expect(screen.getByRole('checkbox', { name: 'Exact match' })).toBeChecked()
+    expect(screen.getByText(/2 grants across 1 object/)).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'app_reader_extra' } })
+    expect(screen.getByTestId('location')).toHaveTextContent('exact=1')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Exact match' }))
+    expect(screen.getByTestId('location')).not.toHaveTextContent('exact=1')
+  })
   it('preserves exact matching, per-permission CSV, focus and inspector URL independence', async () => {
     render(<MemoryRouter initialEntries={['/lineage?tab=access&grantee=app_reader']}><LineagePage /><Location /></MemoryRouter>)
     expect(screen.getByText(/3 grants across 2 objects/)).toBeInTheDocument()

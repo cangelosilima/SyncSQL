@@ -6,6 +6,7 @@ import TypeActivityHeatmap, { CHANGE_ACTIVITY_WEEKS } from '../components/TypeAc
 import { formatRelative, getCoChangePairs, getMostChanged, getRecentlyChanged, getTopReferencedTables, intensity } from '../lib/analytics'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { colorForType } from '../lib/typeColors'
+import BenchmarkExample from '../components/BenchmarkExample'
 
 
 export default function Home() {
@@ -15,7 +16,7 @@ export default function Home() {
   const { catalog } = index
   const totalObjects = catalog.nodes.length
   const totalServers = catalog.servers.length
-  const totalDatabases = new Set(catalog.nodes.map((n) => `${n.server}::${n.database}`)).size
+  const totalDatabases = new Set(catalog.nodes.filter(n => n.database !== '_ServerLevel').map((n) => `${n.server}::${n.database}`)).size
 
   const recentlyChanged = getRecentlyChanged(index, 10)
   const topReferenced = getTopReferencedTables(index, 10)
@@ -44,6 +45,8 @@ export default function Home() {
           {totalDatabases} database(s)
         </span>
       </div>
+
+      <BenchmarkExample catalog={catalog} />
 
       <div className="quick-stats">
         <div className="quick-stat">

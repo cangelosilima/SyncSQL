@@ -57,6 +57,7 @@ function Shell() {
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}sqlineage-icon.svg`} alt="" width="32" height="32" />
           <span className="brand-name">SQLineage</span>
           <span className="brand-version">v{pkg.version}</span>
+          {index?.catalog.example && <span className="sync-line-badge">Example catalog</span>}
         </span>
         <nav aria-label="Primary">
           <NavLink to="/" end>

@@ -1,8 +1,5 @@
 // @vitest-environment node
 import { createRequire } from 'node:module'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
@@ -26,21 +23,6 @@ describe('security override compatibility', () => {
     await reloaded.xlsx.load(bytes)
     expect(reloaded.getWorksheet('Values').getCell('A2').value).toBe(2)
     expect(sheet.conditionalFormattings[0].rules[0].x14Id).toMatch(/^\{[0-9A-F-]{36}\}$/)
-  })
-
-  it('supports the ONNX installer ZIP entry extraction API with adm-zip 0.6', () => {
-    const onnxRequire = createRequire(require.resolve('onnxruntime-node'))
-    const AdmZip = onnxRequire('adm-zip')
-    const zip = new AdmZip()
-    zip.addFile('runtimes/native/sample.dll', Buffer.from('fixture'))
-    const reloaded = new AdmZip(zip.toBuffer())
-    const directory = mkdtempSync(path.join(tmpdir(), 'syncsql-zip-'))
-    try {
-      reloaded.extractEntryTo(reloaded.getEntry('runtimes/native/sample.dll'), directory, false, true)
-      expect(readFileSync(path.join(directory, 'sample.dll'), 'utf8')).toBe('fixture')
-    } finally {
-      rmSync(directory, { recursive: true, force: true })
-    }
   })
 
   it('resizes Transformers raw images through sharp 0.35', async () => {

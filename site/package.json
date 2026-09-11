@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build --configLoader runner && node scripts/package-ai-model.mjs",
     "preview": "vite preview",
+    "example:refresh": "node scripts/catalog-example.mjs",
+    "example:check": "node scripts/catalog-example.mjs --check",
     "test": "vitest run --configLoader runner",
     "test:coverage": "vitest run --configLoader runner --coverage",
     "verify:ai-model": "node scripts/package-ai-model.mjs --strict --verify-only"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^3.8.1",
     "@xyflow/react": "^12.11.3",
     "dagre": "^0.8.5",
     "exceljs": "^4.4.0",
@@ -24,9 +26,6 @@
   "overrides": {
     "@huggingface/transformers": {
       "sharp": "^0.35.4"
-    },
-    "onnxruntime-node": {
-      "adm-zip": "^0.6.0"
     },
     "exceljs": {
       "uuid": "^11.1.1"
@@ -40,10 +39,15 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/coverage-v8": "^3.2.7",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^26.1.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "protobufjs@7.6.6": true,
+    "onnxruntime-node": false
   }
 }

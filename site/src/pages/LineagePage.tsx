@@ -62,7 +62,7 @@ export default function LineagePage() {
   // Access-mode state (merged from the standalone Access page - "what can
   // this grantee touch", now visualized in the same lineage graph).
   const [granteeQuery, setGranteeQuery] = useState(initialGrantee)
-  const [exact, setExact] = useState(false)
+  const [exact, setExact] = useState(searchParams.get('exact') === '1')
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const [activeSuggestion, setActiveSuggestion] = useState(0)
   const suggestionsId = useId()
@@ -176,12 +176,12 @@ export default function LineagePage() {
   function switchMode(next: Mode) {
     setMode(next)
     setFocusStack([])
-    setSearchParams(next === 'access' ? { tab: 'access', ...(granteeQuery ? { grantee: granteeQuery } : {}) } : {}, { replace: true })
+    setSearchParams(next === 'access' ? { tab: 'access', ...(granteeQuery ? { grantee: granteeQuery } : {}), ...(exact ? { exact: '1' } : {}) } : {}, { replace: true })
   }
 
   function pickGrantee(value: string) {
     setGranteeQuery(value)
-    setSearchParams({ tab: 'access', grantee: value }, { replace: true })
+    setSearchParams({ tab: 'access', grantee: value, ...(exact ? { exact: '1' } : {}) }, { replace: true })
     setSuggestionsOpen(false)
   }
 
@@ -249,7 +249,7 @@ export default function LineagePage() {
                     setSuggestionsOpen(true)
                     setActiveSuggestion(0)
                     setFocusStack([])
-                    setSearchParams(e.target.value ? { tab: 'access', grantee: e.target.value } : { tab: 'access' }, { replace: true })
+                    setSearchParams({ tab: 'access', ...(e.target.value ? { grantee: e.target.value } : {}), ...(exact ? { exact: '1' } : {}) }, { replace: true })
                   }}
                   onFocus={() => setSuggestionsOpen(true)}
                   onKeyDown={(event) => {
@@ -286,7 +286,10 @@ export default function LineagePage() {
               )}
             </div>
             <label className="access-exact-toggle">
-              <input type="checkbox" checked={exact} onChange={(e) => setExact(e.target.checked)} />
+              <input type="checkbox" checked={exact} onChange={(e) => {
+                setExact(e.target.checked)
+                setSearchParams({ tab: 'access', ...(granteeQuery ? { grantee: granteeQuery } : {}), ...(e.target.checked ? { exact: '1' } : {}) }, { replace: true })
+              }} />
               Exact match
             </label>
           </div>

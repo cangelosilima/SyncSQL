@@ -174,3 +174,15 @@
   .ai-prompt, .ai-preview, .ai-unavailable { padding: 16px; }
   .ai-examples button { width: 100%; }
 }
+/* The optional benchmark guide belongs to the sample catalog only. */
+.benchmark-example { margin: 20px 0; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.benchmark-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.benchmark-heading h2 { margin: 12px 0 6px; }
+.benchmark-heading p { margin: 0; }
+.benchmark-user { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+.benchmark-user select { max-width: 100%; padding: 8px; border-radius: 6px; }
+.benchmark-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.benchmark-paths details { border: 1px solid var(--border); padding: 14px; border-radius: 8px; }
+.benchmark-paths summary { cursor: pointer; font-weight: 600; }
+.benchmark-paths li { margin: 12px 0; overflow-wrap: anywhere; }
+.benchmark-paths li span { display: block; font-size: 12px; }

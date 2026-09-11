@@ -169,6 +169,14 @@ export interface CatalogLinkedServerReference {
 }
 
 export interface Catalog {
+  /** Present only for the explicitly published synthetic benchmark snapshot. */
+  example?: {
+    scenario: string
+    title: string
+    gatewayVerified: boolean
+    users: { name: string; scope: string; server: string; database: string }[]
+    paths: { name: string; nodes: string[] }[]
+  }
   generatedAt: string
   servers: string[]
   typeCounts: Record<string, number>

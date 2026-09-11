@@ -1,0 +1,65 @@
+name: Publish catalog demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
+      - '.github/workflows/catalog-demo.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
+      - '.github/workflows/catalog-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-demo-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Check example against independent benchmark contract
+        run: npm run example:check
+      - run: npm test -- --maxWorkers=2
+      - name: Build catalog with local AI model
+        run: npm run build
+        env:
+          AI_MODEL_STRICT: '1'
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
+        id: deployment
