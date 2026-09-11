@@ -43,12 +43,12 @@ export default function ObjectPage() {
   const incoming = index?.incoming.get(id) ?? []
   const orphanedRefs = index?.orphanedByFrom.get(id) ?? []
   const systemRefs = index?.systemRefsByFrom.get(id) ?? []
-  const refsThroughThisLink = index?.linkedServerRefsByLink.get(id) ?? []
   const refsAcrossLinks = index?.linkedServerRefsByFrom.get(id) ?? []
 
   // Everything reached through this link, one row per remote object with the callers that use it -
   // the same reference made by five procedures is one remote object, not five findings.
   const targetsThroughThisLink = useMemo(() => {
+    const refsThroughThisLink = index?.linkedServerRefsByLink.get(id) ?? []
     const byTarget = new Map<string, { label: string; to: string | null; callers: string[] }>()
     for (const ref of refsThroughThisLink) {
       const label = qualifiedRefName(ref)
@@ -57,7 +57,7 @@ export default function ObjectPage() {
       byTarget.get(key)!.callers.push(ref.from)
     }
     return [...byTarget.values()].sort((a, b) => a.label.localeCompare(b.label))
-  }, [refsThroughThisLink])
+  }, [index, id])
 
   // Which column's lineage is open, mirrored to ?column= so the view is linkable -
   // "here is who reads Orders.CustomerId" is a thing worth sending someone.

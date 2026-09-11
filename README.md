@@ -3,6 +3,7 @@
 SQLineage is the database catalog and investigation app, formerly branded SyncSQL. The repository, CLI/project identifiers and deployment paths retain their existing names for compatibility.
 
 [![CLI CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli.yml)
+[![Quality gate](https://github.com/cangelosilima/SyncSQL/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/cangelosilima/SyncSQL/actions/workflows/quality.yml)
 [![CLI benchmark](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-benchmark.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-benchmark.yml)
 [![Oracle gateway publish](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-publish-oracle-gateway.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/cli-publish-oracle-gateway.yml)
 [![Site CI](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml/badge.svg)](https://github.com/cangelosilima/SyncSQL/actions/workflows/site.yml)
@@ -428,6 +429,7 @@ GitHub workflows are grouped into independent CLI and Site families:
 
 | Workflow | What it runs |
 |----------|--------------|
+| [Quality](.github/workflows/quality.yml) | CodeQL, dependency review and full npm/NuGet audits, CLI/Site lint and format checks, coverage thresholds, workflow lint, and a single aggregate quality gate. |
 | [CLI - CI](.github/workflows/cli.yml) | .NET format, build, tests and coverage on Linux and Windows; gateway publishing guards and CLI workflow validation; publishing-script compatibility checks, including the actual Windows PowerShell 5.1 parser. |
 | [CLI - heterogeneous benchmark](.github/workflows/cli-benchmark.yml) | Provisions the sample databases, extracts objects and verifies lineage on relevant pull requests or manual runs. Manual runs can also enable the prepared Oracle gateway runner. |
 | [CLI - publish Oracle gateway to GHCR](.github/workflows/cli-publish-oracle-gateway.yml) | Manually validates and publishes the private gateway image from the default branch. |
@@ -441,6 +443,30 @@ attributes, trigger both families. Each family validates its own workflow files.
 Existing build/test job names are retained; path-filtered workflows should not
 be required unconditionally by branch protection, because unrelated changes
 skip them.
+
+The unfiltered `Quality` workflow runs on every pull request, pushes to `main`,
+merge queues, manual runs, and weekly on Mondays. It follows GitHub's
+[CodeQL and Dependency Review starter workflows](https://github.com/actions/starter-workflows/tree/main/code-scanning),
+uses [ReportGenerator](https://github.com/danielpalme/ReportGenerator-GitHub-Action)
+to merge CLI coverage, and [alls-green](https://github.com/re-actors/alls-green)
+to require every job to succeed. Configure **Quality gate** as a required status
+check in branch protection. CodeQL findings appear in GitHub code scanning;
+configure a code scanning ruleset to block merges on alerts as well, since a
+successful analysis job means the scan completed. CodeQL and dependency review
+require the corresponding GitHub security features to be enabled (and GitHub
+Code Security for private repositories).
+
+Coverage minimums are 70% CLI lines (excluding tests and generated grammar),
+and 80% site lines/statements, 75% functions, and 70% branches. The existing 100%
+packaging-script threshold is retained. Reports are uploaded even on test failures.
+Dependency audits fail on all known vulnerability severities, including transitive
+and development dependencies; unavailable NuGet audit data also fails the check.
+
+Run `npm run lint`, `npm run format:check`, and `npm run test:coverage` from `site/`
+to reproduce site checks. `npm run format` applies Prettier to maintained site
+files; generated output, vendored assets and the lockfile are excluded. The CLI
+uses `dotnet format cli/SyncSql.slnx --verify-no-changes --exclude grammar/` and
+`dotnet test cli/SyncSql.slnx --configuration Release --collect "XPlat Code Coverage" --settings cli/coverage.runsettings`.
 
 Scheduled production extraction, publishing objects to git, and the production
 GitLab Pages deployment remain in the GitLab pipeline described above.

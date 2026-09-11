@@ -1,0 +1,219 @@
+# Adapted from GitHub's CodeQL and Dependency Review starter workflows:
+# https://github.com/actions/starter-workflows/tree/main/code-scanning
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vulnerabilities:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Audit npm dependencies (including development dependencies)
+        id: npm-audit
+        working-directory: site
+        run: npm audit --package-lock-only --audit-level=low
+      - name: Audit direct and transitive NuGet dependencies
+        if: ${{ !cancelled() && steps.npm-audit.outcome != 'skipped' }}
+        # Fail on all advisory severities and on unavailable audit data, even in
+        # test projects that normally relax warnings-as-errors.
+        run: >-
+          dotnet restore cli/SyncSql.slnx --force --no-http-cache
+          -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low
+          -p:WarningsAsErrors=NU1900%3BNU1901%3BNU1902%3BNU1903%3BNU1904%3BNU1905
+      - name: Review dependency changes in pull requests
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: low
+          comment-summary-in-pr: never
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        if: matrix.language == 'csharp'
+        with:
+          global-json-file: global.json
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Build CLI for analysis
+        if: matrix.build-mode == 'manual'
+        run: dotnet build cli/SyncSql.slnx --configuration Release
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'
+
+  cli-style:
+    name: CLI lint and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore cli/SyncSql.slnx
+      - name: Lint with .NET analyzers
+        id: lint
+        run: dotnet format analyzers cli/SyncSql.slnx --verify-no-changes --no-restore --exclude grammar/
+      - name: Check formatting and code style
+        if: ${{ !cancelled() && steps.lint.outcome != 'skipped' }}
+        run: dotnet format cli/SyncSql.slnx --verify-no-changes --no-restore --exclude grammar/
+
+  cli-coverage:
+    name: CLI tests and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore cli/SyncSql.slnx
+      - name: Build with .NET analyzers
+        run: dotnet build cli/SyncSql.slnx --configuration Release --no-restore
+      - name: Test with coverage
+        id: tests
+        run: >-
+          dotnet test cli/SyncSql.slnx --configuration Release --no-build
+          --collect "XPlat Code Coverage" --settings cli/coverage.runsettings
+          --results-directory TestResults/quality
+          --logger trx
+      - name: Enforce CLI coverage threshold
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: danielpalme/ReportGenerator-GitHub-Action@049f7ec958c672fd31d5cc1cb01622dc8d2e23ab # 5.5.10
+        with:
+          reports: 'TestResults/quality/**/coverage.cobertura.xml'
+          targetdir: TestResults/quality/report
+          reporttypes: 'Html;Cobertura;MarkdownSummaryGithub'
+          customSettings: 'minimumCoverageThresholds:lineCoverage=70'
+      - name: Publish coverage summary
+        if: ${{ !cancelled() && hashFiles('TestResults/quality/report/SummaryGithub.md') != '' }}
+        run: cat TestResults/quality/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload CLI test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-cli-results
+          path: TestResults/quality/
+          if-no-files-found: error
+          retention-days: 14
+
+  site-style:
+    name: Site lint and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Lint
+        id: lint
+        run: npm run lint
+      - name: Check formatting
+        if: ${{ !cancelled() && steps.lint.outcome != 'skipped' }}
+        run: npm run format:check
+
+  site-coverage:
+    name: Site tests and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Test and enforce coverage thresholds
+        run: npm run test:coverage
+      - name: Upload site coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-site-coverage
+          path: site/coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate GitHub workflows
+        run: >-
+          docker run --rm --volume "$PWD/.github:/repo/.github:ro" --workdir /repo
+          rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          -ignore 'label "oracle-gateway" is unknown'
+          .github/workflows/*.yml
+
+  quality-gate:
+    name: Quality gate
+    if: always()
+    needs: [vulnerabilities, codeql, cli-style, cli-coverage, site-style, site-coverage, workflow-lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every quality check to succeed
+        uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}
