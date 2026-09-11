@@ -108,7 +108,7 @@ runner must still be provisioned with that image before its gateway job can run.
 ## Publish the built image to private GHCR
 
 The **Publish Oracle gateway to GHCR** workflow in
-[publish-oracle-gateway.yml](../../../../.github/workflows/publish-oracle-gateway.yml)
+[cli-publish-oracle-gateway.yml](../../../../.github/workflows/cli-publish-oracle-gateway.yml)
 publishes an image that is already installed on a self-hosted Linux x64 runner
 labelled `oracle-gateway`. It runs manually from the repository's default branch.
 It does not obtain the Oracle installer or build the gateway again.

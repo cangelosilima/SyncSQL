@@ -13,6 +13,7 @@ import { AiProvider, useAi } from './ai/AiContext'
 import pkg from '../package.json'
 import Button from './components/Button'
 import CatalogSidebar from './components/CatalogSidebar'
+import { useBrowserTitle } from './lib/useBrowserTitle'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
 
 function Shell() {
   const { loading, error, index } = useCatalog()
+  useBrowserTitle(index)
   const ai = useAi()
   const { pathname } = useLocation()
   useEffect(() => { document.getElementById('main-content')?.scrollTo?.({ top: 0 }) }, [pathname])

@@ -1,4 +1,4 @@
-name: Publish catalog demo
+name: Site - deploy catalog demo
 
 on:
   push:
@@ -7,13 +7,17 @@ on:
       - 'site/**'
       - 'config/sql-style.json'
       - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
-      - '.github/workflows/catalog-demo.yml'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/workflows/site-deploy.yml'
   pull_request:
     paths:
       - 'site/**'
       - 'config/sql-style.json'
       - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
-      - '.github/workflows/catalog-demo.yml'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/workflows/site-deploy.yml'
   workflow_dispatch:
 
 permissions:

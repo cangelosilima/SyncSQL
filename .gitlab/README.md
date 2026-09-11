@@ -2,10 +2,12 @@
 
 This document is the canonical explanation of the CI pipeline defined by the
 root [`.gitlab-ci.yml`](../.gitlab-ci.yml) and the modules under this
-directory. (GitHub gets the build-and-test half only, in
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) - format/build/test
-the CLI, build the site, check the publish script. Everything that needs
-database credentials, a push token, or a schedule lives here.) The YAML files themselves stay close to bare configuration -
+directory. GitHub's independent
+[CLI CI](../.github/workflows/cli.yml) and
+[Site CI](../.github/workflows/site.yml) format/build/test the CLI, check the
+publish script, and test/build the site. GitHub also has sample benchmark,
+gateway-image publishing and demo deployment workflows; scheduled production
+extraction and publishing live here. The YAML files themselves stay close to bare configuration -
 implementation rationale, trade-offs, and cross-job relationships live here
 instead, so there's exactly one place to update when the pipeline's design
 changes. For product/config docs (what SyncSQL does, `config/servers.json`

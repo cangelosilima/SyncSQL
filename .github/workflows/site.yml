@@ -1,0 +1,92 @@
+# Site tests, coverage, model verification and builds on Linux and Windows.
+
+name: Site - CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'config/sql-style.json'
+      - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/workflows/site*.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'config/sql-style.json'
+      - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/workflows/site*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-checks:
+    name: Site - workflow validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate site workflows
+        run: >-
+          docker run --rm --volume "$PWD/.github:/repo/.github:ro" --workdir /repo
+          rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          .github/workflows/site.yml
+          .github/workflows/site-deploy.yml
+
+  site:
+    name: Site - typecheck and build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Upload site coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-coverage-${{ matrix.os }}
+          path: site/coverage/
+          if-no-files-found: ignore
+
+      # GitHub is the enforcement point for the vendored browser model. GitLab
+      # Pages deliberately treats it as optional so the core catalog still
+      # publishes when a runner cannot materialize LFS objects.
+      - name: Verify vendored AI model
+        run: npm run verify:ai-model
+
+      # `npm run build` typechecks, builds, and stages the verified model.
+      - name: Build
+        run: npm run build
+        env:
+          # Keep staging/copy errors strict too, not only pre-build verification.
+          AI_MODEL_STRICT: '1'
+

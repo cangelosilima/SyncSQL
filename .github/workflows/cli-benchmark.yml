@@ -1,4 +1,4 @@
-name: benchmark
+name: CLI - heterogeneous benchmark
 
 on:
   workflow_dispatch:
@@ -10,8 +10,14 @@ on:
   pull_request:
     paths:
       - 'cli/**'
+      - 'grammar/**'
+      - 'config/sql-style.json'
+      - 'global.json'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/scripts/**'
       - 'samples/scenarios/heterogeneous-lineage/**'
-      - '.github/workflows/heterogeneous-benchmark.yml'
+      - '.github/workflows/cli-benchmark.yml'
 
 permissions:
   contents: read
