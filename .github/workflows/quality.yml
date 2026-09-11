@@ -133,6 +133,9 @@ jobs:
           reports: 'TestResults/quality/**/coverage.cobertura.xml'
           targetdir: TestResults/quality/report
           reporttypes: 'Html;Cobertura;MarkdownSummaryGithub;JsonSummary'
+          # Unlock method/full-method coverage and the metrics overview.
+          # Fork PRs have no repository secrets and retain the free coverage report.
+          license: ${{ secrets.REPORTGENERATOR_LICENSE }}
           customSettings: 'minimumCoverageThresholds:lineCoverage=70'
       - name: Publish coverage summary
         if: ${{ !cancelled() && hashFiles('TestResults/quality/report/SummaryGithub.md') != '' }}
