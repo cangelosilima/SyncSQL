@@ -1,10 +1,12 @@
 ﻿using System.CommandLine;
 using System.Reflection;
+using System.CommandLine.Invocation;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using SyncSql.Cli.Commands;
 using SyncSql.Cli.Composition;
+using SyncSql.Cli.Sync;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Configuration;
 using SyncSql.Core.Domain;
@@ -86,6 +88,34 @@ public sealed class CommandBehaviorTests : IDisposable
             Arg.Is<ExtractionOptions>(o => o.Credentials.Username == "explicit-user" && o.Credentials.Password == "file-password"), Arg.Any<CancellationToken>());
         string json = await File.ReadAllTextAsync("MSSQL/metrics-snapshot/SQL/db/Tables/dbo/t.json");
         Assert.Equal(42, JsonSerializer.Deserialize<MetricsSnapshot>(json)!.RowCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OutputWriter_WritesObjectsAndSnapshotsWithAnOptionalObserver(bool reportProgress)
+    {
+        var observer = Substitute.For<IProgress<ExtractionProgress>>();
+        var outcome = new ExtractionOutcome
+        {
+            Objects = [new ExtractedObject { Server = "SQL", Database = "db", Schema = "dbo", Type = "Tables", Name = "t", Ddl = "CREATE TABLE dbo.t (id int);", Engine = DatabaseEngine.MsSql }],
+            MetricsSnapshots = new Dictionary<string, MetricsSnapshot>
+            {
+                ["SQL/db/Tables/dbo/t"] = new() { CapturedAt = DateTimeOffset.UnixEpoch, RowCount = 42 },
+            },
+        };
+        await ExtractionOutputWriter.WriteAsync(outcome, "objects", "metrics", CancellationToken.None, progress: reportProgress ? observer : null);
+        Assert.Contains("CREATE TABLE", await File.ReadAllTextAsync("objects/SQL/db/dbo/Tables/t.sql"));
+        Assert.Equal(42, JsonSerializer.Deserialize<MetricsSnapshot>(await File.ReadAllTextAsync("metrics/SQL/db/Tables/dbo/t.json"))!.RowCount);
+        if (reportProgress)
+        {
+            Received.InOrder(() =>
+            {
+                observer.Report(new("Writing files", 1, 0, 2));
+                observer.Report(new("Writing files", 1, 1, 2));
+                observer.Report(new("Writing files", 1, 2, 2));
+            });
+        }
     }
 
     [Fact]
@@ -215,9 +245,10 @@ public sealed class CommandBehaviorTests : IDisposable
                 }
             });
 
-        Task<int> run = new RootCommand { SyncCommand.Build(_services) }
-            .Parse(["sync", "--max-parallelism", "2"])
-            .InvokeAsync(new InvocationConfiguration { EnableDefaultExceptionHandler = false }, cancellation.Token);
+        // Invoke the action directly: the command-line process-termination wrapper may return
+        // before its action has unwound cancellation, which races assertions and fixture cleanup.
+        ParseResult parsed = new RootCommand { SyncCommand.Build(_services) }.Parse(["sync", "--max-parallelism", "2"]);
+        Task<int> run = Assert.IsAssignableFrom<AsynchronousCommandLineAction>(parsed.Action).InvokeAsync(parsed, cancellation.Token);
         try
         {
             await slotsFilled.Task.WaitAsync(TimeSpan.FromSeconds(10));

@@ -109,6 +109,18 @@ public sealed class OracleExtractorTests
     }
 
     [Fact]
+    public async Task Progress_ReportsSchemaDefinitionsAndDatabaseLinks()
+    {
+        using FakeOracleDatabase db = new() { Execute = Respond };
+        ProgressRecorder progress = new();
+        ExtractionOutcome result = await Extract(db, progress: progress);
+        Assert.Contains(progress.Updates, p => p.Activity == "APP: schema definitions");
+        Assert.Contains(progress.Updates, p => p.Activity == "APP: database links");
+        Assert.Contains(result.Objects, o => o.Type == "DatabaseLinks");
+        Assert.Contains(result.Objects, o => o.Type == "Schemas");
+    }
+
+    [Fact]
     public async Task Progress_ReportsOnlySelectedObjectsWithAccurateCounts()
     {
         using FakeOracleDatabase db = new() { Execute = Respond };

@@ -202,6 +202,7 @@ internal static class SyncCommand
                 ServerExtractionResult[] results = new ServerExtractionResult[work.Count];
                 await Parallel.ForEachAsync(Enumerable.Range(0, work.Count), parallelOptions, async (index, workerToken) =>
                 {
+                    workerToken.ThrowIfCancellationRequested();
                     var (server, depth, filters, credentials) = work[index];
                     bool discoverHere = followLinkedServers && depth < discovery.MaxDepth && server.Type == DatabaseEngine.MsSql;
                     IProgress<ExtractionProgress> serverProgress = progress.Start(server.Name);
@@ -215,6 +216,7 @@ internal static class SyncCommand
                         Directory.CreateDirectory(metricsRoot);
                         logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; snapshots to {MetricsRoot}", server.Name, stagingRoot, metricsRoot);
                         IDatabaseObjectExtractor extractor = extractorResolver.Resolve(server.Type);
+                        workerToken.ThrowIfCancellationRequested();
                         ExtractionOutcome outcome = await extractor.ExtractAsync(
                             server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere, Progress = serverProgress }, workerToken);
 

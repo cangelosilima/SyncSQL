@@ -7,6 +7,57 @@ namespace SyncSql.Cli.Tests;
 
 public sealed class ExtractionProgressDisplayTests
 {
+    [Theory]
+    [InlineData(true, false, null, false)]
+    [InlineData(false, true, null, false)]
+    [InlineData(false, false, "dumb", false)]
+    [InlineData(false, false, "DUMB", false)]
+    [InlineData(false, false, "xterm-256color", true)]
+    [InlineData(false, false, null, true)]
+    public void Terminal_AnimatesOnlyWhenBothStreamsSupportIt(bool outputRedirected, bool errorRedirected, string? term, bool expected) =>
+        Assert.Equal(expected, SyncSqlTerminal.CanAnimate(outputRedirected, errorRedirected, term));
+
+    [Fact]
+    public async Task EmptyDisplay_AndFinishedObserversRemainStable()
+    {
+        SyncSqlTerminal terminal = new(TextWriter.Null, animated: false);
+        await using ExtractionProgressDisplay display = terminal.StartExtraction();
+        Assert.Contains("0% | 0/0 finished", display.Lines(200, 30)[0]);
+        display.Add("SQL");
+        IProgress<ExtractionProgress> observer = display.Start("SQL");
+        display.Complete("SQL", "Skipped", "Filtered", 0);
+        observer.Report(new("Late update", 999));
+        Assert.Contains("SQL | Skipped | 0 objects", display.Lines(200, 30)[2]);
+        Assert.DoesNotContain("Late update", display.Lines(200, 30)[2]);
+    }
+
+    [Fact]
+    public async Task ReplacedDisplay_DoesNotClearNewSessionAndUsesTerminalDimensions()
+    {
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        SyncSqlTerminal terminal = new(output, animated: true, size: () => (41, 7));
+        await using ExtractionProgressDisplay previous = terminal.StartExtraction();
+        previous.Add("OLD");
+        await using ExtractionProgressDisplay current = terminal.StartExtraction();
+        current.Add("NEW");
+        await previous.DisposeAsync();
+        lock (terminal.Gate)
+        {
+            output.GetStringBuilder().Clear();
+            terminal.Render();
+            string[] lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+            Assert.All(lines, line => Assert.True(line.Length <= 40));
+            Assert.Contains(lines, line => line.Contains("NEW | Queued", StringComparison.Ordinal));
+        }
+        await current.DisposeAsync();
+        lock (terminal.Gate)
+        {
+            string completed = output.ToString();
+            terminal.Render();
+            Assert.Equal(completed, output.ToString());
+        }
+    }
+
     [Fact]
     public async Task Display_TracksEveryServerAndExpandsTotalsForDiscovery()
     {

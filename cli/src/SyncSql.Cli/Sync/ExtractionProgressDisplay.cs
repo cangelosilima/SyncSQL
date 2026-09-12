@@ -14,9 +14,11 @@ internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(in
     internal bool Animated => animated;
 
     public static SyncSqlTerminal Create() => new(Console.Out,
-        !Console.IsOutputRedirected && !Console.IsErrorRedirected
-        && !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase),
+        CanAnimate(Console.IsOutputRedirected, Console.IsErrorRedirected, Environment.GetEnvironmentVariable("TERM")),
         () => (Console.WindowWidth, Console.WindowHeight));
+
+    internal static bool CanAnimate(bool outputRedirected, bool errorRedirected, string? terminalType) =>
+        !outputRedirected && !errorRedirected && !string.Equals(terminalType, "dumb", StringComparison.OrdinalIgnoreCase);
 
     public ExtractionProgressDisplay StartExtraction()
     {
@@ -122,7 +124,7 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
     private readonly SyncSqlTerminal _terminal;
     private readonly Dictionary<string, ServerState> _servers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Stopwatch _elapsed = Stopwatch.StartNew();
-    private readonly CancellationTokenSource _stop = new();
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromMilliseconds(100));
     private readonly Task _animation;
     private bool _disposed;
 
@@ -218,15 +220,10 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
 
     private async Task AnimateAsync()
     {
-        using PeriodicTimer timer = new(TimeSpan.FromMilliseconds(100));
-        try
+        while (await _timer.WaitForNextTickAsync())
         {
-            while (await timer.WaitForNextTickAsync(_stop.Token))
-            {
-                _terminal.Render();
-            }
+            _terminal.Render();
         }
-        catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
     }
 
     public async ValueTask DisposeAsync()
@@ -236,7 +233,7 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
             return;
         }
         _disposed = true;
-        await _stop.CancelAsync();
+        _timer.Dispose();
         try
         {
             await _animation;
@@ -252,7 +249,6 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
                 _elapsed.Stop();
                 _terminal.Finish(this);
             }
-            _stop.Dispose();
         }
     }
 }

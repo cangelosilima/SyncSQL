@@ -86,9 +86,11 @@ public sealed class ExtractorTests
     {
         using var db = Database();
         db.Rows(MsSqlQueries.Tables, new TableRow { ObjectId = 1, SchemaName = "dbo", TableName = "orders" });
+        db.Rows(MsSqlQueries.ModuleObjects, new ModuleObjectRow { TypeCode = "V", SchemaName = "dbo", ObjectName = "orders_view", Definition = "CREATE VIEW dbo.orders_view AS SELECT 1 AS id;" });
         ProgressRecorder progress = new();
         ExtractionOutcome result = await Extract(db, progress: progress);
         Assert.Contains(progress.Updates, p => p.Activity == "db: Tables dbo.orders");
+        Assert.Contains(progress.Updates, p => p.Activity == "db: Views dbo.orders_view");
         Assert.Equal(new ExtractionProgress("Databases extracted", result.Objects.Count, 1, 1), progress.Updates[^1]);
         Assert.DoesNotContain(progress.Updates, p => p.Activity.Contains("excluded", StringComparison.Ordinal));
     }
