@@ -21,6 +21,13 @@ public sealed record CatalogObjectVersion
 /// <summary>One catalog node: a single extracted object plus everything Build/mining attaches to it.</summary>
 public sealed record CatalogNode
 {
+    /// <summary>Extraction metadata used during catalog assembly, not part of the site's data contract.</summary>
+    [JsonIgnore]
+    public Configuration.ServerIdentity? ServerIdentity { get; init; }
+
+    [JsonIgnore]
+    public IReadOnlyList<string> ServerNames { get; init; } = [];
+
     [JsonPropertyName("id")]
     public required string Id { get; init; }
 

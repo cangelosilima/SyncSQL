@@ -104,7 +104,11 @@ public sealed class CommandBehaviorTests : IDisposable
                 ["SQL/db/Tables/dbo/t"] = new() { CapturedAt = DateTimeOffset.UnixEpoch, RowCount = 42 },
             },
         };
-        await ExtractionOutputWriter.WriteAsync(outcome, "objects", "metrics", CancellationToken.None, progress: reportProgress ? observer : null);
+        ServerIdentity identity = ServerIdentity.FromConfig(Server with { Aliases = ["sql-alias"] });
+        await ExtractionOutputWriter.WriteAsync(outcome, "objects", "metrics", CancellationToken.None, progress: reportProgress ? observer : null, serverIdentity: identity);
+        var parsed = Core.Serialization.ExtractedObjectFile.Parse(await File.ReadAllLinesAsync("objects/SQL/db/dbo/Tables/t.sql"));
+        Assert.Equal(identity.Endpoint, parsed.Identity?.ServerIdentity?.Endpoint);
+        Assert.True(parsed.Identity?.ServerIdentity?.Matches("sql-alias"));
         Assert.Contains("CREATE TABLE", await File.ReadAllTextAsync("objects/SQL/db/dbo/Tables/t.sql"));
         Assert.Equal(42, JsonSerializer.Deserialize<MetricsSnapshot>(await File.ReadAllTextAsync("metrics/SQL/db/Tables/dbo/t.json"))!.RowCount);
         if (reportProgress)
@@ -335,6 +339,42 @@ public sealed class CommandBehaviorTests : IDisposable
                 : throw new InvalidOperationException("remote unavailable"));
         Assert.Equal(0, await Run("sync"));
         await _extractor.Received(2).ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SyncAndCatalog_MultipleLinksShareOneConfiguredTarget()
+    {
+        WriteConfig(new SyncSqlConfig
+        {
+            Servers = [Server with { Name = "A", Host = "a" }, Server with { Name = "B", Host = "b" },
+                Server with { Name = "CENTRAL", Host = "central.example.com", Aliases = ["10.0.0.5"] }],
+            Defaults = new ObjectFilterSet { ObjectTypes = ["Tables", "Views", "LinkedServers"] },
+            Discovery = new DiscoveryConfig { LinkedServers = new LinkedServerDiscoveryConfig { Enabled = true } },
+        });
+        _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var server = call.Arg<ServerConfig>();
+                ExtractedObject obj = new() { Server = server.Name, Database = "db", Schema = "dbo", Type = "Tables", Name = "Orders", Ddl = "CREATE TABLE dbo.Orders (id int);", Engine = DatabaseEngine.MsSql };
+                string address = server.Name == "A" ? "central.example.com" : "10.0.0.5";
+                return new ExtractionOutcome
+                {
+                    Objects = server.Name == "CENTRAL" ? [obj] :
+                    [obj with { Type = "Views", Name = "Report", Ddl = "CREATE VIEW dbo.Report AS SELECT id FROM SALES.db.dbo.Orders;" },
+                        obj with { Database = "_ServerLevel", Schema = null, Type = "LinkedServers", Name = "SALES", Ddl = $"EXEC sp_addlinkedserver @server = N'SALES', @datasrc = N'{address}', @catalog = N'db';" }],
+                    MetricsSnapshots = new Dictionary<string, MetricsSnapshot>(),
+                    DiscoveredLinkedServers = server.Name == "CENTRAL" ? [] : [new DiscoveredLinkedServer { Name = "SALES", DataSource = address, Product = "SQL Server", Catalog = "db" }],
+                };
+            });
+        Assert.Equal(0, await Run("sync"));
+        await _extractor.Received(3).ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>());
+        Assert.Equal(0, await Run("catalog", "build", "--output-root", "MSSQL"));
+        var catalog = JsonSerializer.Deserialize<Core.Domain.Catalog>(await File.ReadAllTextAsync("MSSQL/catalog.json"))!;
+        var target = Assert.Single(catalog.Nodes, n => n.Type == "Tables");
+        Assert.Equal("CENTRAL", target.Server);
+        Assert.Equal(2, catalog.LinkedServerReferences.Count);
+        Assert.All(catalog.LinkedServerReferences, reference => Assert.Equal(target.Id, reference.To));
+        Assert.Equal(2, catalog.Edges.Count(edge => edge.To == target.Id));
     }
 
     [Fact]

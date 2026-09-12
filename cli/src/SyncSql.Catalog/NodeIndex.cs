@@ -184,10 +184,13 @@ internal sealed class NodeIndex
         // A four-part name that spells out this object's own server isn't a hop - people write the local
         // server's name out in full often enough that treating it as a foreign one would strand a pile of
         // perfectly local references outside the catalog.
+        LinkedServerLink? namedLink = !string.IsNullOrWhiteSpace(reference.Server)
+            ? _linkedServers.Resolve(fromNode.Server, reference.Server, fromNode.Database, fromNode.Schema) : null;
         if (!string.IsNullOrWhiteSpace(reference.Server)
-            && !string.Equals(reference.Server, fromNode.Server, StringComparison.OrdinalIgnoreCase))
+            && (namedLink is not null || (!string.Equals(reference.Server, fromNode.Server, StringComparison.OrdinalIgnoreCase)
+                && !fromNode.ServerNames.Contains(reference.Server, StringComparer.OrdinalIgnoreCase))))
         {
-            LinkedServerLink? link = _linkedServers.Resolve(fromNode.Server, reference.Server, fromNode.Database, fromNode.Schema);
+            LinkedServerLink? link = namedLink;
             if (link?.TargetServer is not { } linkedTargetServer)
             {
                 // Either the server declares no such link, or the link points somewhere nothing in the
@@ -291,8 +294,8 @@ internal sealed class NodeIndex
         LinkedServerLink? crossServerLink = null;
         foreach (string linkedServer in _linkedServers.ReachableFrom(fromNode.Server))
         {
-            LinkedServerLink? accessibleLink = _linkedServers.LinkTo(fromNode.Server, linkedServer, fromNode.Database, fromNode.Schema);
-            if (accessibleLink is null)
+            LinkedServerLink[] accessibleLinks = _linkedServers.LinksTo(fromNode.Server, linkedServer, fromNode.Database, fromNode.Schema);
+            if (accessibleLinks.Length == 0)
             {
                 continue;
             }
@@ -302,13 +305,13 @@ internal sealed class NodeIndex
                 continue;
             }
 
-            if (linked.Kind == ReferenceResolutionKind.Ambiguous || crossServerMatch is not null)
+            if (linked.Kind == ReferenceResolutionKind.Ambiguous || crossServerMatch is not null || accessibleLinks.Length > 1)
             {
                 return ReferenceResolution.Ambiguous;
             }
 
             crossServerMatch = linked.NodeId;
-            crossServerLink = accessibleLink;
+            crossServerLink = accessibleLinks[0];
         }
 
         return crossServerMatch is not null

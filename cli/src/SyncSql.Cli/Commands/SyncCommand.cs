@@ -144,6 +144,8 @@ internal static class SyncCommand
             // as its own round, so a link found at depth N is extracted at depth N+1 and can in turn be
             // followed (up to discovery.linkedServers.maxDepth).
             List<ServerConfig> knownServers = [.. config.Servers];
+            List<ServerConfig> coveredServers = [.. config.Servers.Where(server => serverSelection.IsAllowed(server.Name)
+                && EffectiveFilters.Resolve(config.Defaults, server).ObjectTypes.Count > 0)];
             Queue<(ServerConfig Server, int Depth)> pending = new(config.Servers.Select(server => (server, 0)));
             ParallelOptions parallelOptions = new()
             {
@@ -188,6 +190,7 @@ internal static class SyncCommand
                     }
                     catch (InvalidOperationException ex)
                     {
+                        coveredServers.Remove(server);
                         progress.Complete(server.Name, "Failed", "Missing credentials");
                         logger.LogError("Skipping '{Server}': {Message}", server.Name, ex.Message);
                         (depth == 0 ? failedServers : failedDiscoveredServers).Add(server.Name);
@@ -200,6 +203,7 @@ internal static class SyncCommand
                 // Each worker owns its connections and output. Fold the small summaries in input
                 // order after the round so competing links always choose the same parent/credentials.
                 ServerExtractionResult[] results = new ServerExtractionResult[work.Count];
+                ServerIdentityRegistry identities = new(knownServers.Select(ServerIdentity.FromConfig));
                 await Parallel.ForEachAsync(Enumerable.Range(0, work.Count), parallelOptions, async (index, workerToken) =>
                 {
                     workerToken.ThrowIfCancellationRequested();
@@ -220,7 +224,7 @@ internal static class SyncCommand
                         ExtractionOutcome outcome = await extractor.ExtractAsync(
                             server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere, Progress = serverProgress }, workerToken);
 
-                        await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress);
+                        await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress, identities.Describe(ServerIdentity.FromConfig(server)));
 
                         results[index] = new(outcome.Objects.Count, discoverHere ? outcome.DiscoveredLinkedServers : [], Failed: false);
                         progress.Complete(server.Name, "Done", "Objects and snapshots written", outcome.Objects.Count);
@@ -241,6 +245,15 @@ internal static class SyncCommand
                     }
                 });
 
+                // Failed attempts establish no coverage, even when another worker in this round
+                // discovers a link back to them. Keep their address registrations for resolution.
+                for (int index = 0; index < work.Count; index++)
+                {
+                    if (results[index].Failed)
+                    {
+                        coveredServers.Remove(work[index].Server);
+                    }
+                }
                 for (int index = 0; index < work.Count; index++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -256,7 +269,7 @@ internal static class SyncCommand
                     if (result.LinkedServers.Count > 0)
                     {
                         discoveredServers += QueueLinkedServers(
-                            logger, server, credentials.Username, result.LinkedServers, discovery, depth, knownServers, pending, config.Defaults);
+                            logger, server, credentials.Username, result.LinkedServers, discovery, depth, knownServers, pending, config.Defaults, coveredServers);
                     }
                 }
                 foreach (var entry in pending)
@@ -305,9 +318,10 @@ internal static class SyncCommand
         int depth,
         List<ServerConfig> knownServers,
         Queue<(ServerConfig Server, int Depth)> pending,
-        ObjectFilterSet? defaults)
+        ObjectFilterSet? defaults,
+        List<ServerConfig> coveredServers)
     {
-        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, parentUsername, discovered, discovery, knownServers, defaults);
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, parentUsername, discovered, discovery, knownServers, defaults, coveredServers);
 
         foreach (SkippedLinkedServer skipped in plan.Skipped)
         {
@@ -325,6 +339,7 @@ internal static class SyncCommand
                 followUp.Catalog is { } catalog ? $", database {catalog}" : string.Empty);
 
             knownServers.Add(followUp.Server);
+            coveredServers.Add(followUp.Server);
             pending.Enqueue((followUp.Server, depth + 1));
         }
 

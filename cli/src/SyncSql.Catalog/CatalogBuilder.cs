@@ -41,7 +41,11 @@ public sealed class CatalogBuilder(
             }
         }
 
+        Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
+        nodes = CatalogServerIdentity.Canonicalize(nodes);
+        Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
         LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
+        nodes = CatalogServerIdentity.MergeObjects(nodes);
         NodeIndex nodeIndex = new(nodes, linkedServers);
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
@@ -79,7 +83,7 @@ public sealed class CatalogBuilder(
         {
             for (int i = 0; i < nodes.Count; i++)
             {
-                IReadOnlyList<MetricsSnapshot> metrics = await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, nodes[i].Id, cancellationToken);
+                IReadOnlyList<MetricsSnapshot> metrics = await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, sourceIdsByPath[nodes[i].Path], cancellationToken);
                 if (metrics.Count > 0)
                 {
                     nodes[i] = nodes[i] with { Metrics = metrics };
@@ -100,7 +104,7 @@ public sealed class CatalogBuilder(
                 MaxHistoryContentCalls = request.MaxHistoryContentCalls,
                 MaxCoChangeCommitSize = request.MaxCoChangeCommitSize,
                 KnownObjectIds = nodesById.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
-                ObjectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase),
+                ObjectPaths = objectPaths,
             }, cancellationToken);
 
             recentChanges = [.. history.RecentChanges];
@@ -183,6 +187,7 @@ public sealed class CatalogBuilder(
             Sections = parsed.Sections,
             Engine = parsed.Engine,
             ServiceBrokerGuid = parsed.Identity?.ServiceBrokerGuid,
+            ServerIdentity = parsed.Identity?.ServerIdentity,
             SizeBytes = Encoding.UTF8.GetByteCount(parsed.Ddl),
         };
     }
@@ -277,7 +282,9 @@ public sealed class CatalogBuilder(
                 // everything reached through it - including the parts of the fleet nobody extracts.
                 if (resolution.ViaLink is { } link)
                 {
-                    string linkedKey = $"{node.Id}|{link.NodeId}|{reference.Database}|{reference.Schema}|{reference.Name}";
+                    string targetKey = resolution.NodeId is { } resolvedId ? $"resolved:{resolvedId}"
+                        : $"unresolved:{reference.Database ?? link.DefaultDatabase}|{reference.Schema}|{reference.Name}";
+                    string linkedKey = $"{node.Id}|{link.NodeId}|{targetKey}";
                     if (linkedReferenceIndexByKey.TryGetValue(linkedKey, out int existingLinked))
                     {
                         if (!dynamic && linkedServerReferences[existingLinked].Dynamic)
