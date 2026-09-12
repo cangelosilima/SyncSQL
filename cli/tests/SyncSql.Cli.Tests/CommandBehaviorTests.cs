@@ -20,6 +20,7 @@ public sealed class CommandBehaviorTests : IDisposable
     private readonly ServiceProvider _services;
     private readonly IDatabaseObjectExtractor _extractor = Substitute.For<IDatabaseObjectExtractor>();
     private readonly ICredentialProvider _credentials = Substitute.For<ICredentialProvider>();
+    private readonly IDatabaseObjectExtractorResolver _resolver = Substitute.For<IDatabaseObjectExtractorResolver>();
     private static readonly ServerConfig Server = new()
     {
         Name = "SQL",
@@ -36,9 +37,8 @@ public sealed class CommandBehaviorTests : IDisposable
         ServiceCollectionExtensions.AddSyncSqlServices(registrations);
         _credentials.Read("TEST").Returns(new PartialCredentials("user", "password"));
         registrations.AddSingleton(_credentials);
-        var resolver = Substitute.For<IDatabaseObjectExtractorResolver>();
-        resolver.Resolve(Arg.Any<DatabaseEngine>()).Returns(_extractor);
-        registrations.AddSingleton(resolver);
+        _resolver.Resolve(Arg.Any<DatabaseEngine>()).Returns(_extractor);
+        registrations.AddSingleton(_resolver);
         _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
             .Returns(new ExtractionOutcome { Objects = [], MetricsSnapshots = new Dictionary<string, MetricsSnapshot>() });
         _services = registrations.BuildServiceProvider();
@@ -215,6 +215,31 @@ public sealed class CommandBehaviorTests : IDisposable
         await _extractor.DidNotReceiveWithAnyArgs().ExtractAsync(default!, default!, default!, default);
     }
 
+    private sealed class WaitingExtractor : IDatabaseObjectExtractor
+    {
+        public DatabaseEngine Engine => DatabaseEngine.MsSql;
+        public TaskCompletionSource SlotsFilled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Started;
+        public int Stopped;
+
+        public async Task<ExtractionOutcome> ExtractAsync(ServerConfig server, EffectiveFilters filters, ExtractionOptions options, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref Started) == 2)
+            {
+                SlotsFilled.TrySetResult();
+            }
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("Expected cancellation");
+            }
+            finally
+            {
+                Interlocked.Increment(ref Stopped);
+            }
+        }
+    }
+
     [Fact]
     public async Task Sync_CancellationStopsActiveWorkersAndLeavesQueuedServersUnstarted()
     {
@@ -224,26 +249,8 @@ public sealed class CommandBehaviorTests : IDisposable
             Defaults = new ObjectFilterSet { ObjectTypes = ["Tables"] },
         });
         using CancellationTokenSource cancellation = new();
-        TaskCompletionSource slotsFilled = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        int started = 0;
-        int stopped = 0;
-        _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
-            {
-                if (Interlocked.Increment(ref started) == 2)
-                {
-                    slotsFilled.TrySetResult();
-                }
-                try
-                {
-                    await Task.Delay(Timeout.InfiniteTimeSpan, call.Arg<CancellationToken>());
-                    throw new InvalidOperationException("Expected cancellation");
-                }
-                finally
-                {
-                    Interlocked.Increment(ref stopped);
-                }
-            });
+        WaitingExtractor extractor = new();
+        _resolver.Resolve(Arg.Any<DatabaseEngine>()).Returns(extractor);
 
         // Invoke the action directly: the command-line process-termination wrapper may return
         // before its action has unwound cancellation, which races assertions and fixture cleanup.
@@ -251,15 +258,15 @@ public sealed class CommandBehaviorTests : IDisposable
         Task<int> run = Assert.IsAssignableFrom<AsynchronousCommandLineAction>(parsed.Action).InvokeAsync(parsed, cancellation.Token);
         try
         {
-            await slotsFilled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await extractor.SlotsFilled.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
         {
             await cancellation.CancelAsync();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
         }
-        Assert.Equal(2, started);
-        Assert.Equal(2, stopped);
+        Assert.Equal(2, extractor.Started);
+        Assert.Equal(2, extractor.Stopped);
     }
 
     [Fact]
