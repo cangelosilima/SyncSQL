@@ -199,7 +199,7 @@ local files (`SyncSql.Catalog`'s history mining is a read-only `git log`/
 syncsql validate-config [--config <path>]
 syncsql sync [--config <path>] [--output-root] [--staging-root] [--metrics-snapshot-root]
              [--db-user PREFIX=value] [--db-password PREFIX=value] [--credentials-file <path>]
-             [--server-include/--server-exclude]
+             [--server-include/--server-exclude] [--max-parallelism <count>]
 syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
@@ -217,6 +217,14 @@ variables, so existing setups keep working), and every output path defaults
 to an engine folder named after uppercase `servers.type` (`./MSSQL` or
 `./ORACLE`). `--output-root` overrides this location. Catalog and metrics
 commands visit both existing engine folders by default; T-SQL lint defaults to `./MSSQL`.
+
+`sync` extracts up to four servers concurrently by default. Set
+`--max-parallelism <count>` to tune this limit, or `--max-parallelism 1`
+for sequential extraction. Linked-server discovery runs in depth rounds,
+with the same concurrency limit in each round.
+Interactive terminals show live overall and per-server progress, including the
+current extraction activity, object counts, file writes, and elapsed time.
+Redirected output remains plain log lines.
 
 `sync` extracts (purely local - no git of any kind); `catalog build` and
 `metrics update` are the other two pure, composable steps (rebuild the

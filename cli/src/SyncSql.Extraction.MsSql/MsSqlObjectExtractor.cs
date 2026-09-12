@@ -72,6 +72,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         // the caller may want to follow up on (see LinkedServerFollowUpPlanner).
         if (filters.ObjectTypes.Contains("LinkedServers") || options.DiscoverLinkedServers)
         {
+            options.Progress?.Report(new("Reading linked servers"));
             await using DbConnection masterConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken);
             IReadOnlyList<IGrouping<string, LinkedServerRow>> linkedServers =
                 [.. (await MsSqlCatalogReader.GetLinkedServersAsync(masterConnection)).GroupBy(r => r.LinkedServerName, StringComparer.OrdinalIgnoreCase)];
@@ -87,19 +88,18 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
             }
         }
 
+        options.Progress?.Report(new("Listing databases", objects.Count));
         await using DbConnection dbListConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken);
         IEnumerable<string> databases = await MsSqlCatalogReader.GetDatabasesAsync(dbListConnection);
-
-        foreach (string database in databases)
+        string[] allowedDatabases = [.. databases.Where(filters.Databases.IsAllowed)];
+        int completed = 0;
+        foreach (string database in allowedDatabases)
         {
-            if (!filters.Databases.IsAllowed(database))
-            {
-                continue;
-            }
-
+            options.Progress?.Report(new($"Database {database}", objects.Count, completed, allowedDatabases.Length));
             _logger.LogInformation("[{Server}/{Database}] Extracting", server.Name, database);
             await using DbConnection connection = await OpenAsync(server, database, options.Credentials, cancellationToken);
             await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
+            options.Progress?.Report(new("Databases extracted", objects.Count, ++completed, allowedDatabases.Length));
         }
 
         return new ExtractionOutcome
@@ -166,6 +166,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         List<ExtractedObject> objects,
         Dictionary<string, MetricsSnapshot> metrics)
     {
+        options.Progress?.Report(new($"{database}: reading catalog metadata", objects.Count));
         List<SchemaRow> schemaRows = [.. await MsSqlCatalogReader.GetSchemasAsync(connection)];
         int firstObject = objects.Count;
         Dictionary<string, bool> allowedSchemas = schemaRows.ToDictionary(
@@ -226,26 +227,31 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
 
         if (ModuleObjectTypes.Any(filters.ObjectTypes.Contains))
         {
-            await ExtractModuleObjectsAsync(connection, server, database, filters, allowedSchemas, extendedProperties, grants, columnList, objects);
+            options.Progress?.Report(new($"{database}: modules", objects.Count));
+            await ExtractModuleObjectsAsync(connection, server, database, filters, allowedSchemas, extendedProperties, grants, columnList, objects, options.Progress);
         }
 
         if (filters.ObjectTypes.Contains("Tables"))
         {
+            options.Progress?.Report(new($"{database}: tables and metrics", objects.Count));
             await ExtractTablesAsync(connection, server, database, filters, options, allowedSchemas, extendedProperties, grants, columnList, columnDefinitions, objects, metrics);
         }
 
         if (filters.ObjectTypes.Contains("Synonyms"))
         {
+            options.Progress?.Report(new($"{database}: synonyms", objects.Count));
             await ExtractSynonymsAsync(connection, server, database, filters, allowedSchemas, grants, objects);
         }
 
         if (filters.ObjectTypes.Contains("Replication"))
         {
+            options.Progress?.Report(new($"{database}: replication", objects.Count));
             await ExtractReplicationAsync(connection, server, database, filters, objects);
         }
 
         if (ServiceBrokerReader.ObjectTypes.Any(filters.ObjectTypes.Contains))
         {
+            options.Progress?.Report(new($"{database}: Service Broker", objects.Count));
             foreach (BrokerRow row in await ServiceBrokerReader.ReadAsync(connection))
             {
                 if (!filters.ObjectTypes.Contains(row.Type) || !filters.ObjectNames.IsAllowed(row.Name)
@@ -267,6 +273,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
             }
         }
 
+        options.Progress?.Report(new($"{database}: configuration", objects.Count));
         await AppendConfigurationAsync(connection, server.Name, database, objects, firstObject);
         if (objects.Count > firstObject)
         {
@@ -284,7 +291,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         IReadOnlyDictionary<string, ExtendedPropertiesEntry> extendedProperties,
         IReadOnlyDictionary<string, List<GrantEntry>> grants,
         IReadOnlyDictionary<string, List<ExtractedColumn>> columnList,
-        List<ExtractedObject> objects)
+        List<ExtractedObject> objects, IProgress<ExtractionProgress>? progress)
     {
         foreach (ModuleObjectRow row in await MsSqlCatalogReader.GetModuleObjectsAsync(connection))
         {
@@ -315,6 +322,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
                 Columns = objectType == "Views" ? MergeColumns(columnList, extendedProperties, key) : [],
                 Grants = grants.GetValueOrDefault(key) ?? [],
             });
+            progress?.Report(new($"{database}: {objectType} {key}", objects.Count));
         }
     }
 
@@ -376,6 +384,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
                 Grants = grants.GetValueOrDefault(key) ?? [],
                 Sections = sections,
             });
+            options.Progress?.Report(new($"{database}: Tables {key}", objects.Count));
 
             if (options.CaptureMetrics && snapshotsByKey.TryGetValue(key, out MetricsSnapshot? snapshot))
             {

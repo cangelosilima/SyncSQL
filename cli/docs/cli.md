@@ -127,6 +127,22 @@ syncsql sync --config ./config/servers.json
 | `--credentials-file`       | *(none)*                            | JSON file of credentials keyed by `credentialsVariablePrefix` - see [Credentials](#credentials). |
 | `--server-include`         | `config.serverSelection.include`    | Regex a server name must match to run. Repeatable. Overrides the config value entirely when passed. |
 | `--server-exclude`         | `config.serverSelection.exclude`    | Regex that excludes a server. Repeatable. Overrides the config value entirely when passed. |
+| `--max-parallelism`        | `4`                                | Maximum concurrent server extractions, including writing their objects and snapshots. Must be positive; use `1` for sequential extraction. |
+
+Each server uses its own database connections. Queries within a server remain
+sequential. Linked-server discovery runs in depth rounds with the same concurrency
+limit; duplicate targets are resolved in configuration order, so the chosen parent
+and inherited credentials do not depend on which extraction finishes first.
+
+In an interactive terminal, extraction displays an animated overall progress bar
+and one row per server: queued, extracting, writing, done, failed, skipped, or cancelled.
+Rows show elapsed time, extracted object counts, the current database/schema or
+object, and completed/total counts when known (including files being written).
+Overall percentage measures servers finished, not estimated query time. Discovery
+can increase the total while the run is in progress. Large fleets rotate through
+pages every three seconds to fit the terminal; the final summary lists every server.
+Warnings and errors stay visible above the display. Redirected output and `TERM=dumb`
+use plain log lines without animation or terminal escape sequences.
 
 Exit code `0` if every selected server extracted successfully; `1` if
 any server failed (extraction error or missing credentials). A partial

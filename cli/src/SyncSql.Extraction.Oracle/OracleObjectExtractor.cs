@@ -40,6 +40,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
         string serviceName = server.ServiceName
             ?? throw new InvalidOperationException($"Oracle server '{server.Name}' is missing required key 'serviceName'.");
 
+        options.Progress?.Report(new($"Connecting to {serviceName}"));
         await using DbConnection connection = _createConnection(server, options.Credentials);
         await connection.OpenAsync(cancellationToken);
         await OracleConnectionFactory.InitializeAsync(connection, cancellationToken);
@@ -47,11 +48,13 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
         List<ExtractedObject> objects = [];
         Dictionary<string, MetricsSnapshot> metrics = [];
 
+        options.Progress?.Report(new($"{serviceName}: listing schemas"));
         List<string> allOwners = await OracleCommandRunner.QueryAsync(connection, OracleQueries.Schemas, r => r.GetStringOrEmpty("OWNER"), cancellationToken);
         List<string> allowedOwners = [.. allOwners.Where(filters.Schemas.IsAllowed)];
 
         if (filters.ObjectTypes.Contains("Schemas"))
         {
+            options.Progress?.Report(new($"{serviceName}: schema definitions", objects.Count));
             await ExtractSchemasAsync(connection, server, serviceName, allowedOwners, objects, cancellationToken);
         }
 
@@ -73,6 +76,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
 
             foreach (string owner in allowedOwners)
             {
+                options.Progress?.Report(new($"{serviceName}/{owner}: {configType}", objects.Count));
                 if (!grantsByOwner.TryGetValue(owner, out Dictionary<string, List<GrantEntry>>? ownerGrants))
                 {
                     ownerGrants = await TryLoadAsync(() => LoadGrantsAsync(connection, owner, cancellationToken), server.Name, owner, "ALL_TAB_PRIVS/ALL_COL_PRIVS");
@@ -91,13 +95,11 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
                     connection, OracleQueries.ObjectList, r => r.GetStringOrEmpty("ObjectName"), cancellationToken,
                     ("owner", owner), ("objType", oracleType));
 
-                foreach (string objectName in objectNames)
+                string[] allowedNames = [.. objectNames.Where(filters.ObjectNames.IsAllowed)];
+                int processed = 0;
+                foreach (string objectName in allowedNames)
                 {
-                    if (!filters.ObjectNames.IsAllowed(objectName))
-                    {
-                        continue;
-                    }
-
+                    options.Progress?.Report(new($"{owner}.{objectName}: {configType}", objects.Count, processed++, allowedNames.Length));
                     string? ddl;
                     try
                     {
@@ -130,6 +132,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
                         Columns = columns,
                         Grants = objectGrants,
                     });
+                    options.Progress?.Report(new($"{owner}: {configType}", objects.Count, processed, allowedNames.Length));
 
                     if (options.CaptureMetrics && oracleType == "TABLE" &&
                         metricsByOwner.TryGetValue(owner, out Dictionary<string, MetricsSnapshot>? ownerMetrics) &&
@@ -144,6 +147,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
 
         if (filters.ObjectTypes.Contains("DatabaseLinks"))
         {
+            options.Progress?.Report(new($"{serviceName}: database links", objects.Count));
             await ExtractDatabaseLinksAsync(connection, server, serviceName, filters, objects, cancellationToken);
         }
 
