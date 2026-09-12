@@ -54,6 +54,21 @@ internal static class SyncCommand
         };
         Option<string[]> serverIncludeOption = new("--server-include") { Description = "Regex override for which configured servers run. Takes precedence over config.serverSelection." };
         Option<string[]> serverExcludeOption = new("--server-exclude") { Description = "Regex override for which configured servers are skipped. Takes precedence over config.serverSelection." };
+        Option<int> maxParallelismOption = new("--max-parallelism")
+        {
+            Description = "Maximum number of servers extracted concurrently. Use 1 for sequential extraction.",
+            DefaultValueFactory = _ => 4,
+        };
+        maxParallelismOption.Validators.Add(result =>
+        {
+            if (result.Tokens.Count == 1
+                && int.TryParse(result.Tokens[0].Value, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out int value)
+                && value < 1)
+            {
+                result.AddError("--max-parallelism must be at least 1.");
+            }
+        });
 
         Command command = new("sync", "Extract every configured server's database objects and metrics snapshots.")
         {
@@ -66,6 +81,7 @@ internal static class SyncCommand
             credentialsFileOption,
             serverIncludeOption,
             serverExcludeOption,
+            maxParallelismOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -129,77 +145,125 @@ internal static class SyncCommand
             // followed (up to discovery.linkedServers.maxDepth).
             List<ServerConfig> knownServers = [.. config.Servers];
             Queue<(ServerConfig Server, int Depth)> pending = new(config.Servers.Select(server => (server, 0)));
+            ParallelOptions parallelOptions = new()
+            {
+                MaxDegreeOfParallelism = parseResult.GetValue(maxParallelismOption),
+                CancellationToken = cancellationToken,
+            };
+            SyncSqlTerminal terminal = services.GetService<SyncSqlTerminal>() ?? new(TextWriter.Null, animated: false);
+            await using ExtractionProgressDisplay progress = terminal.StartExtraction();
+            foreach (ServerConfig server in config.Servers)
+            {
+                progress.Add(server.Name);
+            }
 
             while (pending.Count > 0)
             {
-                (ServerConfig server, int depth) = pending.Dequeue();
-
-                if (depth == 0 && !serverSelection.IsAllowed(server.Name))
+                List<(ServerConfig Server, int Depth, EffectiveFilters Filters, DatabaseCredentials Credentials)> work = [];
+                while (pending.TryDequeue(out var entry))
                 {
-                    logger.LogInformation("Skipping '{Server}' (excluded by server selection filter)", server.Name);
-                    continue;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    (ServerConfig server, int depth) = entry;
+
+                    if (depth == 0 && !serverSelection.IsAllowed(server.Name))
+                    {
+                        progress.Complete(server.Name, "Skipped", "Excluded by server filter");
+                        logger.LogInformation("Skipping '{Server}' (excluded by server selection filter)", server.Name);
+                        continue;
+                    }
+
+                    EffectiveFilters filters = EffectiveFilters.Resolve(config.Defaults, server);
+                    if (filters.ObjectTypes.Count == 0)
+                    {
+                        progress.Complete(server.Name, "Skipped", "No object types configured");
+                        logger.LogWarning("Skipping '{Server}': no objectTypes configured (defaults + server override both empty).", server.Name);
+                        continue;
+                    }
+
+                    attemptedServers++;
+                    DatabaseCredentials credentials;
+                    try
+                    {
+                        credentials = credentialProvider.Resolve(server.CredentialsVariablePrefix);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        progress.Complete(server.Name, "Failed", "Missing credentials");
+                        logger.LogError("Skipping '{Server}': {Message}", server.Name, ex.Message);
+                        (depth == 0 ? failedServers : failedDiscoveredServers).Add(server.Name);
+                        continue;
+                    }
+
+                    work.Add((server, depth, filters, credentials));
                 }
 
-                EffectiveFilters filters = EffectiveFilters.Resolve(config.Defaults, server);
-                if (filters.ObjectTypes.Count == 0)
+                // Each worker owns its connections and output. Fold the small summaries in input
+                // order after the round so competing links always choose the same parent/credentials.
+                ServerExtractionResult[] results = new ServerExtractionResult[work.Count];
+                await Parallel.ForEachAsync(Enumerable.Range(0, work.Count), parallelOptions, async (index, workerToken) =>
                 {
-                    logger.LogWarning("Skipping '{Server}': no objectTypes configured (defaults + server override both empty).", server.Name);
-                    continue;
-                }
+                    var (server, depth, filters, credentials) = work[index];
+                    bool discoverHere = followLinkedServers && depth < discovery.MaxDepth && server.Type == DatabaseEngine.MsSql;
+                    IProgress<ExtractionProgress> serverProgress = progress.Start(server.Name);
 
-                attemptedServers++;
-                DatabaseCredentials credentials;
-                try
+                    try
+                    {
+                        string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot(server.Type);
+                        string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
+                        string metricsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(metricsSnapshotRootOption), outputRoot, SyncSqlPaths.MetricsSnapshotDirectoryName);
+                        Directory.CreateDirectory(stagingRoot);
+                        Directory.CreateDirectory(metricsRoot);
+                        logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; snapshots to {MetricsRoot}", server.Name, stagingRoot, metricsRoot);
+                        IDatabaseObjectExtractor extractor = extractorResolver.Resolve(server.Type);
+                        ExtractionOutcome outcome = await extractor.ExtractAsync(
+                            server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere, Progress = serverProgress }, workerToken);
+
+                        await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress);
+
+                        results[index] = new(outcome.Objects.Count, discoverHere ? outcome.DiscoveredLinkedServers : [], Failed: false);
+                        progress.Complete(server.Name, "Done", "Objects and snapshots written", outcome.Objects.Count);
+                        logger.LogInformation("- {Server} ({Engine}): {Count} object file(s)", server.Name, server.Type.ToConfigString(), outcome.Objects.Count);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        progress.Complete(server.Name, "Failed", "See error above");
+                        if (depth == 0)
+                        {
+                            logger.LogError("Extraction failed for '{Server}': {Message}", server.Name, ex.Message);
+                        }
+                        else
+                        {
+                            logger.LogWarning("Extraction failed for discovered server '{Server}': {Message}", server.Name, ex.Message);
+                        }
+                        results[index] = new(0, [], Failed: true);
+                    }
+                });
+
+                for (int index = 0; index < work.Count; index++)
                 {
-                    credentials = credentialProvider.Resolve(server.CredentialsVariablePrefix);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    logger.LogError("Skipping '{Server}': {Message}", server.Name, ex.Message);
-                    (depth == 0 ? failedServers : failedDiscoveredServers).Add(server.Name);
-                    continue;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var (server, depth, _, credentials) = work[index];
+                    ServerExtractionResult result = results[index];
+                    if (result.Failed)
+                    {
+                        (depth == 0 ? failedServers : failedDiscoveredServers).Add(server.Name);
+                        continue;
+                    }
 
-                bool discoverHere = followLinkedServers && depth < discovery.MaxDepth && server.Type == DatabaseEngine.MsSql;
-
-                try
-                {
-                    string outputRoot = parseResult.GetValue(outputRootOption) ?? SyncSqlPaths.DefaultOutputRoot(server.Type);
-                    string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
-                    string metricsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(metricsSnapshotRootOption), outputRoot, SyncSqlPaths.MetricsSnapshotDirectoryName);
-                    Directory.CreateDirectory(stagingRoot);
-                    Directory.CreateDirectory(metricsRoot);
-                    logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; snapshots to {MetricsRoot}", server.Name, stagingRoot, metricsRoot);
-                    IDatabaseObjectExtractor extractor = extractorResolver.Resolve(server.Type);
-                    ExtractionOutcome outcome = await extractor.ExtractAsync(
-                        server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere }, cancellationToken);
-
-                    await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, cancellationToken, server.ExportPath);
-
-                    totalFiles += outcome.Objects.Count;
-                    logger.LogInformation("- {Server} ({Engine}): {Count} object file(s)", server.Name, server.Type.ToConfigString(), outcome.Objects.Count);
-
-                    if (discoverHere)
+                    totalFiles += result.FileCount;
+                    if (result.LinkedServers.Count > 0)
                     {
                         discoveredServers += QueueLinkedServers(
-                            logger, server, credentials.Username, outcome.DiscoveredLinkedServers, discovery, depth, knownServers, pending, config.Defaults);
+                            logger, server, credentials.Username, result.LinkedServers, discovery, depth, knownServers, pending, config.Defaults);
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                foreach (var entry in pending)
                 {
-                    if (depth == 0)
-                    {
-                        logger.LogError("Extraction failed for '{Server}': {Message}", server.Name, ex.Message);
-                        failedServers.Add(server.Name);
-                    }
-                    else
-                    {
-                        logger.LogWarning("Extraction failed for discovered server '{Server}': {Message}", server.Name, ex.Message);
-                        failedDiscoveredServers.Add(server.Name);
-                    }
+                    progress.Add(entry.Server.Name);
                 }
             }
 
+            await progress.DisposeAsync();
             logger.LogInformation(
                 "Extraction complete: {TotalFiles} object file(s) across {ServerCount} server(s) ({DiscoveredCount} reached through a linked server); {FailureCount} failure(s).",
                 totalFiles, attemptedServers - failedServers.Count - failedDiscoveredServers.Count, discoveredServers, failedServers.Count);
@@ -222,6 +286,8 @@ internal static class SyncCommand
 
         return command;
     }
+
+    private sealed record ServerExtractionResult(int FileCount, IReadOnlyList<DiscoveredLinkedServer> LinkedServers, bool Failed);
 
     /// <summary>
     /// Turns the linked servers one extraction reported into the next round of work, logging both what

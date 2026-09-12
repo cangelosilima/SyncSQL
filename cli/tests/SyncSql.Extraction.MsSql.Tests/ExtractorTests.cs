@@ -61,7 +61,7 @@ public sealed class ExtractorTests
         return db;
     }
 
-    private static Task<ExtractionOutcome> Extract(FakeDatabase db, string[]? types = null, bool metrics = true, bool discover = true)
+    private static Task<ExtractionOutcome> Extract(FakeDatabase db, string[]? types = null, bool metrics = true, bool discover = true, IProgress<ExtractionProgress>? progress = null)
     {
         var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System, (_, _, _) => db);
         var server = Server with
@@ -72,7 +72,25 @@ public sealed class ExtractorTests
             ObjectNames = new NameFilter { Exclude = ["^skip$"] }
         };
         return extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
-            new ExtractionOptions { Credentials = Credentials, CaptureMetrics = metrics, DiscoverLinkedServers = discover }, CancellationToken.None);
+            new ExtractionOptions { Credentials = Credentials, CaptureMetrics = metrics, DiscoverLinkedServers = discover, Progress = progress }, CancellationToken.None);
+    }
+
+    private sealed class ProgressRecorder : IProgress<ExtractionProgress>
+    {
+        public List<ExtractionProgress> Updates { get; } = [];
+        public void Report(ExtractionProgress value) => Updates.Add(value);
+    }
+
+    [Fact]
+    public async Task Progress_ReportsFilteredDatabaseTotalsAndExtractedObjects()
+    {
+        using var db = Database();
+        db.Rows(MsSqlQueries.Tables, new TableRow { ObjectId = 1, SchemaName = "dbo", TableName = "orders" });
+        ProgressRecorder progress = new();
+        ExtractionOutcome result = await Extract(db, progress: progress);
+        Assert.Contains(progress.Updates, p => p.Activity == "db: Tables dbo.orders");
+        Assert.Equal(new ExtractionProgress("Databases extracted", result.Objects.Count, 1, 1), progress.Updates[^1]);
+        Assert.DoesNotContain(progress.Updates, p => p.Activity.Contains("excluded", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -52,6 +52,9 @@ public sealed record ExtractionOptions
 {
     public required DatabaseCredentials Credentials { get; init; }
 
+    /// <summary>Optional synchronous progress observer; totals are supplied only when known.</summary>
+    public IProgress<ExtractionProgress>? Progress { get; init; }
+
     /// <summary>Whether to also capture a volatile metrics snapshot per table (row counts, index fragmentation/usage, optimizer statistics) - see MetricsSnapshot.</summary>
     public bool CaptureMetrics { get; init; } = true;
 
@@ -63,6 +66,8 @@ public sealed record ExtractionOptions
     /// </summary>
     public bool DiscoverLinkedServers { get; init; }
 }
+
+public sealed record ExtractionProgress(string Activity, int ObjectsExtracted = 0, int? Completed = null, int? Total = null);
 
 /// <summary>
 /// Extracts every allowed object from one server into <see cref="ExtractedObject"/>s, one implementation

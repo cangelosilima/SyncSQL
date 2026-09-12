@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using SyncSql.Core.Domain;
+using SyncSql.Core.Abstractions;
 using SyncSql.Core.Json;
 using SyncSql.Core.Serialization;
 
@@ -14,14 +15,18 @@ namespace SyncSql.Cli.Sync;
 /// </summary>
 internal static class ExtractionOutputWriter
 {
-    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null)
+    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null, IProgress<ExtractionProgress>? progress = null)
     {
+        int written = 0;
+        int total = outcome.Objects.Count + outcome.MetricsSnapshots.Count;
+        progress?.Report(new("Writing files", outcome.Objects.Count, written, total));
         foreach (ExtractedObject obj in outcome.Objects)
         {
             string relativePath = ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, serverPath: serverPath);
             string path = Path.Combine(stagingRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj), cancellationToken);
+            progress?.Report(new("Writing files", outcome.Objects.Count, ++written, total));
         }
 
         foreach ((string objectId, MetricsSnapshot snapshot) in outcome.MetricsSnapshots)
@@ -29,6 +34,7 @@ internal static class ExtractionOutputWriter
             string path = Path.Combine(metricsRoot, objectId.Replace('/', Path.DirectorySeparatorChar) + ".json");
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, JsonSerializer.Serialize(snapshot, SyncSqlJsonOptions.Default), cancellationToken);
+            progress?.Report(new("Writing files", outcome.Objects.Count, ++written, total));
         }
     }
 }

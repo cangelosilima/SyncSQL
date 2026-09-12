@@ -90,7 +90,7 @@ public sealed class OracleExtractorTests
         throw new InvalidOperationException("Unexpected query: " + sql);
     }
 
-    private static Task<ExtractionOutcome> Extract(FakeOracleDatabase db, bool metrics = true, string[]? types = null, ServerConfig? config = null)
+    private static Task<ExtractionOutcome> Extract(FakeOracleDatabase db, bool metrics = true, string[]? types = null, ServerConfig? config = null, IProgress<ExtractionProgress>? progress = null)
     {
         var extractor = new OracleObjectExtractor(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) => db);
         var server = config ?? Server with
@@ -99,7 +99,24 @@ public sealed class OracleExtractorTests
             Schemas = new NameFilter { Exclude = ["^PRIVATE$"] },
             ObjectNames = new NameFilter { Exclude = ["^skip$"] }
         };
-        return extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server), new ExtractionOptions { Credentials = Credentials, CaptureMetrics = metrics }, CancellationToken.None);
+        return extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server), new ExtractionOptions { Credentials = Credentials, CaptureMetrics = metrics, Progress = progress }, CancellationToken.None);
+    }
+
+    private sealed class ProgressRecorder : IProgress<ExtractionProgress>
+    {
+        public List<ExtractionProgress> Updates { get; } = [];
+        public void Report(ExtractionProgress value) => Updates.Add(value);
+    }
+
+    [Fact]
+    public async Task Progress_ReportsOnlySelectedObjectsWithAccurateCounts()
+    {
+        using FakeOracleDatabase db = new() { Execute = Respond };
+        ProgressRecorder progress = new();
+        ExtractionOutcome result = await Extract(db, types: ["Tables"], progress: progress);
+        Assert.Contains(progress.Updates, p => p.Activity == "APP.orders: Tables");
+        Assert.Equal(new ExtractionProgress("APP: Tables", result.Objects.Count, 2, 2), progress.Updates[^1]);
+        Assert.DoesNotContain(progress.Updates, p => p.Activity.Contains("skip", StringComparison.Ordinal) || p.Activity.Contains("PRIVATE", StringComparison.Ordinal));
     }
 
     [Theory]
