@@ -59,7 +59,13 @@ internal sealed class FakeDatabase : DbConnection
         protected override DbParameter CreateDbParameter() => new SqlParameter();
         public override void Cancel() { }
         public override void Prepare() { }
-        public override int ExecuteNonQuery() => throw new NotSupportedException();
+        public override int ExecuteNonQuery()
+        {
+            database.Queries.Add(CommandText);
+            if (database.FailQueries.Contains(CommandText)) { throw new FakeDatabaseException(); }
+            if (CommandText == "SET NUMERIC_ROUNDABORT OFF;") { return 0; }
+            throw new NotSupportedException();
+        }
         public override object? ExecuteScalar()
         {
             using var reader = ExecuteReader();

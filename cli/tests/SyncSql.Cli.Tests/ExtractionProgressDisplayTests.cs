@@ -18,6 +18,24 @@ public sealed class ExtractionProgressDisplayTests
         Assert.Equal(expected, SyncSqlTerminal.CanAnimate(outputRedirected, errorRedirected, term));
 
     [Fact]
+    public void TerminalColors_FitsPlainAndAnsiText()
+    {
+        Assert.Equal("value", TerminalColors.Wrap("value", TerminalColors.Cyan, false));
+        Assert.Equal("\e[36mvalue\e[0m", TerminalColors.Wrap("value", TerminalColors.Cyan, true));
+        Assert.Equal("plain", TerminalColors.Fit("plain", 10));
+        Assert.Equal("...", TerminalColors.Fit("plain", 3));
+        Assert.Equal("a b", TerminalColors.Fit("a\nb", 10));
+
+        const string colored = "\e[36mtext\e[0m";
+        Assert.Equal(colored, TerminalColors.Fit(colored, 10));
+        Assert.DoesNotContain("\e[", TerminalColors.Fit(colored, 3));
+        Assert.Equal("\e[36mtex...\e[0m", TerminalColors.Fit(colored, 6));
+        Assert.Equal("abc", TerminalColors.Fit("\e[Xabc", 10));
+        Assert.Equal(" Xa...", TerminalColors.Fit("\eXabcdef", 6));
+        Assert.Equal(" [1...", TerminalColors.Fit("\e[123456", 6));
+    }
+
+    [Fact]
     public async Task EmptyDisplay_AndFinishedObserversRemainStable()
     {
         SyncSqlTerminal terminal = new(TextWriter.Null, animated: false);
@@ -27,7 +45,8 @@ public sealed class ExtractionProgressDisplayTests
         IProgress<ExtractionProgress> observer = display.Start("SQL");
         display.Complete("SQL", "Skipped", "Filtered", 0);
         observer.Report(new("Late update", 999));
-        Assert.Contains("SQL | Skipped | 0 objects", display.Lines(200, 30)[2]);
+        Assert.Contains("SQL | Skipped |", display.Lines(200, 30)[2]);
+        Assert.Contains("0 objects", display.Lines(200, 30)[2]);
         Assert.DoesNotContain("Late update", display.Lines(200, 30)[2]);
     }
 
@@ -73,8 +92,10 @@ public sealed class ExtractionProgressDisplayTests
         string running = string.Join('\n', display.Lines(200, 30));
         Assert.Contains("0/2 finished | 2 active", running);
         Assert.Contains("37 objects extracted", running);
-        Assert.Contains("SQL | Extracting | 25 objects", running);
+        Assert.Contains("SQL", running);
+        Assert.Contains("| Extracting", running);
         Assert.Contains("ORACLE | Extracting (3/10)", running);
+        Assert.Contains("25 objects", running);
         Assert.Contains("HR: Views", running);
 
         display.Complete("SQL", "Done", "Files written", 25);

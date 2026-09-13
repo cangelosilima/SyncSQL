@@ -6,19 +6,22 @@ namespace SyncSql.Cli.Sync;
 
 /// <summary>One synchronized output path for log messages and the animated extraction display.</summary>
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "StartExtraction transfers ownership of the display to the caller's await using scope.")]
-internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(int Width, int Height)>? size = null)
+internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(int Width, int Height)>? size = null, bool? colorEnabled = null)
 {
     internal object Gate { get; } = new();
     private ExtractionProgressDisplay? _display;
     private int _rows;
     internal bool Animated => animated;
+    internal bool ColorEnabled { get; } = colorEnabled ?? false;
 
-    public static SyncSqlTerminal Create() => new(Console.Out,
-        CanAnimate(Console.IsOutputRedirected, Console.IsErrorRedirected, Environment.GetEnvironmentVariable("TERM")),
-        () => (Console.WindowWidth, Console.WindowHeight));
+    public static SyncSqlTerminal Create()
+    {
+        bool color = TerminalColors.SupportsColor(Console.IsOutputRedirected, Console.IsErrorRedirected, Environment.GetEnvironmentVariable("TERM"));
+        return new(Console.Out, color, () => (Console.WindowWidth, Console.WindowHeight), color);
+    }
 
     internal static bool CanAnimate(bool outputRedirected, bool errorRedirected, string? terminalType) =>
-        !outputRedirected && !errorRedirected && !string.Equals(terminalType, "dumb", StringComparison.OrdinalIgnoreCase);
+        TerminalColors.SupportsColor(outputRedirected, errorRedirected, terminalType);
 
     public ExtractionProgressDisplay StartExtraction()
     {
@@ -191,31 +194,46 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
             string bar = new string('#', percent / 5).PadRight(20, '-');
             List<string> lines =
             [
-                FormattableString.Invariant($"Extraction [{bar}] {percent}% | {finished}/{total} finished | {active} active | {failed} failed"),
-                FormattableString.Invariant($"{objects} objects extracted | elapsed {_elapsed.Elapsed:hh\\:mm\\:ss} | totals include discovered servers"),
+                TerminalColors.Wrap(FormattableString.Invariant($"Extraction [{bar}] {percent}% | {finished}/{total} finished | {active} active | {failed} failed"), TerminalColors.Cyan, _terminal.ColorEnabled),
+                TerminalColors.Wrap(FormattableString.Invariant($"{objects} objects extracted | elapsed {_elapsed.Elapsed:hh\\:mm\\:ss} | totals include discovered servers"), TerminalColors.Dim, _terminal.ColorEnabled),
             ];
             int capacity = Math.Max(1, height - 3);
             int pages = Math.Max(1, (int)Math.Ceiling((double)total / capacity));
             int page = (int)(_elapsed.ElapsedMilliseconds / 3000 % pages);
-            foreach (ServerState state in _servers.Values.Skip(page * capacity).Take(capacity))
+            ServerState[] visibleServers = [.. _servers.Values.Skip(page * capacity).Take(capacity)];
+            int nameWidth = visibleServers.Length == 0 ? 0 : visibleServers.Max(s => s.Name.Length);
+            int statusWidth = visibleServers.Length == 0 ? 0 : visibleServers.Max(s => StatusText(s).Length);
+            foreach (ServerState state in visibleServers)
             {
                 string marker = state.Finished ? state.Status == "Done" ? "+" : "!" : state.Status == "Queued" ? "." : spinner.ToString();
-                string units = state.Progress.Total is { } count
-                    ? FormattableString.Invariant($" ({state.Progress.Completed}/{count})") : string.Empty;
-                lines.Add(FormattableString.Invariant($"{marker} {state.Name} | {state.Status}{units} | {state.Progress.ObjectsExtracted} objects | {state.Elapsed.Elapsed:hh\\:mm\\:ss} | {state.Progress.Activity}"));
+                string markerColor = state.Status switch
+                {
+                    "Done" => TerminalColors.Green,
+                    "Failed" => TerminalColors.Red,
+                    "Skipped" => TerminalColors.Yellow,
+                    "Cancelled" => TerminalColors.Yellow,
+                    "Queued" => TerminalColors.Gray,
+                    _ => TerminalColors.Cyan,
+                };
+                string row = FormattableString.Invariant(
+                    $"{marker} {state.Name.PadRight(nameWidth)} | {StatusText(state).PadRight(statusWidth)} | {state.Progress.ObjectsExtracted,7} objects | {state.Elapsed.Elapsed:hh\\:mm\\:ss} | {state.Progress.Activity}");
+                lines.Add(TerminalColors.Wrap(row, markerColor, _terminal.ColorEnabled));
             }
             if (pages > 1)
             {
-                lines.Add(FormattableString.Invariant($"Servers page {page + 1}/{pages} (rotates every 3s)"));
+                lines.Add(TerminalColors.Wrap(FormattableString.Invariant($"Servers page {page + 1}/{pages} (rotates every 3s)"), TerminalColors.Dim, _terminal.ColorEnabled));
             }
             return [.. lines.Select(line => Fit(line, width))];
         }
     }
 
+    private static string StatusText(ServerState state) => state.Progress.Total is { } count
+        ? FormattableString.Invariant($"{state.Status} ({state.Progress.Completed}/{count})")
+        : state.Status;
+
     private static string Fit(string value, int width)
     {
-        string clean = new([.. value.Select(c => char.IsControl(c) ? ' ' : c)]);
-        return clean.Length <= width ? clean : clean[..(width - 3)] + "...";
+        return TerminalColors.Fit(value, width);
     }
 
     private async Task AnimateAsync()

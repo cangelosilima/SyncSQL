@@ -39,13 +39,16 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         try
         {
             await connection.OpenAsync(cancellationToken);
-            return connection;
+            await using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SET NUMERIC_ROUNDABORT OFF;";
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
         catch
         {
             await connection.DisposeAsync();
             throw;
         }
+        return connection;
     }
 
     private static readonly IReadOnlyDictionary<string, string> TypeCodeMap = new Dictionary<string, string>(StringComparer.Ordinal)
