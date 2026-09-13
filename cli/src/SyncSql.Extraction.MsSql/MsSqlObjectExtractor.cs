@@ -39,6 +39,9 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         try
         {
             await connection.OpenAsync(cancellationToken);
+            await using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SET NUMERIC_ROUNDABORT OFF;";
+            await command.ExecuteNonQueryAsync(cancellationToken);
             return connection;
         }
         catch
