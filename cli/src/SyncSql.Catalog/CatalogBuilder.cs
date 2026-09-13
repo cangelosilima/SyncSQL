@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
 using SyncSql.Core.Serialization;
@@ -43,6 +44,10 @@ public sealed class CatalogBuilder(
 
         Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
         nodes = CatalogServerIdentity.Canonicalize(nodes);
+        Dictionary<string, string[]> sourceIdsByObject = nodes.GroupBy(n => n.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key,
+                group => group.Select(n => sourceIdsByPath[n.Path]).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
         LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
         nodes = CatalogServerIdentity.MergeObjects(nodes);
@@ -83,10 +88,20 @@ public sealed class CatalogBuilder(
         {
             for (int i = 0; i < nodes.Count; i++)
             {
-                IReadOnlyList<MetricsSnapshot> metrics = await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, sourceIdsByPath[nodes[i].Path], cancellationToken);
+                List<MetricsSnapshot> metrics = [];
+                foreach (string sourceId in sourceIdsByObject[nodes[i].Id])
+                {
+                    metrics.AddRange(await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, sourceId, cancellationToken));
+                }
                 if (metrics.Count > 0)
                 {
-                    nodes[i] = nodes[i] with { Metrics = metrics };
+                    // Compare the complete payload, including nested collections. Different samples
+                    // captured at the same time must survive; identical alias copies must not.
+                    nodes[i] = nodes[i] with
+                    {
+                        Metrics = [.. metrics.DistinctBy(snapshot => JsonSerializer.Serialize(snapshot))
+                            .OrderBy(snapshot => snapshot.CapturedAt)],
+                    };
                 }
             }
         }

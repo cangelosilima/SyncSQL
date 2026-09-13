@@ -7,6 +7,18 @@ namespace SyncSql.Catalog.Tests;
 public class LinkedServerMapTests
 {
     [Fact]
+    public void FromNodes_QualifiesTheDataSourceUsingTheSourceServerSuffix()
+    {
+        CatalogNode remote = Table("REMOTE", "SalesDb", "Orders") with { ServerIdentity = Identity("sql.example.com") };
+        CatalogNode link = Link("LOCAL", "SALES", MsSqlLinkDdl("SALES", "sql")) with
+        {
+            ServerIdentity = Identity("local.example.com") with { HostNameSuffix = "example.com" },
+        };
+        LinkedServerMap map = LinkedServerMap.FromNodes([remote, link]);
+        Assert.Equal("REMOTE", map.Resolve("LOCAL", "SALES")?.TargetServer);
+    }
+
+    [Fact]
     public void Private_links_are_scoped_to_the_service_and_owner()
     {
         CatalogNode procurement = Link("HELIOS", "REMOTE", "CREATE DATABASE LINK REMOTE USING 'ATLAS'", "DatabaseLinks") with

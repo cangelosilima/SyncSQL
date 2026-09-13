@@ -163,6 +163,81 @@ public sealed class CatalogBuilderTests : IDisposable
         Assert.Contains("TWO", error.Message);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildAsync_MergedObjectsRetainDistinctMetricsFromEverySource(bool primaryHasHistory)
+    {
+        var identity = new Core.Configuration.ServerIdentity { Engine = DatabaseEngine.MsSql, Endpoint = "REMOTE,1433", Addresses = ["REMOTE,1433"] };
+        ExtractedObject obj = new()
+        {
+            Server = "A",
+            Database = "db",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "t",
+            Ddl = "CREATE TABLE dbo.t (id int);",
+            Engine = DatabaseEngine.MsSql,
+            ServerIdentity = identity,
+        };
+        WriteMetadataObject(obj, ["A"]);
+        WriteMetadataObject(obj with { Server = "B" }, ["ROOT", "LinkedServers", "FIRST"]);
+        WriteMetadataObject(obj with { Server = "B" }, ["ROOT", "LinkedServers", "SECOND"]);
+        MetricsSnapshot sample = new()
+        {
+            CapturedAt = FixedNow,
+            RowCount = 42,
+            Indexes = [new CatalogIndexMetric { Name = "PK_t", PageCount = 10 }],
+            Statistics = [new CatalogStatMetric { Name = "id", Rows = 42 }],
+        };
+        MetricsSnapshot copy = sample with
+        {
+            Indexes = [new CatalogIndexMetric { Name = "PK_t", PageCount = 10 }],
+            Statistics = [new CatalogStatMetric { Name = "id", Rows = 42 }],
+        };
+        MetricsSnapshot older = sample with { CapturedAt = FixedNow.AddDays(-1), RowCount = 20 };
+        MetricsSnapshot differentIndex = sample with { Indexes = [new CatalogIndexMetric { Name = "PK_t", PageCount = 11 }] };
+        MetricsSnapshot differentStat = sample with { Statistics = [new CatalogStatMetric { Name = "id", Rows = 41 }] };
+        _metricsHistoryStore.LoadHistoryAsync("metrics", "A/db/Tables/dbo/t", Arg.Any<CancellationToken>())
+            .Returns(primaryHasHistory ? [sample] : Array.Empty<MetricsSnapshot>());
+        _metricsHistoryStore.LoadHistoryAsync("metrics", "B/db/Tables/dbo/t", Arg.Any<CancellationToken>())
+            .Returns([copy, differentIndex, differentStat, older, sample]);
+
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot, MetricsRoot = "metrics" }, CancellationToken.None);
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("A/db/Tables/dbo/t", node.Id);
+        Assert.Equal(4, node.Metrics.Count);
+        Assert.Equal(older, node.Metrics[0]);
+        Assert.Equal(new long?[] { 10, 11, 10 }, node.Metrics.Skip(1).Select(m => Assert.Single(m.Indexes).PageCount));
+        Assert.Equal(new long?[] { 42, 42, 41 }, node.Metrics.Skip(1).Select(m => Assert.Single(m.Statistics).Rows));
+        await _metricsHistoryStore.Received(1).LoadHistoryAsync("metrics", "A/db/Tables/dbo/t", Arg.Any<CancellationToken>());
+        await _metricsHistoryStore.Received(1).LoadHistoryAsync("metrics", "B/db/Tables/dbo/t", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BuildAsync_RejectsTheSameServerNameWithDifferentEndpoints()
+    {
+        ExtractedObject obj = new()
+        {
+            Server = "REMOTE",
+            Database = "db",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "t",
+            Ddl = "CREATE TABLE dbo.t (id int);",
+            Engine = DatabaseEngine.MsSql,
+            ServerIdentity = new Core.Configuration.ServerIdentity { Engine = DatabaseEngine.MsSql, Endpoint = "ONE,1433" },
+        };
+        WriteMetadataObject(obj, ["ROOT", "LinkedServers", "ONE"]);
+        WriteMetadataObject(obj with
+        {
+            ServerIdentity = obj.ServerIdentity with { Endpoint = "TWO,1433" },
+        }, ["ROOT", "LinkedServers", "TWO"]);
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None));
+        Assert.Contains("conflicting endpoint metadata", error.Message);
+        Assert.Contains("REMOTE", error.Message);
+    }
+
     private void WriteMetadataObject(ExtractedObject obj, IReadOnlyList<string> serverPath)
     {
         string path = Path.Combine(_objectsRoot, ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, serverPath: serverPath));

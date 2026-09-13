@@ -122,6 +122,26 @@ public sealed class CommandBehaviorTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OutputWriter_PreservesObjectIdentityWithoutAnOverride(bool hasIdentity)
+    {
+        ServerIdentity? identity = hasIdentity ? ServerIdentity.FromConfig(Server) : null;
+        var outcome = new ExtractionOutcome
+        {
+            Objects = [new ExtractedObject
+            {
+                Server = "SQL", Database = "db", Schema = "dbo", Type = "Tables", Name = "t",
+                Ddl = "CREATE TABLE dbo.t (id int);", Engine = DatabaseEngine.MsSql, ServerIdentity = identity,
+            }],
+            MetricsSnapshots = new Dictionary<string, MetricsSnapshot>(),
+        };
+        await ExtractionOutputWriter.WriteAsync(outcome, "objects", "metrics", CancellationToken.None);
+        var parsed = Core.Serialization.ExtractedObjectFile.Parse(await File.ReadAllLinesAsync("objects/SQL/db/dbo/Tables/t.sql"));
+        Assert.Equal(identity?.Endpoint, parsed.Identity?.ServerIdentity?.Endpoint);
+    }
+
     [Fact]
     public async Task Sync_MissingCredentialsAndExtractionFailureFailTheRun()
     {

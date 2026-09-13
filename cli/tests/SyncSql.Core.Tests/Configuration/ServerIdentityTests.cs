@@ -14,6 +14,37 @@ public sealed class ServerIdentityTests
     public void Normalization_preserves_instance_and_port(string address, string expected) =>
         Assert.Equal(expected, ServerIdentity.NormalizeSqlAddress(address));
 
+    [Theory]
+    [InlineData("sql,bad", "SQL,BAD")]
+    [InlineData("sql,0", "SQL,0")]
+    [InlineData("sql,65536", "SQL,65536")]
+    [InlineData("sql,1", "SQL,1")]
+    [InlineData("sql,65535", "SQL,65535")]
+    public void Normalization_does_not_repair_invalid_ports(string address, string expected) =>
+        Assert.Equal(expected, ServerIdentity.NormalizeSqlAddress(address));
+
+    [Theory]
+    [InlineData("sql", "SQL.EXAMPLE.COM,1433")]
+    [InlineData("sql-name_2", "SQL-NAME_2.EXAMPLE.COM,1433")]
+    [InlineData("sql.other.com", "SQL.OTHER.COM,1433")]
+    [InlineData("localhost", "LOCALHOST,1433")]
+    [InlineData("::1", "::1,1433")]
+    [InlineData("", ",1433")]
+    [InlineData("sql$", "SQL$,1433")]
+    [InlineData(".", ".,1433")]
+    public void Suffix_only_qualifies_valid_short_dns_names(string address, string expected) =>
+        Assert.Equal(expected, ServerIdentity.NormalizeSqlAddress(address, suffix: " .example.com. "));
+
+    [Fact]
+    public void Matching_uses_the_source_suffix_without_merging_other_domains()
+    {
+        ServerIdentity identity = new() { Engine = DatabaseEngine.MsSql, Endpoint = "SQL.EXAMPLE.COM,1433", Addresses = ["SQL.EXAMPLE.COM,1433"] };
+        Assert.True(identity.Matches("sql", "example.com"));
+        Assert.True(identity.Matches("sql.example.com", "other.com"));
+        Assert.False(identity.Matches("sql", "other.com"));
+        Assert.False(identity.Matches("sql", " "));
+    }
+
     [Fact]
     public void Only_explicit_aliases_establish_equivalence()
     {
