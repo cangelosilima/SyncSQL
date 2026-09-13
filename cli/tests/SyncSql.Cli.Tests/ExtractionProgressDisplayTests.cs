@@ -18,6 +18,24 @@ public sealed class ExtractionProgressDisplayTests
         Assert.Equal(expected, SyncSqlTerminal.CanAnimate(outputRedirected, errorRedirected, term));
 
     [Fact]
+    public void TerminalColors_FitsPlainAndAnsiText()
+    {
+        Assert.Equal("value", TerminalColors.Wrap("value", TerminalColors.Cyan, false));
+        Assert.Equal("\e[36mvalue\e[0m", TerminalColors.Wrap("value", TerminalColors.Cyan, true));
+        Assert.Equal("plain", TerminalColors.Fit("plain", 10));
+        Assert.Equal("...", TerminalColors.Fit("plain", 3));
+        Assert.Equal("a b", TerminalColors.Fit("a\nb", 10));
+
+        const string colored = "\e[36mtext\e[0m";
+        Assert.Equal(colored, TerminalColors.Fit(colored, 10));
+        Assert.DoesNotContain("\e[", TerminalColors.Fit(colored, 3));
+        Assert.Equal("\e[36mtex...\e[0m", TerminalColors.Fit(colored, 6));
+        Assert.Equal("abc", TerminalColors.Fit("\e[Xabc", 10));
+        Assert.Equal(" Xa...", TerminalColors.Fit("\eXabcdef", 6));
+        Assert.Equal(" [1...", TerminalColors.Fit("\e[123456", 6));
+    }
+
+    [Fact]
     public async Task EmptyDisplay_AndFinishedObserversRemainStable()
     {
         SyncSqlTerminal terminal = new(TextWriter.Null, animated: false);
