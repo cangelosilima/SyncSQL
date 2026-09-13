@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
 using SyncSql.Core.Serialization;
@@ -41,7 +42,15 @@ public sealed class CatalogBuilder(
             }
         }
 
+        Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
+        nodes = CatalogServerIdentity.Canonicalize(nodes);
+        Dictionary<string, string[]> sourceIdsByObject = nodes.GroupBy(n => n.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key,
+                group => group.Select(n => sourceIdsByPath[n.Path]).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
         LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
+        nodes = CatalogServerIdentity.MergeObjects(nodes);
         NodeIndex nodeIndex = new(nodes, linkedServers);
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
@@ -79,10 +88,20 @@ public sealed class CatalogBuilder(
         {
             for (int i = 0; i < nodes.Count; i++)
             {
-                IReadOnlyList<MetricsSnapshot> metrics = await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, nodes[i].Id, cancellationToken);
+                List<MetricsSnapshot> metrics = [];
+                foreach (string sourceId in sourceIdsByObject[nodes[i].Id])
+                {
+                    metrics.AddRange(await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, sourceId, cancellationToken));
+                }
                 if (metrics.Count > 0)
                 {
-                    nodes[i] = nodes[i] with { Metrics = metrics };
+                    // Compare the complete payload, including nested collections. Different samples
+                    // captured at the same time must survive; identical alias copies must not.
+                    nodes[i] = nodes[i] with
+                    {
+                        Metrics = [.. metrics.DistinctBy(snapshot => JsonSerializer.Serialize(snapshot))
+                            .OrderBy(snapshot => snapshot.CapturedAt)],
+                    };
                 }
             }
         }
@@ -100,7 +119,7 @@ public sealed class CatalogBuilder(
                 MaxHistoryContentCalls = request.MaxHistoryContentCalls,
                 MaxCoChangeCommitSize = request.MaxCoChangeCommitSize,
                 KnownObjectIds = nodesById.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
-                ObjectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase),
+                ObjectPaths = objectPaths,
             }, cancellationToken);
 
             recentChanges = [.. history.RecentChanges];
@@ -183,6 +202,7 @@ public sealed class CatalogBuilder(
             Sections = parsed.Sections,
             Engine = parsed.Engine,
             ServiceBrokerGuid = parsed.Identity?.ServiceBrokerGuid,
+            ServerIdentity = parsed.Identity?.ServerIdentity,
             SizeBytes = Encoding.UTF8.GetByteCount(parsed.Ddl),
         };
     }
@@ -277,7 +297,9 @@ public sealed class CatalogBuilder(
                 // everything reached through it - including the parts of the fleet nobody extracts.
                 if (resolution.ViaLink is { } link)
                 {
-                    string linkedKey = $"{node.Id}|{link.NodeId}|{reference.Database}|{reference.Schema}|{reference.Name}";
+                    string targetKey = resolution.NodeId is { } resolvedId ? $"resolved:{resolvedId}"
+                        : $"unresolved:{reference.Database ?? link.DefaultDatabase}|{reference.Schema}|{reference.Name}";
+                    string linkedKey = $"{node.Id}|{link.NodeId}|{targetKey}";
                     if (linkedReferenceIndexByKey.TryGetValue(linkedKey, out int existingLinked))
                     {
                         if (!dynamic && linkedServerReferences[existingLinked].Dynamic)

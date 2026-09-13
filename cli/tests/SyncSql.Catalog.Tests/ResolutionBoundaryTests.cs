@@ -85,4 +85,29 @@ public sealed class ResolutionBoundaryTests
         var map = LinkedServerMap.FromNodes(nodes);
         Assert.Equal(ReferenceResolutionKind.Ambiguous, new NodeIndex(nodes, map).Resolve(caller, new ObjectRef("dbo", "t")).Kind);
     }
+
+    [Fact]
+    public void Resolution_DoesNotChooseAnotherServerToAvoidAnAmbiguousRoute()
+    {
+        var caller = Node("ROOT", "db", "dbo", "caller");
+        CatalogNode[] nodes = [caller, Node("REMOTE", "db", "dbo", "t"), Node("OTHER", "db", "dbo", "t"),
+            Node("ROOT", "_ServerLevel", null, "ONE", "LinkedServers", "EXEC sp_addlinkedserver @datasrc = N'REMOTE';"),
+            Node("ROOT", "_ServerLevel", null, "TWO", "LinkedServers", "EXEC sp_addlinkedserver @datasrc = N'REMOTE';"),
+            Node("ROOT", "_ServerLevel", null, "THREE", "LinkedServers", "EXEC sp_addlinkedserver @datasrc = N'OTHER';")];
+        var index = new NodeIndex(nodes, LinkedServerMap.FromNodes(nodes));
+        Assert.Equal(ReferenceResolutionKind.Ambiguous, index.Resolve(caller, new ObjectRef("dbo", "t")).Kind);
+        Assert.Equal("REMOTE", nodes.Single(n => n.Id == index.Resolve(caller, new ObjectRef("dbo", "t") { Server = "ONE" }).NodeId).Server);
+    }
+
+    [Fact]
+    public void Resolution_LocalCatalogNameDoesNotShadowAnActualLink()
+    {
+        var caller = Node("ROOT", "db", "dbo", "caller");
+        var remote = Node("REMOTE", "db", "dbo", "t");
+        CatalogNode[] nodes = [caller, remote, Node("ROOT", "db", "dbo", "t"),
+            Node("ROOT", "_ServerLevel", null, "ROOT", "LinkedServers", "EXEC sp_addlinkedserver @datasrc = N'REMOTE';")];
+        var index = new NodeIndex(nodes, LinkedServerMap.FromNodes(nodes));
+        Assert.Equal(remote.Id, index.Resolve(caller, new ObjectRef("dbo", "t") { Server = "ROOT" }).NodeId);
+        Assert.Equal(ReferenceResolutionKind.External, index.Resolve(caller, new ObjectRef("dbo", "t") { Server = "ROOT.other.com" }).Kind);
+    }
 }

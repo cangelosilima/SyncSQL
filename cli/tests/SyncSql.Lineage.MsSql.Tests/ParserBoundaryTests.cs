@@ -7,6 +7,13 @@ namespace SyncSql.Lineage.MsSql.Tests;
 public sealed class ParserBoundaryTests
 {
     [Fact]
+    public async Task Factory_ConcurrentCallsShareTheCachedParser()
+    {
+        TSqlParser[] parsers = await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(TSqlParserFactory.GetParser)));
+        Assert.All(parsers, parser => Assert.Same(parsers[0], parser));
+    }
+
+    [Fact]
     public void Factory_SelectsNewestParserAndReportsMissingGrammar()
     {
         Assert.IsType<TSql160Parser>(TSqlParserFactory.CreateParser([typeof(string), typeof(TSql150Parser), typeof(TSql160Parser)]));

@@ -318,8 +318,8 @@ extracted.
   }
   ```
 
-  A followed link becomes a server entry that inherits everything from the
-  one that declared it - port, TLS settings, schema/objectName/objectType
+  A followed link becomes a server entry that inherits the declaring server's
+  TLS settings, schema/objectName/objectType
   filters, and its `credentialsVariablePrefix`, so the *same username and
   password* are used on the far side. `requireMatchingLogin` (default true)
   keeps that honest by only following a link whose remote login is that same
@@ -331,6 +331,12 @@ extracted.
   logged reason; Oracle database links are not followed. Discovered servers
   are named after the link, which is also their output path segment. See the
   main [README](../../README.md#following-linked-servers).
+  Remote ports come from the destination address or SQL Server's default/instance
+  resolution. `servers[].aliases` declares alternate addresses for the same
+  instance. Endpoint metadata lets multiple links share one catalog object;
+  discovery checks database and object-filter coverage before skipping a target.
+  Ambiguous addresses remain unresolved, and conflicting copies of an object
+  stop catalog generation. Re-extract older files to populate endpoint metadata.
 
 Filtering is regex-based (.NET regex syntax) and works at every level:
 server, database, schema, and individual object name. An exclude match

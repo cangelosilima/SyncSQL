@@ -238,7 +238,7 @@ public class NodeIndexTests
     {
         CatalogNode remoteOrders = Node("SQLPROD02", "SalesDb", "dbo", "Orders");
         CatalogNode caller = Node("SQLPROD01", "AppDb", "dbo", "GetOrder", type: "StoredProcedures");
-        CatalogNode link = LinkNode("SQLPROD01", "SQLPROD02", "sqlprod02.example.com,1433");
+        CatalogNode link = LinkNode("SQLPROD01", "SQLPROD02", "sqlprod02,1433");
         NodeIndex index = new([remoteOrders, caller, link], LinkedServerMap.FromNodes([remoteOrders, caller, link]));
 
         ReferenceResolution resolution = index.Resolve(caller, new ObjectRef("dbo", "Orders") { Database = "SalesDb", Server = "SQLPROD02" });
