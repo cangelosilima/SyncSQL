@@ -2,6 +2,20 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "git: enable hooks",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Install-GitHooks.ps1"
+      ],
+      "runOptions": { "runOn": "folderOpen" },
+      "problemMatcher": []
+    },
+    {
       "label": "cli: restore",
       "type": "process",
       "command": "dotnet",

@@ -1,0 +1,91 @@
+#!/bin/sh
+set -eu
+
+if command -v pwsh >/dev/null 2>&1; then
+    powershell_command=pwsh
+elif command -v powershell >/dev/null 2>&1; then
+    powershell_command=powershell
+else
+    printf '%s\n' "pre-push checks require PowerShell (pwsh or powershell)." >&2
+    exit 1
+fi
+
+"$powershell_command" -NoProfile -ExecutionPolicy Bypass -Command - <<'POWERSHELL'
+$args = @()
+
+$ErrorActionPreference = 'Stop'
+$repoRoot = (& git rev-parse --show-toplevel).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
+    throw 'Unable to locate the repository root.'
+}
+
+function Invoke-CheckedCommand {
+    param(
+        [Parameter(Mandatory)] [string] $Command,
+        [Parameter(Mandatory)] [string[]] $Arguments,
+        [Parameter(Mandatory)] [string] $WorkingDirectory
+    )
+
+    Write-Host "`n> $Command $($Arguments -join ' ')"
+    Push-Location $WorkingDirectory
+    try {
+        & $Command @Arguments
+        if ($LASTEXITCODE -ne 0) { throw "$Command exited with code $LASTEXITCODE." }
+    }
+    finally { Pop-Location }
+}
+
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'The pre-push checks require dotnet on PATH.' }
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'The pre-push checks require npm on PATH.' }
+
+$coverageRoot = Join-Path $repoRoot 'TestResults/pre-push'
+if (Test-Path -LiteralPath $coverageRoot) { Remove-Item -LiteralPath $coverageRoot -Recurse -Force }
+New-Item -ItemType Directory -Path $coverageRoot -Force | Out-Null
+
+try {
+    Invoke-CheckedCommand dotnet @(
+        'test', 'cli/SyncSql.slnx', '--configuration', 'Release',
+        '--collect', 'XPlat Code Coverage', '--settings', 'cli/coverage.runsettings',
+        '--results-directory', 'TestResults/pre-push', '--logger', 'console;verbosity=minimal'
+    ) $repoRoot
+
+    $reports = @(Get-ChildItem -LiteralPath $coverageRoot -Recurse -Filter 'coverage.cobertura.xml' -File)
+    if ($reports.Count -eq 0) { throw 'CLI tests completed without producing a Cobertura coverage report.' }
+
+    [long]$linesCovered = 0; [long]$linesValid = 0
+    [long]$branchesCovered = 0; [long]$branchesValid = 0
+    [long]$methodsCovered = 0; [long]$methodsValid = 0
+    foreach ($report in $reports) {
+        [xml]$xml = Get-Content -LiteralPath $report.FullName -Raw
+        $coverage = $xml.coverage
+        $linesCovered += [long]$coverage.'lines-covered'; $linesValid += [long]$coverage.'lines-valid'
+        $branchesCovered += [long]$coverage.'branches-covered'; $branchesValid += [long]$coverage.'branches-valid'
+        foreach ($method in @($xml.coverage.packages.package.classes.class.methods.method)) {
+            $methodsValid++
+            if ([double]$method.'line-rate' -ge 1) { $methodsCovered++ }
+        }
+    }
+
+    $coverageFailures = @()
+    if ($linesCovered -ne $linesValid) { $coverageFailures += "lines $linesCovered/$linesValid" }
+    if ($branchesCovered -ne $branchesValid) { $coverageFailures += "branches $branchesCovered/$branchesValid" }
+    if ($methodsCovered -ne $methodsValid) { $coverageFailures += "methods $methodsCovered/$methodsValid" }
+    if ($coverageFailures.Count -gt 0) { throw "CLI coverage gate failed: $($coverageFailures -join ', ')." }
+
+    $sitePath = Join-Path $repoRoot 'site'
+    if (-not (Test-Path -LiteralPath (Join-Path $sitePath 'node_modules'))) {
+        throw 'Site dependencies are missing. Run npm ci in site/ before pushing.'
+    }
+    Invoke-CheckedCommand npm @('run', 'test:coverage') $sitePath
+}
+finally {
+    if (Test-Path -LiteralPath $coverageRoot) { Remove-Item -LiteralPath $coverageRoot -Recurse -Force }
+}
+
+POWERSHELL
+
+if ! command -v git-lfs >/dev/null 2>&1; then
+    printf '%s\n' "This repository requires Git LFS, but git-lfs was not found on PATH." >&2
+    exit 2
+fi
+git lfs pre-push "$@"

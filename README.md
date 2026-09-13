@@ -517,6 +517,19 @@ files; generated output, vendored assets and the lockfile are excluded. The CLI
 uses `dotnet format cli/SyncSql.slnx --verify-no-changes --exclude grammar/` and
 `dotnet test cli/SyncSql.slnx --configuration Release --collect "XPlat Code Coverage" --settings cli/coverage.runsettings`.
 
+### Pre-push checks
+
+Enable the versioned Git hook once per checkout:
+
+```powershell
+pwsh ./scripts/Install-GitHooks.ps1
+```
+
+After that, every push runs the CLI tests with their 100% line, branch, and
+method coverage gate, followed by the site tests and their configured coverage
+thresholds. Git LFS's pre-push transfer is preserved. The hook can still be
+intentionally bypassed with Git's standard `--no-verify` option.
+
 Scheduled production extraction, publishing objects to git, and the production
 GitLab Pages deployment remain in the GitLab pipeline described above.
 
