@@ -1,4 +1,4 @@
-namespace SyncSql.Cli.Sync;
+﻿namespace SyncSql.Cli.Sync;
 
 /// <summary>Small ANSI palette shared by logs and the live extraction dashboard.</summary>
 internal static class TerminalColors
