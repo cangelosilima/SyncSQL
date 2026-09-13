@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using SyncSql.Core.Domain;
+using SyncSql.Core.Configuration;
 
 namespace SyncSql.Catalog;
 
@@ -20,7 +21,8 @@ internal sealed record LinkedServerLink(
     string OnServer,
     string? DataSource,
     string? DefaultDatabase,
-    string? TargetServer);
+    string? TargetServer,
+    bool IsDatabaseLink = false);
 
 /// <summary>
 /// Maps a linked-server (MSSQL) or database-link (Oracle) name, as written in one object's DDL, onto the
@@ -33,8 +35,8 @@ internal sealed record LinkedServerLink(
 /// their DDL: MSSQL's sp_addlinkedserver call carries the link's <c>@datasrc</c> and <c>@catalog</c>,
 /// Oracle's CREATE DATABASE LINK its <c>USING</c> connect string. What a link points at is a host (or a
 /// TNS alias); what the catalog is keyed by is the *configured* server name, and those two need not be
-/// spelled the same - so a link lands on a catalog server when that server's name equals the link's own
-/// name, its data source, or the host part of that data source (port, instance and DNS suffix stripped).
+/// spelled the same. Exported endpoint metadata and explicit aliases identify the destination;
+/// legacy exports can still match an exact catalog server name. Ambiguity never picks a winner.
 /// A link nothing answers to still resolves to the link itself, just without a target server: a
 /// reference through it is out of the catalog's scope, which is a different thing from "the target was
 /// dropped".
@@ -57,10 +59,8 @@ internal sealed partial class LinkedServerMap
     {
         List<CatalogNode> allNodes = [.. nodes];
         List<CatalogNode> linkNodes = [];
-        HashSet<string> catalogServers = new(StringComparer.OrdinalIgnoreCase);
         foreach (CatalogNode node in allNodes)
         {
-            catalogServers.Add(node.Server);
             if (node.Type is "LinkedServers" or "DatabaseLinks")
             {
                 linkNodes.Add(node);
@@ -82,7 +82,16 @@ internal sealed partial class LinkedServerMap
                 .Where(candidate => candidate.Path.StartsWith(linkPrefix, StringComparison.OrdinalIgnoreCase)
                     && !candidate.Path[linkPrefix.Length..].Contains("/LinkedServers/", StringComparison.OrdinalIgnoreCase))
                 .Select(candidate => candidate.Server).Distinct(StringComparer.OrdinalIgnoreCase)];
-            string? targetServer = nestedServers.Length == 1 ? nestedServers[0] : MatchCatalogServer(catalogServers, node.Name, dataSource);
+            string[] destinations = MatchCatalogServers(allNodes, node, dataSource);
+            string? targetServer = destinations.Length switch
+            {
+                1 => destinations[0],
+                // Legacy exports lack endpoint metadata. Their exact subtree is usable only
+                // when no address claim contradicts it; a stale folder cannot override metadata.
+                0 when nestedServers.Length == 1 && !allNodes.Any(candidate =>
+                    candidate.Server == nestedServers[0] && candidate.ServerIdentity is not null) => nestedServers[0],
+                _ => null,
+            };
 
             // Private Oracle links are scoped to both service and owner. Two owners
             // may use REMOTE for completely different destinations.
@@ -90,7 +99,7 @@ internal sealed partial class LinkedServerMap
                 node.Type == "DatabaseLinks"
                     ? $"{node.Server}::{node.Database}::{node.Schema}::{node.Name}"
                     : $"{node.Server}::{node.Name}",
-                new LinkedServerLink(node.Id, node.Name, node.Server, dataSource, NullIfBlank(catalog), targetServer));
+                new LinkedServerLink(node.Id, node.Name, node.Server, dataSource, NullIfBlank(catalog), targetServer, node.Type == "DatabaseLinks"));
 
             // A link that comes back to the server it's declared on adds no reachability - following it
             // would only find what the same-server lookup already does. It stays resolvable by name (a
@@ -146,12 +155,13 @@ internal sealed partial class LinkedServerMap
             }
         }
 
-        // Oracle writes a link's full "NAME.DOMAIN" (and T-SQL sometimes an FQDN) where the link object
-        // itself is named by the bare label - try that before giving up.
+        // Oracle link domains may be omitted from the extracted definition. SQL Server aliases
+        // are exact local names; stripping their suffix could select a different link.
         int firstDot = linkName.IndexOf('.', StringComparison.Ordinal);
-        return firstDot > 0
+        LinkedServerLink? shortened = firstDot > 0
             ? Resolve(fromServer, linkName[..firstDot], database, schema)
             : null;
+        return shortened?.IsDatabaseLink == true ? shortened : null;
     }
 
     /// <summary>Every catalog server reachable from <paramref name="fromServer"/> through one link - the set a reference that named no server at all may still be looked up in, as a last resort.</summary>
@@ -161,18 +171,14 @@ internal sealed partial class LinkedServerMap
     /// <summary>The link on <paramref name="fromServer"/> that lands on <paramref name="targetServer"/>, for attributing a hop the lookup took without a named link.</summary>
     public LinkedServerLink? LinkTo(string fromServer, string targetServer, string? database = null, string? schema = null)
     {
-        foreach (LinkedServerLink link in _linksByName.Values)
-        {
-            if (string.Equals(link.OnServer, fromServer, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(link.TargetServer, targetServer, StringComparison.OrdinalIgnoreCase)
-                && (database is null || Resolve(fromServer, link.Name, database, schema)?.NodeId == link.NodeId))
-            {
-                return link;
-            }
-        }
-
-        return null;
+        LinkedServerLink[] matches = LinksTo(fromServer, targetServer, database, schema);
+        return matches.Length == 1 ? matches[0] : null;
     }
+
+    public LinkedServerLink[] LinksTo(string fromServer, string targetServer, string? database, string? schema) =>
+        [.. _linksByName.Values.Where(link => string.Equals(link.OnServer, fromServer, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.TargetServer, targetServer, StringComparison.OrdinalIgnoreCase)
+                && (database is null || Resolve(fromServer, link.Name, database, schema)?.NodeId == link.NodeId))];
 
     // sp_addlinkedserver's own arguments, as LinkedServerDdlBuilder writes them.
     [GeneratedRegex(@"@datasrc\s*=\s*N'([^']*)'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -191,57 +197,19 @@ internal sealed partial class LinkedServerMap
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     /// <summary>
-    /// The catalog server a link points at: its own name first (the common case - a linked server is
-    /// usually named after the server it reaches), then the data source as written, then that data
-    /// source with "host,port" / "host\instance" / a DNS suffix trimmed off.
+    /// Resolve an exact declared destination, preserving ports, instances and DNS suffixes.
     /// </summary>
-    private static string? MatchCatalogServer(HashSet<string> catalogServers, string linkName, string? dataSource)
+    private static string[] MatchCatalogServers(List<CatalogNode> nodes, CatalogNode link, string? dataSource)
     {
-        foreach (string candidate in Candidates(linkName, dataSource))
-        {
-            if (catalogServers.TryGetValue(candidate, out string? actual))
-            {
-                return actual;
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<string> Candidates(string linkName, string? dataSource)
-    {
-        yield return linkName;
-
-        foreach (string form in HostForms(linkName))
-        {
-            yield return form;
-        }
-
-        if (dataSource is null)
-        {
-            yield break;
-        }
-
-        yield return dataSource;
-        foreach (string form in HostForms(dataSource))
-        {
-            yield return form;
-        }
-    }
-
-    /// <summary>"sqlprod01.corp.example.com,1433" -> "sqlprod01.corp.example.com" -> "sqlprod01"; "SQLPROD01\INST" -> "SQLPROD01".</summary>
-    private static IEnumerable<string> HostForms(string value)
-    {
-        string host = value.Split(',', 2)[0].Split('\\', 2)[0].Trim();
-        if (host.Length > 0 && !string.Equals(host, value, StringComparison.Ordinal))
-        {
-            yield return host;
-        }
-
-        int firstDot = host.IndexOf('.', StringComparison.Ordinal);
-        if (firstDot > 0)
-        {
-            yield return host[..firstDot];
-        }
+        // A declared destination wins over the local link alias. Ambiguous addresses stay unresolved.
+        string address = dataSource ?? link.Name;
+        string[] matches = [.. nodes.Where(node =>
+                string.Equals(node.Server, address, StringComparison.OrdinalIgnoreCase)
+                || node.ServerNames.Contains(address, StringComparer.OrdinalIgnoreCase)
+                || (node.ServerIdentity?.Matches(address, link.ServerIdentity?.HostNameSuffix) ?? false)
+                || (link.Type == "LinkedServers" && node.ServerIdentity is null
+                    && ServerIdentity.NormalizeSqlAddress(node.Server) == ServerIdentity.NormalizeSqlAddress(address)))
+            .Select(node => node.Server).Distinct(StringComparer.OrdinalIgnoreCase)];
+        return matches;
     }
 }

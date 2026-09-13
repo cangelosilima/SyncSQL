@@ -1188,7 +1188,7 @@ By default `syncsql sync` extracts exactly the servers `config/servers.json`
 lists. With `discovery.linkedServers.enabled`, it also follows the linked
 servers it finds on those servers and extracts what's on the other side,
 reusing **the same credentials** - the follow-up server inherits its
-parent's `credentialsVariablePrefix`, along with its port, TLS settings, and
+parent's `credentialsVariablePrefix`, along with its TLS settings and
 schema/objectName/objectType filters, except that `LinkedServers` is excluded
 from discovered-server exports (including when inherited from defaults).
 Configured servers retain their selected linked-server definitions. Discovery
@@ -1255,9 +1255,48 @@ skipped, each with a logged reason. Discovered servers are named after the
 link (suffixed if that collides with a configured name). Their objects are written
 under the original server's `LinkedServers/<link-name>/<database>/<schema>/...`
 subtree; the link definition stays at `LinkedServers/<link-name>.sql`. Logical
-server names and object IDs remain stable. Oracle database links aren't followed:
+identity is independent of this physical hierarchy. Oracle database links aren't followed:
 an Oracle connection needs a service name that a link's connect string
 doesn't reliably provide.
+
+Multiple links can point to one server. SyncSQL stores endpoint identity with
+each extracted object and builds one catalog object for identical exports of
+the same endpoint/database/schema/type/name. Each originating link remains a
+separate graph hop pointing to that shared object. Configured server names take
+precedence over discovered names; ties are resolved in name order.
+
+Declare alternate addresses explicitly on the target server entry:
+
+```json
+{
+  "name": "CENTRAL",
+  "type": "mssql",
+  "host": "central.example.com",
+  "aliases": ["central", "10.0.0.5", "reporting.example.com"],
+  "credentialsVariablePrefix": "CENTRAL"
+}
+```
+
+Aliases identify the same instance, not merely the same machine. Include a
+nondefault port or named instance in an alias when applicable. Oracle targets
+can declare TNS/connect aliases in the same array. DNS suffixes, different ports,
+and instance names are never discarded to guess a destination. A link's declared
+data source takes precedence over its local alias; competing address mappings
+remain unresolved. If a reference omits its link and several routes are possible,
+the catalog does not choose an arbitrary route.
+
+Discovery skips an endpoint only when a successful or queued extraction covers
+the requested databases, schemas, object names, and object types. A full-instance
+scope can cover a pinned database; excluded databases and narrower object filters
+do not. Unknown regex containment is treated conservatively. Failed and excluded
+server entries establish no coverage. Remote connections use their declared port
+(or SQL Server's default/instance resolution), not the parent server's port.
+
+Re-run extraction to add endpoint metadata to older exports, then rebuild the
+catalog. Legacy files still support exact-name and exported-subtree matching.
+Matching copies merge; conflicting definitions for the same object stop catalog
+generation with the source paths, so an arbitrary version cannot appear in the
+site. Re-extract conflicting scopes into a clean staging tree before retrying.
 
 Each follow-up opens a connection to a host nobody listed by hand, which is
 why this is opt-in - and why the credentials rule above is on by default.

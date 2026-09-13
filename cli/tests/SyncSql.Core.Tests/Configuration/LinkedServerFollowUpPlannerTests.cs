@@ -280,7 +280,7 @@ public class LinkedServerFollowUpPlannerTests
             parent, "svc_syncsql", [Link("REMOTE", dataSource)], Enabled, [parent]).FollowUps).Server;
 
         Assert.Equal(expectedHost, remote.Host);
-        Assert.Equal(expectedPort, remote.Port);
+        Assert.Equal(expectedPort, remote.EffectivePort);
         Assert.Equal(suffix, remote.HostNameSuffix);
         Assert.Equal(Parent.Host, parent.Host);
     }
@@ -311,5 +311,70 @@ public class LinkedServerFollowUpPlannerTests
         Assert.Equal("SQLPROD02.example.com", Assert.Single(plan.FollowUps).Server.Host);
         Assert.Equal(2, plan.Skipped.Count);
         Assert.All(plan.Skipped, skipped => Assert.Contains("already covered", skipped.Reason, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Plan_FullInstanceCoversPinnedCatalogAcrossParentsAndAliases()
+    {
+        ServerConfig configured = Parent with { Name = "CENTRAL", Host = "central.example.com", Port = null, Aliases = ["10.0.0.5", "central"] };
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(Parent, "reader",
+            [Link("FIRST", "10.0.0.5,1433", "Sales"), Link("SECOND", "tcp:central", "Sales")], Enabled, [Parent, configured]);
+        Assert.Empty(plan.FollowUps);
+        Assert.Equal(2, plan.Skipped.Count);
+    }
+
+    [Fact]
+    public void Plan_ExcludedCatalogAndNarrowObjectFiltersDoNotClaimCoverage()
+    {
+        ServerConfig remote = Parent with
+        {
+            Name = "CENTRAL",
+            Host = "central",
+            Databases = new NameFilter { Exclude = ["^Sales$"] },
+        };
+        Assert.Single(LinkedServerFollowUpPlanner.Plan(Parent, "reader", [Link("LINK", "central", "Sales")], Enabled, [Parent, remote]).FollowUps);
+        remote = remote with { Databases = null, ObjectTypes = ["Tables"] };
+        Assert.Single(LinkedServerFollowUpPlanner.Plan(Parent, "reader", [Link("LINK", "central", "Sales")], Enabled, [Parent, remote]).FollowUps);
+        remote = remote with { ObjectTypes = Parent.ObjectTypes, Schemas = new NameFilter { Include = ["^sales$"] } };
+        Assert.Single(LinkedServerFollowUpPlanner.Plan(Parent, "reader", [Link("LINK", "central", "Sales")], Enabled, [Parent, remote]).FollowUps);
+    }
+
+    [Fact]
+    public void Plan_DefaultFiltersAndPatternOrderAreRespected()
+    {
+        ServerConfig parent = Parent with { Databases = new NameFilter { Include = ["^Sales$", "^Ops$"] } };
+        ServerConfig remote = parent with { Name = "CENTRAL", Host = "central", Databases = null };
+        ObjectFilterSet defaults = new() { Databases = new NameFilter { Include = ["^Ops$", "^Sales$"] } };
+        Assert.Empty(LinkedServerFollowUpPlanner.Plan(parent, "reader", [Link("LINK", "central")], Enabled, [parent, remote], defaults).FollowUps);
+        defaults = defaults with { Databases = new NameFilter { Include = ["^Ops$"] } };
+        Assert.Single(LinkedServerFollowUpPlanner.Plan(parent, "reader", [Link("LINK", "central", "Sales")], Enabled, [parent, remote], defaults).FollowUps);
+    }
+
+    [Fact]
+    public void Plan_ConflictingAliasesAreSkipped()
+    {
+        ServerConfig first = Parent with { Name = "ONE", Host = "one", Aliases = ["shared"] };
+        ServerConfig second = Parent with { Name = "TWO", Host = "two", Aliases = ["shared"] };
+        var plan = LinkedServerFollowUpPlanner.Plan(Parent, "reader", [Link("LINK", "shared")], Enabled, [Parent, first, second]);
+        Assert.Empty(plan.FollowUps);
+        Assert.Contains("multiple server identities", Assert.Single(plan.Skipped).Reason);
+    }
+
+    [Fact]
+    public void Plan_UncoveredScopeReusesRegisteredEndpointAndAliases()
+    {
+        ServerConfig remote = Parent with { Name = "CENTRAL", Host = "central.example.com", Aliases = ["10.0.0.5"], Databases = new NameFilter { Include = ["^Ops$"] } };
+        ServerConfig follow = Assert.Single(LinkedServerFollowUpPlanner.Plan(Parent, "reader", [Link("LINK", "10.0.0.5", "Sales")], Enabled, [Parent, remote]).FollowUps).Server;
+        Assert.Equal(ServerIdentity.FromConfig(remote).Endpoint, ServerIdentity.FromConfig(follow).Endpoint);
+        Assert.True(ServerIdentity.FromConfig(follow).Matches("10.0.0.5"));
+    }
+
+    [Fact]
+    public void Plan_FailedOrExcludedEntriesRetainIdentityButDoNotCoverExtraction()
+    {
+        ServerConfig remote = Parent with { Name = "CENTRAL", Host = "central.example.com", Aliases = ["10.0.0.5"] };
+        var plan = LinkedServerFollowUpPlanner.Plan(Parent, "reader", [Link("LINK", "10.0.0.5", "Sales")], Enabled,
+            [Parent, remote], coveredServers: [Parent]);
+        Assert.Equal(remote.Host, Assert.Single(plan.FollowUps).Server.Host);
     }
 }

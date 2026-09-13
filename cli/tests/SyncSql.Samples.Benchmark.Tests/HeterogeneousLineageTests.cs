@@ -100,11 +100,13 @@ public sealed class HeterogeneousLineageTests
         string root = Directory.CreateTempSubdirectory("syncsql-heterogeneous-").FullName;
         try
         {
+            var config = await Core.Configuration.SyncSqlConfigLoader.LoadAsync(Path.Combine(HeterogeneousContract.Root, "servers.json"));
             foreach (ExtractedObject obj in HeterogeneousDdl.LoadObjects())
             {
                 string path = Path.Combine(root, ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name));
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj));
+                var identity = Core.Configuration.ServerIdentity.FromConfig(config.Servers.Single(server => server.Name == obj.Server));
+                await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj with { ServerIdentity = identity }));
             }
             Core.Domain.Catalog catalog = await BuildCatalogAsync(root);
             HeterogeneousContract.Load().AssertCatalog(catalog);

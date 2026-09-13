@@ -35,6 +35,25 @@ public sealed class ConfigurationBoundaryTests
     public async Task NullConfiguration_IsRejected() => await Reject("null", "empty or 'null'");
 
     [Theory]
+    [InlineData("null")]
+    [InlineData("[null]")]
+    [InlineData("[\"\"]")]
+    [InlineData("[\" \" ]")]
+    public async Task EmptyAliases_AreRejected(string aliases) => await Reject(
+        $$"""{"servers":[{"name":"server","host":"host","type":"mssql","credentialsVariablePrefix":"TEST","aliases":{{aliases}}}]}""",
+        "empty alias");
+
+    [Fact]
+    public void Discovery_DoesNotTreatAnOracleAliasAsAnExtractedSqlServer()
+    {
+        var link = new DiscoveredLinkedServer { Name = "remote", Product = "SQL Server", DataSource = "remote" };
+        var oracle = Server with { Name = "oracle", Type = DatabaseEngine.Oracle, Host = "remote", Aliases = ["remote,1433"] };
+        var plan = LinkedServerFollowUpPlanner.Plan(Server, "user", [link], new LinkedServerDiscoveryConfig { Enabled = true }, [Server, oracle]);
+        Assert.Equal(DatabaseEngine.MsSql, Assert.Single(plan.FollowUps).Server.Type);
+        Assert.Empty(plan.Skipped);
+    }
+
+    [Theory]
     [InlineData(64)]
     [InlineData(254)]
     public async Task OversizedDnsSuffix_IsRejected(int length) => await Reject(

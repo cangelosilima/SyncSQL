@@ -43,7 +43,7 @@ public sealed record LinkedServerFollowUpPlan
 /// <item>Nothing already covered: a server config already lists (by name or by host), or another link on this same
 /// server already reached.</item>
 /// </list>
-/// Everything else about the follow-up server is inherited from its parent - engine, port, TLS settings,
+/// Everything else about the follow-up server is inherited from its parent - engine, TLS settings,
 /// filters, and above all <see cref="ServerConfig.CredentialsVariablePrefix"/>, which is what makes the
 /// same username and password apply on the other side.
 ///
@@ -57,7 +57,8 @@ public static class LinkedServerFollowUpPlanner
         IReadOnlyList<DiscoveredLinkedServer> discovered,
         LinkedServerDiscoveryConfig config,
         IReadOnlyCollection<ServerConfig> alreadyKnown,
-        ObjectFilterSet? defaults = null)
+        ObjectFilterSet? defaults = null,
+        IReadOnlyCollection<ServerConfig>? coveredServers = null)
     {
         ArgumentNullException.ThrowIfNull(parent);
         ArgumentNullException.ThrowIfNull(discovered);
@@ -70,7 +71,8 @@ public static class LinkedServerFollowUpPlanner
         }
 
         HashSet<string> takenNames = new(alreadyKnown.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
-        HashSet<string> takenTargets = new(alreadyKnown.Select(TargetKey), StringComparer.OrdinalIgnoreCase);
+        List<ServerConfig> known = [.. alreadyKnown];
+        List<ServerConfig> covered = [.. coveredServers ?? alreadyKnown];
 
         List<LinkedServerFollowUp> followUps = [];
         List<SkippedLinkedServer> skipped = [];
@@ -111,6 +113,22 @@ public static class LinkedServerFollowUpPlanner
             }
 
             host = ApplyHostNameSuffix(host, parent.HostNameSuffix);
+            string address = ServerIdentity.NormalizeSqlAddress(host, port);
+            ServerIdentityRegistry identities = new(known.Select(ServerIdentity.FromConfig));
+            ServerConfig[] matches = [.. known.Where(s => s.Type == DatabaseEngine.MsSql
+                && ServerIdentity.FromConfig(s).Matches(address))];
+            string[] targets = [.. matches.Select(s => identities.CanonicalKey(ServerIdentity.FromConfig(s))).Distinct(StringComparer.OrdinalIgnoreCase)];
+            if (targets.Length > 1)
+            {
+                skipped.Add(new SkippedLinkedServer(link.Name, $"data source '{link.DataSource}' matches multiple server identities; correct the configured aliases"));
+                continue;
+            }
+            if (targets.Length == 1)
+            {
+                matches = [.. known.Where(s => identities.CanonicalKey(ServerIdentity.FromConfig(s)) == targets[0])];
+            }
+            // Reuse the registered endpoint even when this link uses an IP or DNS alias.
+            ServerConfig? registered = matches.FirstOrDefault();
             string name = UniqueName(link.Name, takenNames);
             string? catalog = config.RestrictToLinkedCatalog && !string.IsNullOrWhiteSpace(link.Catalog) ? link.Catalog : null;
 
@@ -119,9 +137,10 @@ public static class LinkedServerFollowUpPlanner
                 Name = name,
                 ExportPath = [.. parent.ExportPath ?? [parent.Name], "LinkedServers", link.Name],
                 Type = DatabaseEngine.MsSql,
-                Host = host,
-                HostNameSuffix = parent.HostNameSuffix,
-                Port = port ?? (parent.Type == DatabaseEngine.MsSql ? parent.Port : null),
+                Host = registered?.Host ?? host,
+                Aliases = registered is not null ? identities.Describe(ServerIdentity.FromConfig(registered)).Addresses : [],
+                HostNameSuffix = registered?.HostNameSuffix ?? parent.HostNameSuffix,
+                Port = registered is not null ? registered.Port : port,
                 Encrypt = parent.Encrypt,
                 TrustServerCertificate = parent.TrustServerCertificate,
                 // The same credentials prefix as the parent: same username, same password, on the other
@@ -136,14 +155,15 @@ public static class LinkedServerFollowUpPlanner
                     .Where(type => !string.Equals(type, "LinkedServers", StringComparison.OrdinalIgnoreCase))],
             };
 
-            string targetKey = TargetKey(server);
-            if (!takenTargets.Add(targetKey))
+            if (matches.Any(existing => covered.Contains(existing) && Covers(existing, server, catalog, defaults)))
             {
                 skipped.Add(new SkippedLinkedServer(link.Name, $"'{host}' is already covered by another server entry"));
                 continue;
             }
 
             takenNames.Add(name);
+            known.Add(server);
+            covered.Add(server);
             followUps.Add(new LinkedServerFollowUp(server, parent.Name, link.Name, catalog));
         }
 
@@ -203,9 +223,22 @@ public static class LinkedServerFollowUpPlanner
         return $"{dataSource[..hostStart]}{host}.{suffix.Trim().TrimStart('.')}{(instanceStart < 0 ? "" : dataSource[instanceStart..])}";
     }
 
-    /// <summary>What makes two entries the same target: host (case-insensitively) plus the databases they'd extract, so a link pinned to one catalog doesn't collide with a full-instance entry.</summary>
-    private static string TargetKey(ServerConfig server) =>
-        $"{server.Host}|{server.Port}|{string.Join(",", server.Databases?.Include ?? [])}";
+    private static bool Covers(ServerConfig existing, ServerConfig candidate, string? catalog, ObjectFilterSet? defaults)
+    {
+        EffectiveFilters have = EffectiveFilters.Resolve(defaults, existing);
+        EffectiveFilters need = EffectiveFilters.Resolve(defaults, candidate);
+        return (catalog is not null ? have.Databases.IsAllowed(catalog) : CoversFilter(have.Databases, need.Databases))
+            && CoversFilter(have.Schemas, need.Schemas)
+            && CoversFilter(have.ObjectNames, need.ObjectNames)
+            && need.ObjectTypes.All(type => have.ObjectTypes.Contains(type, StringComparer.OrdinalIgnoreCase));
+    }
+
+    // Regex containment cannot generally be proved. Only an unrestricted filter or identical
+    // pattern sets establish coverage; excludes and case-sensitive regex spelling both matter.
+    private static bool CoversFilter(NameFilter have, NameFilter need) =>
+        (have.Include.Count == 0 && have.Exclude.Count == 0)
+        || (have.Include.ToHashSet(StringComparer.Ordinal).SetEquals(need.Include)
+            && have.Exclude.ToHashSet(StringComparer.Ordinal).SetEquals(need.Exclude));
 
     /// <summary>Server names become the top-level output path segment, so a discovered one that collides with an existing name is suffixed rather than allowed to overwrite it.</summary>
     private static string UniqueName(string preferred, HashSet<string> taken)

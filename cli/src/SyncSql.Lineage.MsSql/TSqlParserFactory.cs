@@ -12,7 +12,7 @@ namespace SyncSql.Lineage.MsSql;
 public static class TSqlParserFactory
 {
     private static readonly Regex ParserTypeNamePattern = new(@"^TSql(\d+)Parser$", RegexOptions.Compiled);
-    private static TSqlParser? _cachedParser;
+    private static readonly Lazy<TSqlParser> CachedParser = new(() => CreateParser(typeof(TSqlFragmentVisitor).Assembly.GetTypes()));
 
     /// <summary>
     /// Finds the newest TSqlNNNParser type via reflection rather than a hardcoded class name -
@@ -20,16 +20,7 @@ public static class TSqlParserFactory
     /// picking up newer syntax support on a ScriptDom upgrade instead of just working. $true = quoted
     /// identifiers on, matching this project's extracted DDL (identifiers are bracket-quoted).
     /// </summary>
-    public static TSqlParser GetParser()
-    {
-        if (_cachedParser is not null)
-        {
-            return _cachedParser;
-        }
-
-        _cachedParser = CreateParser(typeof(TSqlFragmentVisitor).Assembly.GetTypes());
-        return _cachedParser;
-    }
+    public static TSqlParser GetParser() => CachedParser.Value;
 
     internal static TSqlParser CreateParser(IEnumerable<Type> availableTypes)
     {

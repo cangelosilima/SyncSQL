@@ -54,6 +54,7 @@
       "type": "mssql",
       "host": "sqlprod01.example.com",
       "hostNameSuffix": "example.com",
+      "aliases": ["SQLPROD01"],
       "port": 1433,
       "encrypt": true,
       "trustServerCertificate": false,

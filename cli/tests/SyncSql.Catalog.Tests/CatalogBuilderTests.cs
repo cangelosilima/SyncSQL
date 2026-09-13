@@ -72,6 +72,179 @@ public sealed class CatalogBuilderTests : IDisposable
         Assert.Equal(target.Id, Assert.Single(catalog.LinkedServerReferences).To);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildAsync_RepeatedEndpointProducesOneObjectWithEveryLinkRoute(bool alternateEndpoint)
+    {
+        var identity = Core.Configuration.ServerIdentity.FromConfig(new Core.Configuration.ServerConfig
+        {
+            Name = "CENTRAL",
+            Host = "central.example.com",
+            Type = DatabaseEngine.MsSql,
+            CredentialsVariablePrefix = "CENTRAL",
+            Aliases = ["10.0.0.5"],
+        });
+        ExtractedObject remote = new()
+        {
+            Server = "REMOTE_A",
+            Database = "SalesDb",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "Orders",
+            Ddl = "CREATE TABLE dbo.Orders (Id int);",
+            Engine = DatabaseEngine.MsSql,
+            ServerIdentity = identity,
+        };
+        foreach (var route in new[] { (Root: "ROOT_A", Link: "FIRST"), (Root: "ROOT_B", Link: "SECOND"), (Root: "ROOT_C", Link: "THIRD") })
+        {
+            WriteObjectFile(route.Root, "_ServerLevel", "LinkedServers", null, route.Link, LinkedServerDdl(route.Link, "10.0.0.5", "SalesDb"));
+            string ddl = $"SELECT * FROM {route.Link}.SalesDb.dbo.Orders;";
+            WriteObjectFile(route.Root, "App", "Views", "dbo", "Report", ddl);
+            _mssqlAnalyzer.Analyze(ddl, Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+            {
+                ObjectRefs = [new ObjectRef("dbo", "Orders") { Server = route.Link, Database = "SalesDb" },
+                    new ObjectRef("dbo", "orders") { Server = route.Link, Database = "SalesDb" },
+                    new ObjectRef("dbo", "Orders") { Server = route.Link }],
+                Aliases = new Dictionary<string, ObjectRef>(),
+                ColumnRefs = [],
+            });
+        }
+        WriteMetadataObject(remote, ["ROOT_A", "LinkedServers", "FIRST"]);
+        ExtractedObject second = remote with
+        {
+            Server = "REMOTE_B",
+            ServerIdentity = alternateEndpoint ? identity with { Endpoint = "10.0.0.5,1433", Addresses = ["10.0.0.5,1433"] } : identity,
+        };
+        WriteMetadataObject(second, ["ROOT_B", "LinkedServers", "SECOND"]);
+        // An additional database extracted through the second route retains its metrics source id.
+        ExtractedObject ops = second with { Database = "Ops" };
+        WriteMetadataObject(ops, ["ROOT_B", "LinkedServers", "SECOND"]);
+        _metricsHistoryStore.LoadHistoryAsync("metrics", "REMOTE_B/Ops/Tables/dbo/Orders", Arg.Any<CancellationToken>())
+            .Returns([new MetricsSnapshot { CapturedAt = FixedNow, RowCount = 42 }]);
+
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot, MetricsRoot = "metrics" }, CancellationToken.None);
+        CatalogNode target = Assert.Single(catalog.Nodes, n => n.Type == "Tables" && n.Database == "SalesDb");
+        Assert.Equal("REMOTE_A", target.Server);
+        Assert.DoesNotContain("REMOTE_B", catalog.Servers);
+        Assert.Equal(3, catalog.LinkedServerReferences.Count);
+        Assert.All(catalog.LinkedServerReferences, reference => Assert.Equal(target.Id, reference.To));
+        Assert.Equal(3, catalog.Edges.Count(edge => edge.To == target.Id));
+        Assert.Equal(catalog.Nodes.Count, catalog.Nodes.Select(n => n.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(42, Assert.Single(Assert.Single(catalog.Nodes, n => n.Database == "Ops").Metrics).RowCount);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ConflictingCopiesCannotPublishAMisleadingCatalog()
+    {
+        var identity = Core.Configuration.ServerIdentity.FromConfig(new Core.Configuration.ServerConfig
+        {
+            Name = "REMOTE",
+            Host = "remote",
+            Type = DatabaseEngine.MsSql,
+            CredentialsVariablePrefix = "REMOTE",
+        });
+        ExtractedObject obj = new()
+        {
+            Server = "ONE",
+            Database = "db",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "t",
+            Ddl = "CREATE TABLE dbo.t (id int);",
+            Engine = DatabaseEngine.MsSql,
+            ServerIdentity = identity,
+        };
+        WriteMetadataObject(obj, ["ROOT", "LinkedServers", "ONE"]);
+        WriteMetadataObject(obj with { Server = "TWO", Ddl = "CREATE TABLE dbo.t (id bigint);" }, ["ROOT", "LinkedServers", "TWO"]);
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None));
+        Assert.Contains("Conflicting exports", error.Message);
+        Assert.Contains("ONE", error.Message);
+        Assert.Contains("TWO", error.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildAsync_MergedObjectsRetainDistinctMetricsFromEverySource(bool primaryHasHistory)
+    {
+        var identity = new Core.Configuration.ServerIdentity { Engine = DatabaseEngine.MsSql, Endpoint = "REMOTE,1433", Addresses = ["REMOTE,1433"] };
+        ExtractedObject obj = new()
+        {
+            Server = "A",
+            Database = "db",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "t",
+            Ddl = "CREATE TABLE dbo.t (id int);",
+            Engine = DatabaseEngine.MsSql,
+            ServerIdentity = identity,
+        };
+        WriteMetadataObject(obj, ["A"]);
+        WriteMetadataObject(obj with { Server = "B" }, ["ROOT", "LinkedServers", "FIRST"]);
+        WriteMetadataObject(obj with { Server = "B" }, ["ROOT", "LinkedServers", "SECOND"]);
+        MetricsSnapshot sample = new()
+        {
+            CapturedAt = FixedNow,
+            RowCount = 42,
+            Indexes = [new CatalogIndexMetric { Name = "PK_t", PageCount = 10 }],
+            Statistics = [new CatalogStatMetric { Name = "id", Rows = 42 }],
+        };
+        MetricsSnapshot copy = sample with
+        {
+            Indexes = [new CatalogIndexMetric { Name = "PK_t", PageCount = 10 }],
+            Statistics = [new CatalogStatMetric { Name = "id", Rows = 42 }],
+        };
+        MetricsSnapshot older = sample with { CapturedAt = FixedNow.AddDays(-1), RowCount = 20 };
+        MetricsSnapshot differentIndex = sample with { Indexes = [new CatalogIndexMetric { Name = "PK_t", PageCount = 11 }] };
+        MetricsSnapshot differentStat = sample with { Statistics = [new CatalogStatMetric { Name = "id", Rows = 41 }] };
+        _metricsHistoryStore.LoadHistoryAsync("metrics", "A/db/Tables/dbo/t", Arg.Any<CancellationToken>())
+            .Returns(primaryHasHistory ? [sample] : Array.Empty<MetricsSnapshot>());
+        _metricsHistoryStore.LoadHistoryAsync("metrics", "B/db/Tables/dbo/t", Arg.Any<CancellationToken>())
+            .Returns([copy, differentIndex, differentStat, older, sample]);
+
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot, MetricsRoot = "metrics" }, CancellationToken.None);
+        CatalogNode node = Assert.Single(catalog.Nodes);
+        Assert.Equal("A/db/Tables/dbo/t", node.Id);
+        Assert.Equal(4, node.Metrics.Count);
+        Assert.Equal(older, node.Metrics[0]);
+        Assert.Equal(new long?[] { 10, 11, 10 }, node.Metrics.Skip(1).Select(m => Assert.Single(m.Indexes).PageCount));
+        Assert.Equal(new long?[] { 42, 42, 41 }, node.Metrics.Skip(1).Select(m => Assert.Single(m.Statistics).Rows));
+        await _metricsHistoryStore.Received(1).LoadHistoryAsync("metrics", "A/db/Tables/dbo/t", Arg.Any<CancellationToken>());
+        await _metricsHistoryStore.Received(1).LoadHistoryAsync("metrics", "B/db/Tables/dbo/t", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BuildAsync_RejectsTheSameServerNameWithDifferentEndpoints()
+    {
+        ExtractedObject obj = new()
+        {
+            Server = "REMOTE",
+            Database = "db",
+            Schema = "dbo",
+            Type = "Tables",
+            Name = "t",
+            Ddl = "CREATE TABLE dbo.t (id int);",
+            Engine = DatabaseEngine.MsSql,
+            ServerIdentity = new Core.Configuration.ServerIdentity { Engine = DatabaseEngine.MsSql, Endpoint = "ONE,1433" },
+        };
+        WriteMetadataObject(obj, ["ROOT", "LinkedServers", "ONE"]);
+        WriteMetadataObject(obj with
+        {
+            ServerIdentity = obj.ServerIdentity with { Endpoint = "TWO,1433" },
+        }, ["ROOT", "LinkedServers", "TWO"]);
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None));
+        Assert.Contains("conflicting endpoint metadata", error.Message);
+        Assert.Contains("REMOTE", error.Message);
+    }
+
+    private void WriteMetadataObject(ExtractedObject obj, IReadOnlyList<string> serverPath)
+    {
+        string path = Path.Combine(_objectsRoot, ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, serverPath: serverPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, ExtractedObjectFile.Write(obj));
+    }
+
     [Fact]
     public async Task BuildAsync_SchemaDefinitionInsideSchemaFolder_RetainsLegacyIdentity()
     {

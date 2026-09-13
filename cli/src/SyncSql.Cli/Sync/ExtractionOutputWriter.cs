@@ -15,7 +15,7 @@ namespace SyncSql.Cli.Sync;
 /// </summary>
 internal static class ExtractionOutputWriter
 {
-    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null, IProgress<ExtractionProgress>? progress = null)
+    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null, IProgress<ExtractionProgress>? progress = null, Core.Configuration.ServerIdentity? serverIdentity = null)
     {
         int written = 0;
         int total = outcome.Objects.Count + outcome.MetricsSnapshots.Count;
@@ -25,7 +25,7 @@ internal static class ExtractionOutputWriter
             string relativePath = ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, serverPath: serverPath);
             string path = Path.Combine(stagingRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj), cancellationToken);
+            await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj with { ServerIdentity = serverIdentity ?? obj.ServerIdentity }), cancellationToken);
             progress?.Report(new("Writing files", outcome.Objects.Count, ++written, total));
         }
 

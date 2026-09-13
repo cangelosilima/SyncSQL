@@ -62,6 +62,10 @@ public static class SyncSqlConfigLoader
             {
                 throw new ConfigValidationException($"Config file '{path}' has server '{server.Name}' missing required key 'credentialsVariablePrefix'.");
             }
+            if (server.Aliases is null || server.Aliases.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new ConfigValidationException($"Config file '{path}' has server '{server.Name}' with an empty alias - aliases must be explicit instance addresses.");
+            }
             if (server.Type == Domain.DatabaseEngine.Oracle && string.IsNullOrWhiteSpace(server.ServiceName))
             {
                 throw new ConfigValidationException($"Config file '{path}' has Oracle server '{server.Name}' missing required key 'serviceName'.");

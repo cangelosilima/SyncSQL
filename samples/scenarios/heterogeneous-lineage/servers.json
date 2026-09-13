@@ -48,6 +48,7 @@
   "servers": [
     {
       "name": "ATLAS_SQL",
+      "aliases": ["ATLAS_SQL", "ATLAS_SQL.Receivables"],
       "type": "mssql",
       "host": "127.0.0.1",
       "port": 14431,
@@ -64,6 +65,7 @@
     },
     {
       "name": "MERIDIAN_SQL",
+      "aliases": ["MERIDIAN_SQL", "MERIDIAN_SQL.Intelligence"],
       "type": "mssql",
       "host": "127.0.0.1",
       "port": 14432,
