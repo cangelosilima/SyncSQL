@@ -25,14 +25,16 @@ internal sealed class SyncSqlConsoleLoggerProvider(SyncSqlTerminal terminal) : I
             {
                 return;
             }
-            string label = logLevel switch
+            (string label, string color) = logLevel switch
             {
-                LogLevel.Critical or LogLevel.Error => "[ERROR]",
-                LogLevel.Warning => "[WARN] ",
-                LogLevel.Debug or LogLevel.Trace => "[DEBUG]",
-                _ => "[INFO] ",
+                LogLevel.Critical or LogLevel.Error => ("[ERROR]", TerminalColors.Red),
+                LogLevel.Warning => ("[WARN] ", TerminalColors.Yellow),
+                LogLevel.Debug or LogLevel.Trace => ("[DEBUG]", TerminalColors.Gray),
+                _ => ("[INFO] ", TerminalColors.Cyan),
             };
-            terminal.WriteLog($"{label} {message}{Environment.NewLine}" + (exception is null ? string.Empty : $"{exception}{Environment.NewLine}"));
+            string rendered = TerminalColors.Wrap(label, color, terminal.ColorEnabled);
+            string details = exception is null ? string.Empty : $"{TerminalColors.Wrap(exception.ToString(), TerminalColors.Red, terminal.ColorEnabled)}{Environment.NewLine}";
+            terminal.WriteLog($"{rendered} {message}{Environment.NewLine}{details}");
         }
     }
 }

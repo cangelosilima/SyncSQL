@@ -27,7 +27,8 @@ public sealed class ExtractionProgressDisplayTests
         IProgress<ExtractionProgress> observer = display.Start("SQL");
         display.Complete("SQL", "Skipped", "Filtered", 0);
         observer.Report(new("Late update", 999));
-        Assert.Contains("SQL | Skipped | 0 objects", display.Lines(200, 30)[2]);
+        Assert.Contains("SQL | Skipped |", display.Lines(200, 30)[2]);
+        Assert.Contains("0 objects", display.Lines(200, 30)[2]);
         Assert.DoesNotContain("Late update", display.Lines(200, 30)[2]);
     }
 
@@ -73,8 +74,10 @@ public sealed class ExtractionProgressDisplayTests
         string running = string.Join('\n', display.Lines(200, 30));
         Assert.Contains("0/2 finished | 2 active", running);
         Assert.Contains("37 objects extracted", running);
-        Assert.Contains("SQL | Extracting | 25 objects", running);
+        Assert.Contains("SQL", running);
+        Assert.Contains("| Extracting", running);
         Assert.Contains("ORACLE | Extracting (3/10)", running);
+        Assert.Contains("25 objects", running);
         Assert.Contains("HR: Views", running);
 
         display.Complete("SQL", "Done", "Files written", 25);

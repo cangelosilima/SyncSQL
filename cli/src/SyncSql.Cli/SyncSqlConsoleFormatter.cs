@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Console;
+using SyncSql.Cli.Sync;
 
 namespace SyncSql.Cli;
 
@@ -24,15 +25,16 @@ public sealed class SyncSqlConsoleFormatter() : ConsoleFormatter("syncsql")
 
         (string label, string color) = logEntry.LogLevel switch
         {
-            LogLevel.Critical or LogLevel.Error => ("[ERROR]", "\e[31m"),
-            LogLevel.Warning => ("[WARN] ", "\e[33m"),
-            LogLevel.Debug or LogLevel.Trace => ("[DEBUG]", "\e[90m"),
-            _ => ("[INFO] ", "\e[36m"),
+            LogLevel.Critical or LogLevel.Error => ("[ERROR]", TerminalColors.Red),
+            LogLevel.Warning => ("[WARN] ", TerminalColors.Yellow),
+            LogLevel.Debug or LogLevel.Trace => ("[DEBUG]", TerminalColors.Gray),
+            _ => ("[INFO] ", TerminalColors.Cyan),
         };
 
         textWriter.Write(color);
         textWriter.Write(label);
-        textWriter.Write("\e[0m ");
+        textWriter.Write(TerminalColors.Reset);
+        textWriter.Write(' ');
         textWriter.WriteLine(message);
 
         if (logEntry.Exception is not null)
