@@ -62,6 +62,7 @@ internal sealed class FakeDatabase : DbConnection
         public override int ExecuteNonQuery()
         {
             database.Queries.Add(CommandText);
+            if (database.FailQueries.Contains(CommandText)) { throw new FakeDatabaseException(); }
             if (CommandText == "SET NUMERIC_ROUNDABORT OFF;") { return 0; }
             throw new NotSupportedException();
         }

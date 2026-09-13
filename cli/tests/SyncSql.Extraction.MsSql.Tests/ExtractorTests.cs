@@ -215,6 +215,11 @@ public sealed class ExtractorTests
         db.FailOpen = true;
         await Assert.ThrowsAsync<FakeDatabaseException>(() => Extract(db));
         Assert.True(db.WasDisposed);
+
+        using var setupFailureDb = Database();
+        setupFailureDb.FailQueries.Add("SET NUMERIC_ROUNDABORT OFF;");
+        await Assert.ThrowsAsync<FakeDatabaseException>(() => Extract(setupFailureDb));
+        Assert.True(setupFailureDb.WasDisposed);
     }
 
 }
