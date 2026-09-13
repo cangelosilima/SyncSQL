@@ -52,7 +52,12 @@ internal static class TerminalColors
             }
             if (visible == width - 3)
             {
-                return result + "..." + (hasAnsi ? Reset : string.Empty);
+                result.Append("...");
+                if (hasAnsi)
+                {
+                    result.Append(Reset);
+                }
+                return result.ToString();
             }
             result.Append(char.IsControl(value[index]) ? ' ' : value[index]);
             visible++;
