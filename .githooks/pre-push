@@ -60,20 +60,47 @@ try {
     $reports = @(Get-ChildItem -LiteralPath $coverageRoot -Recurse -Filter 'coverage.cobertura.xml' -File)
     if ($reports.Count -eq 0) { throw 'CLI tests completed without producing a Cobertura coverage report.' }
 
-    [long]$linesCovered = 0; [long]$linesValid = 0
-    [long]$branchesCovered = 0; [long]$branchesValid = 0
-    [long]$methodsCovered = 0; [long]$methodsValid = 0
+    # Each test project emits a report for the same product assemblies. Merge
+    # by source identity before checking coverage; summing report totals would
+    # count shared files once per test project and produce a false failure.
+    $lineHits = @{}
+    $branchCoverage = @{}
+    $methodLines = @{}
     foreach ($report in $reports) {
         [xml]$xml = Get-Content -LiteralPath $report.FullName -Raw
-        $coverage = $xml.coverage
-        $linesCovered += [long]$coverage.'lines-covered'; $linesValid += [long]$coverage.'lines-valid'
-        $branchesCovered += [long]$coverage.'branches-covered'; $branchesValid += [long]$coverage.'branches-valid'
-        foreach ($method in @($xml.coverage.packages.package.classes.class.methods.method)) {
-            $methodsValid++
-            if ([double]$method.'line-rate' -ge 1) { $methodsCovered++ }
+        foreach ($class in @($xml.coverage.packages.package.classes.class)) {
+            $file = [string]$class.filename
+            foreach ($line in @($class.lines.line)) {
+                $key = "$file|$([string]$line.number)"
+                $hits = [long]$line.hits
+                if (-not $lineHits.ContainsKey($key) -or $hits -gt $lineHits[$key]) { $lineHits[$key] = $hits }
+                foreach ($condition in @($line.conditions.condition)) {
+                    $branchKey = "$key|$([string]$condition.number)"
+                    $coverageText = ([string]$condition.coverage) -replace '%.*$', ''
+                    $covered = [double]$coverageText -ge 100
+                    if (-not $branchCoverage.ContainsKey($branchKey) -or $covered) { $branchCoverage[$branchKey] = $covered }
+                }
+            }
+            foreach ($method in @($class.methods.method)) {
+                $methodKey = "$file|$([string]$method.name)|$([string]$method.signature)"
+                if (-not $methodLines.ContainsKey($methodKey)) { $methodLines[$methodKey] = @{} }
+                foreach ($line in @($method.lines.line)) {
+                    $lineKey = [string]$line.number
+                    $hits = [long]$line.hits
+                    if (-not $methodLines[$methodKey].ContainsKey($lineKey) -or $hits -gt $methodLines[$methodKey][$lineKey]) {
+                        $methodLines[$methodKey][$lineKey] = $hits
+                    }
+                }
+            }
         }
     }
 
+    [long]$linesCovered = @($lineHits.Values | Where-Object { $_ -gt 0 }).Count
+    [long]$linesValid = $lineHits.Count
+    [long]$branchesCovered = @($branchCoverage.Values | Where-Object { $_ }).Count
+    [long]$branchesValid = $branchCoverage.Count
+    [long]$methodsValid = $methodLines.Count
+    [long]$methodsCovered = @($methodLines.Values | Where-Object { @($_.Values | Where-Object { $_ -eq 0 }).Count -eq 0 }).Count
     $coverageFailures = @()
     if ($linesCovered -ne $linesValid) { $coverageFailures += "lines $linesCovered/$linesValid" }
     if ($branchesCovered -ne $branchesValid) { $coverageFailures += "branches $branchesCovered/$branchesValid" }
