@@ -44,6 +44,13 @@ New-Item -ItemType Directory -Path $coverageRoot -Force | Out-Null
 
 try {
     Invoke-CheckedCommand dotnet @(
+        'format', 'analyzers', 'cli/SyncSql.slnx', '--verify-no-changes', '--no-restore', '--exclude', 'grammar/'
+    ) $repoRoot
+    Invoke-CheckedCommand dotnet @(
+        'format', 'cli/SyncSql.slnx', '--verify-no-changes', '--no-restore', '--exclude', 'grammar/'
+    ) $repoRoot
+
+    Invoke-CheckedCommand dotnet @(
         'test', 'cli/SyncSql.slnx', '--configuration', 'Release',
         '--collect', 'XPlat Code Coverage', '--settings', 'cli/coverage.runsettings',
         '--results-directory', 'TestResults/pre-push', '--logger', 'console;verbosity=minimal'
@@ -76,6 +83,9 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $sitePath 'node_modules'))) {
         throw 'Site dependencies are missing. Run npm ci in site/ before pushing.'
     }
+    Invoke-CheckedCommand npm @('run', 'format:check') $sitePath
+    Invoke-CheckedCommand npm @('run', 'lint') $sitePath
+    Invoke-CheckedCommand npm @('run', 'typecheck') $sitePath
     Invoke-CheckedCommand npm @('run', 'test:coverage') $sitePath
 }
 finally {
