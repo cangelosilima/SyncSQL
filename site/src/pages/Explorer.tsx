@@ -150,7 +150,12 @@ export default function Explorer() {
                 <td>
                   <TypeBadge type={node.type} />
                 </td>
-                <td>{node.server}</td>
+                <td>
+                  {node.server}
+                  {node.actualServerName && node.actualServerName !== node.server && (
+                    <span className="muted"> ({node.actualServerName})</span>
+                  )}
+                </td>
                 <td>{node.database}</td>
                 <td>{node.schema ?? <span className="muted">-</span>}</td>
                 <td className="explorer-description">{node.description ?? <span className="muted">-</span>}</td>

@@ -31,16 +31,34 @@ internal static class CatalogServerIdentity
                 canonicalByEndpoint.TryAdd(endpoint, node.Server);
             }
         }
-        Dictionary<string, IReadOnlyList<string>> namesByEndpoint = endpointByName.GroupBy(pair => pair.Value, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)[.. group.Select(pair => pair.Key)], StringComparer.OrdinalIgnoreCase);
-        return [.. nodes.Select(node => endpointByName.TryGetValue(node.Server, out string? endpoint)
-            ? node with
+        Dictionary<string, IReadOnlyList<string>> namesByEndpoint = endpointByName
+            .GroupBy(pair => pair.Value, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)[.. group
+                .Select(pair => pair.Key)
+                .Concat(nodes.Where(node => endpointByName.TryGetValue(node.Server, out string? endpoint)
+                    && string.Equals(endpoint, group.Key, StringComparison.OrdinalIgnoreCase))
+                    .Select(node => node.ServerIdentity)
+                    .OfType<ServerIdentity>()
+                    .Select(identity => identity.Name)
+                    .OfType<string>())
+                .Distinct(StringComparer.OrdinalIgnoreCase)], StringComparer.OrdinalIgnoreCase);
+        return [.. nodes.Select(CanonicalizeNode)];
+
+        CatalogNode CanonicalizeNode(CatalogNode node)
+        {
+            if (!endpointByName.TryGetValue(node.Server, out string? endpoint))
+            {
+                return node;
+            }
+
+            return node with
             {
                 Server = canonicalByEndpoint[endpoint],
                 Id = ExtractedObjectFile.ObjectId(canonicalByEndpoint[endpoint], node.Database, node.Schema, node.Type, node.Name),
                 ServerNames = namesByEndpoint[endpoint],
-            }
-            : node)];
+                ActualServerName = node.ServerIdentity!.Name,
+            };
+        }
     }
 
     public static List<CatalogNode> MergeObjects(List<CatalogNode> nodes)

@@ -334,6 +334,61 @@ public class NodeIndexTests
     }
 
     [Fact]
+    public void Resolve_FourPartNameUsingAliasAndHostSuffix_StaysOnTheActualServerName()
+    {
+        CatalogNode orders = Node("REMOTE", "AppDb", "dbo", "Orders") with
+        {
+            ServerIdentity = SyncSql.Core.Configuration.ServerIdentity.FromConfig(new SyncSql.Core.Configuration.ServerConfig
+            {
+                Name = "REMOTE",
+                Host = "remote",
+                HostNameSuffix = "example.com",
+                Type = DatabaseEngine.MsSql,
+                CredentialsVariablePrefix = "REMOTE",
+            }),
+        };
+        CatalogNode caller = Node("REMOTE", "AppDb", "dbo", "GetOrder", type: "StoredProcedures") with
+        {
+            ServerIdentity = orders.ServerIdentity,
+        };
+        NodeIndex index = new([orders, caller]);
+
+        ReferenceResolution resolution = index.Resolve(
+            caller, new ObjectRef("dbo", "Orders") { Database = "AppDb", Server = "remote.example.com" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(orders.Id, resolution.NodeId);
+        Assert.Null(resolution.ViaLink);
+    }
+
+    [Fact]
+    public void Resolve_FourPartNameMatchingTheServerIdentity_StaysLocal()
+    {
+        CatalogNode orders = Node("REMOTE", "AppDb", "dbo", "Orders") with
+        {
+            ServerIdentity = SyncSql.Core.Configuration.ServerIdentity.FromConfig(new SyncSql.Core.Configuration.ServerConfig
+            {
+                Name = "REMOTE",
+                Host = "remote.example.com",
+                Type = DatabaseEngine.MsSql,
+                CredentialsVariablePrefix = "REMOTE",
+            }),
+        };
+        CatalogNode caller = Node("REMOTE", "AppDb", "dbo", "GetOrder", type: "StoredProcedures") with
+        {
+            ServerIdentity = orders.ServerIdentity,
+        };
+        NodeIndex index = new([orders, caller]);
+
+        ReferenceResolution resolution = index.Resolve(
+            caller, new ObjectRef("dbo", "Orders") { Database = "AppDb", Server = "remote.example.com" });
+
+        Assert.Equal(ReferenceResolutionKind.Resolved, resolution.Kind);
+        Assert.Equal(orders.Id, resolution.NodeId);
+        Assert.Null(resolution.ViaLink);
+    }
+
+    [Fact]
     public void Resolve_AcrossALoopbackLink_StaysLocalWithoutALinkHop()
     {
         CatalogNode orders = Node("SQLPROD01", "AppDb", "dbo", "Orders");

@@ -1,5 +1,7 @@
 ﻿using SyncSql.Core.Domain;
 
+using SyncSql.Core.Configuration;
+
 namespace SyncSql.Catalog;
 
 /// <summary>Why a <see cref="NodeIndex.Resolve"/> lookup did or didn't produce a node id.</summary>
@@ -188,7 +190,7 @@ internal sealed class NodeIndex
             ? _linkedServers.Resolve(fromNode.Server, reference.Server, fromNode.Database, fromNode.Schema) : null;
         if (!string.IsNullOrWhiteSpace(reference.Server)
             && (namedLink is not null || (!string.Equals(reference.Server, fromNode.Server, StringComparison.OrdinalIgnoreCase)
-                && !fromNode.ServerNames.Contains(reference.Server, StringComparer.OrdinalIgnoreCase))))
+                && !IsCurrentServerName(fromNode, reference.Server))))
         {
             LinkedServerLink? link = namedLink;
             if (link?.TargetServer is not { } linkedTargetServer)
@@ -249,6 +251,15 @@ internal sealed class NodeIndex
             ? ReferenceResolution.System
             : resolution;
     }
+
+    private static bool IsCurrentServerName(CatalogNode node, string name) =>
+        node.ServerNames.Contains(name, StringComparer.OrdinalIgnoreCase)
+        || (node.ServerIdentity?.Matches(name, node.ServerIdentity.HostNameSuffix) ?? false)
+        || (node.ServerIdentity is { HostNameSuffix: { Length: > 0 } } identity
+            && string.Equals(
+                ServerIdentity.NormalizeSqlAddress(identity.Endpoint, suffix: identity.HostNameSuffix),
+                ServerIdentity.NormalizeSqlAddress(name),
+                StringComparison.OrdinalIgnoreCase));
 
     private ReferenceResolution ResolveQualified(
         CatalogNode fromNode,
