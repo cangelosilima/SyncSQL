@@ -90,6 +90,19 @@ public sealed class CommandBehaviorTests : IDisposable
         Assert.Equal(42, JsonSerializer.Deserialize<MetricsSnapshot>(json)!.RowCount);
     }
 
+    [Fact]
+    public async Task Sync_SkipMetrics_DisablesCaptureAndSnapshotOutput()
+    {
+        Assert.Equal(0, await Run("sync", "--skip-metrics"));
+
+        await _extractor.Received().ExtractAsync(
+            Arg.Any<ServerConfig>(),
+            Arg.Any<EffectiveFilters>(),
+            Arg.Is<ExtractionOptions>(options => !options.CaptureMetrics),
+            Arg.Any<CancellationToken>());
+        Assert.False(Directory.Exists("MSSQL/metrics-snapshot"));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
