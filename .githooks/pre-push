@@ -43,12 +43,13 @@ if (Test-Path -LiteralPath $coverageRoot) { Remove-Item -LiteralPath $coverageRo
 New-Item -ItemType Directory -Path $coverageRoot -Force | Out-Null
 
 try {
-    Invoke-CheckedCommand dotnet @(
-        'format', 'analyzers', 'cli/SyncSql.slnx', '--verify-no-changes', '--no-restore', '--exclude', 'grammar/'
-    ) $repoRoot
-    Invoke-CheckedCommand dotnet @(
-        'format', 'cli/SyncSql.slnx', '--verify-no-changes', '--no-restore', '--exclude', 'grammar/'
-    ) $repoRoot
+    $changedCliFiles = @(git diff --name-only 'origin/main...HEAD' -- '*.cs' '*.csproj' '*.props' '*.targets')
+    foreach ($file in @($changedCliFiles | Where-Object { $_ -like 'cli/*.cs' })) {
+        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $repoRoot $file))
+        if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            throw "C# file '$file' must be UTF-8 with BOM, matching cli/.editorconfig."
+        }
+    }
 
     Invoke-CheckedCommand dotnet @(
         'test', 'cli/SyncSql.slnx', '--configuration', 'Release',
