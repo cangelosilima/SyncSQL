@@ -107,7 +107,8 @@ failure (missing/invalid field, no servers defined, malformed JSON).
 ### `syncsql sync`
 
 Extracts every configured (and selected) server: writes each object as
-its own `.sql` file and each table's metrics as its own snapshot file.
+its own `.sql` file and, unless `--skip-metrics` is passed, each table's
+metrics as its own snapshot file.
 Purely local - no git operation of any kind. This is the extraction half
 of what a scheduled CI pipeline runs; the other half (publishing the
 result) is the calling pipeline's job - see [`.gitlab/README.md`](../../.gitlab/README.md).
@@ -122,6 +123,7 @@ syncsql sync --config ./config/servers.json
 | `--output-root`            | `./MSSQL` or `./ORACLE` | Uppercase `servers.type`; explicit override applies to every server. |
 | `--staging-root`           | `<output-root>`                     | Local directory each extracted object is written to, as `<server>/<database>/<schema>/<type>/<object>.sql` - the tree starts at the server name, with no wrapping folder. |
 | `--metrics-snapshot-root`  | `<output-root>/metrics-snapshot`    | Local directory this run's volatile metrics snapshots are written to (separate from `--staging-root` - one JSON file per table, meant to be folded into history later via `syncsql metrics update`). |
+| `--skip-metrics`           | `false`                             | Skip volatile per-table metrics queries and do not create the metrics snapshot tree. |
 | `--db-user`                | `--credentials-file`, then the environment | Database username for one server, as `PREFIX=value` (`PREFIX` = that server's `credentialsVariablePrefix`). Repeatable. |
 | `--db-password`            | `--credentials-file`, then the environment | Database password for one server, as `PREFIX=value`. Repeatable. Only the first `=` separates, so a password containing `=` needs no escaping. |
 | `--credentials-file`       | *(none)*                            | JSON file of credentials keyed by `credentialsVariablePrefix` - see [Credentials](#credentials). |

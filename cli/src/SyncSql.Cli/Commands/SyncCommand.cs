@@ -40,6 +40,10 @@ internal static class SyncCommand
         {
             Description = $"Directory this run's volatile metrics snapshots are written to (separate from --staging-root - one JSON file per table, folded into history later via `syncsql metrics update`). Default: <output-root>/{SyncSqlPaths.MetricsSnapshotDirectoryName}.",
         };
+        Option<bool> skipMetricsOption = new("--skip-metrics")
+        {
+            Description = "Skip capturing volatile table metrics during extraction.",
+        };
         Option<string[]> dbUserOption = new("--db-user")
         {
             Description = "Database username for one server, as PREFIX=value where PREFIX is that server's credentialsVariablePrefix. Repeatable. Takes precedence over --credentials-file and the environment.",
@@ -76,6 +80,7 @@ internal static class SyncCommand
             outputRootOption,
             stagingRootOption,
             metricsSnapshotRootOption,
+            skipMetricsOption,
             dbUserOption,
             dbPasswordOption,
             credentialsFileOption,
@@ -139,6 +144,7 @@ internal static class SyncCommand
             int attemptedServers = 0;
             int totalFiles = 0;
             int discoveredServers = 0;
+            bool captureMetrics = !parseResult.GetValue(skipMetricsOption);
 
             // Configured servers first; anything reached by following their linked servers is appended
             // as its own round, so a link found at depth N is extracted at depth N+1 and can in turn be
@@ -217,17 +223,33 @@ internal static class SyncCommand
                         string stagingRoot = SyncSqlPaths.Resolve(parseResult.GetValue(stagingRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
                         string metricsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(metricsSnapshotRootOption), outputRoot, SyncSqlPaths.MetricsSnapshotDirectoryName);
                         Directory.CreateDirectory(stagingRoot);
-                        Directory.CreateDirectory(metricsRoot);
-                        logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; snapshots to {MetricsRoot}", server.Name, stagingRoot, metricsRoot);
+                        if (captureMetrics)
+                        {
+                            Directory.CreateDirectory(metricsRoot);
+                        }
+                        if (captureMetrics)
+                        {
+                            logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; snapshots to {MetricsRoot}", server.Name, stagingRoot, metricsRoot);
+                        }
+                        else
+                        {
+                            logger.LogInformation("[{Server}] Writing objects to {StagingRoot}; metrics capture skipped", server.Name, stagingRoot);
+                        }
                         IDatabaseObjectExtractor extractor = extractorResolver.Resolve(server.Type);
                         workerToken.ThrowIfCancellationRequested();
                         ExtractionOutcome outcome = await extractor.ExtractAsync(
-                            server, filters, new ExtractionOptions { Credentials = credentials, DiscoverLinkedServers = discoverHere, Progress = serverProgress }, workerToken);
+                            server, filters, new ExtractionOptions
+                            {
+                                Credentials = credentials,
+                                CaptureMetrics = captureMetrics,
+                                DiscoverLinkedServers = discoverHere,
+                                Progress = serverProgress,
+                            }, workerToken);
 
                         await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress, identities.Describe(ServerIdentity.FromConfig(server)));
 
                         results[index] = new(outcome.Objects.Count, discoverHere ? outcome.DiscoveredLinkedServers : [], Failed: false);
-                        progress.Complete(server.Name, "Done", "Objects and snapshots written", outcome.Objects.Count);
+                        progress.Complete(server.Name, "Done", captureMetrics ? "Objects and snapshots written" : "Objects written", outcome.Objects.Count);
                         logger.LogInformation("- {Server} ({Engine}): {Count} object file(s)", server.Name, server.Type.ToConfigString(), outcome.Objects.Count);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)

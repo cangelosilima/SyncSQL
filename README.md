@@ -197,7 +197,7 @@ local files (`SyncSql.Catalog`'s history mining is a read-only `git log`/
 
 ```
 syncsql validate-config [--config <path>]
-syncsql sync [--config <path>] [--output-root] [--staging-root] [--metrics-snapshot-root]
+syncsql sync [--config <path>] [--output-root] [--staging-root] [--metrics-snapshot-root] [--skip-metrics]
              [--db-user PREFIX=value] [--db-password PREFIX=value] [--credentials-file <path>]
              [--server-include/--server-exclude] [--max-parallelism <count>]
 syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
@@ -222,6 +222,8 @@ commands visit both existing engine folders by default; T-SQL lint defaults to `
 `--max-parallelism <count>` to tune this limit, or `--max-parallelism 1`
 for sequential extraction. Linked-server discovery runs in depth rounds,
 with the same concurrency limit in each round.
+Use `--skip-metrics` when only object definitions are needed; it skips the
+per-table metrics queries and does not create a metrics snapshot tree.
 Interactive terminals show live overall and per-server progress, including the
 current extraction activity, object counts, file writes, and elapsed time.
 Redirected output remains plain log lines.
@@ -1483,7 +1485,8 @@ three work.)
 `./MSSQL` or `./ORACLE`, according to uppercase `servers.type`, e.g.
 `./MSSQL/SQLPROD01/AppDb/dbo/Tables/Orders.sql` — and metrics
 snapshots under `./MSSQL/metrics-snapshot` (`--staging-root` /
-`--metrics-snapshot-root` / `--output-root` override that). The other
+`--metrics-snapshot-root` / `--output-root` override that; pass
+`--skip-metrics` to omit metrics capture). The other
 commands default to the same layout, so the chain needs no arguments:
 
 ```bash
