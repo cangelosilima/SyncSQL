@@ -12,8 +12,11 @@ public sealed record ServerIdentity
 
     public required DatabaseEngine Engine { get; init; }
     public required string Endpoint { get; init; }
+    public string? Host { get; init; }
     public IReadOnlyList<string> Addresses { get; init; } = [];
     public string? HostNameSuffix { get; init; }
+    public string? Environment { get; init; }
+    public IReadOnlyList<string> Tags { get; init; } = [];
 
     public static ServerIdentity FromConfig(ServerConfig server)
     {
@@ -25,7 +28,10 @@ public sealed record ServerIdentity
             Name = server.Name,
             Engine = server.Type,
             Endpoint = endpoint,
+            Host = server.Host,
             HostNameSuffix = server.HostNameSuffix,
+            Environment = server.Environment,
+            Tags = [.. server.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)],
             Addresses = [.. server.Aliases.Select(alias => NormalizeAddress(server.Type, alias))
                 .Append(endpoint).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)],
         };

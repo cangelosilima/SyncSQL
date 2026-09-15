@@ -183,6 +183,7 @@ export interface Catalog {
   }
   generatedAt: string
   servers: string[]
+  serverDetails?: CatalogServer[]
   typeCounts: Record<string, number>
   nodes: CatalogNode[]
   edges: CatalogEdge[]
@@ -192,4 +193,12 @@ export interface Catalog {
   orphanedReferences?: CatalogOrphanedReference[]
   systemReferences?: CatalogSystemReference[]
   linkedServerReferences?: CatalogLinkedServerReference[]
+}
+
+export interface CatalogServer {
+  name: string
+  hostname?: string | null
+  environment?: string | null
+  tags?: string[]
+  engine?: string | null
 }

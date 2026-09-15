@@ -136,10 +136,27 @@ public sealed class CatalogBuilder(
 
         logger.LogInformation("Built {NodeCount} node(s), {EdgeCount} edge(s)", nodes.Count, edges.Count);
 
+        List<CatalogServer> serverDetails = [.. nodes.GroupBy(n => n.Server, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                CatalogNode representative = group.FirstOrDefault(n => n.ServerIdentity is not null) ?? group.First();
+                SyncSql.Core.Configuration.ServerIdentity? identity = representative.ServerIdentity;
+                return new CatalogServer
+                {
+                    Name = group.Key,
+                    Hostname = identity?.Host,
+                    Environment = identity?.Environment,
+                    Tags = identity?.Tags ?? [],
+                    Engine = representative.Engine,
+                };
+            })
+            .OrderBy(server => server.Name, StringComparer.OrdinalIgnoreCase)];
+
         return new Core.Domain.Catalog
         {
             GeneratedAt = timeProvider.GetUtcNow(),
             Servers = [.. nodes.Select(n => n.Server).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)],
+            ServerDetails = serverDetails,
             TypeCounts = typeCounts,
             Nodes = nodes,
             Edges = edges,

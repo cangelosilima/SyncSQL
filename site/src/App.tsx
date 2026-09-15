@@ -11,6 +11,7 @@ import Alerts from './pages/Alerts'
 import { AiProvider, useAi } from './ai/AiContext'
 import pkg from '../package.json'
 import CatalogSidebar from './components/CatalogSidebar'
+import ServerPage from './pages/ServerPage'
 import { useBrowserTitle } from './lib/useBrowserTitle'
 
 export default function App() {
@@ -114,7 +115,9 @@ function Shell() {
         </div>
       </header>
       <div className="body">
-        {(pathname.replace(/\/$/, '') === '/explorer' || pathname.startsWith('/object/')) && (
+        {(pathname.replace(/\/$/, '') === '/explorer' ||
+          pathname.startsWith('/object/') ||
+          pathname.startsWith('/server/')) && (
           <CatalogSidebar
             nodes={index?.catalog.nodes ?? []}
             linkedServerReferences={index?.catalog.linkedServerReferences}
@@ -124,6 +127,7 @@ function Shell() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/explorer" element={<Explorer />} />
+            <Route path="/server/:serverName" element={<ServerPage />} />
             <Route path="/ai" element={<AiPage />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/object/*" element={<ObjectPage />} />

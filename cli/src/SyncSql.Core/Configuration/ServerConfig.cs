@@ -35,6 +35,14 @@ public sealed record ServerConfig
     [JsonPropertyName("host")]
     public required string Host { get; init; }
 
+    /// <summary>Operational environment label shown by the catalog site (for example Production or UAT).</summary>
+    [JsonPropertyName("environment")]
+    public string? Environment { get; init; }
+
+    /// <summary>Optional user-defined labels for grouping and filtering servers in the catalog site.</summary>
+    [JsonPropertyName("tags")]
+    public IReadOnlyList<string> Tags { get; init; } = [];
+
     /// <summary>Explicit alternate addresses for this instance (DNS names, IPs, or Oracle connect aliases).</summary>
     [JsonPropertyName("aliases")]
     public IReadOnlyList<string> Aliases { get; init; } = [];
