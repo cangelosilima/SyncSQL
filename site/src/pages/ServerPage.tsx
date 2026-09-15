@@ -11,7 +11,7 @@ function unique<T>(values: T[]): T[] {
 export default function ServerPage() {
   const { index } = useCatalog()
   const { serverName = '' } = useParams()
-  const server = decodeURIComponent(serverName)
+  const server = serverName
   const nodes = useMemo(
     () => index?.catalog.nodes.filter((node) => node.server.toLowerCase() === server.toLowerCase()) ?? [],
     [index, server],
@@ -94,8 +94,8 @@ export default function ServerPage() {
       <section className="server-section" aria-labelledby="server-links-title">
         <h2 id="server-links-title">Database links</h2>
         <div className="server-link-columns">
-          <RelationshipList title="References to" refs={outgoing} index={index} />
-          <RelationshipList title="Referenced by" refs={incoming} index={index} />
+          <RelationshipList title="References to" refs={outgoing} index={index} direction="outgoing" />
+          <RelationshipList title="Referenced by" refs={incoming} index={index} direction="incoming" />
         </div>
       </section>
     </div>
@@ -106,17 +106,22 @@ function RelationshipList({
   title,
   refs,
   index,
+  direction,
 }: {
   title: string
   refs: CatalogLinkedServerReference[]
   index: CatalogIndex
+  direction: 'incoming' | 'outgoing'
 }) {
-  const rows = unique(refs.map((ref) => `${ref.to ?? ''}|${ref.database ?? ''}|${ref.schema ?? ''}|${ref.name}`)).map(
-    (key) => {
-      const [to, database, schema, name] = key.split('|')
-      return { to, database, schema, name }
-    },
-  )
+  const rows = unique(
+    refs.map((ref) => {
+      const objectId = direction === 'incoming' ? ref.from : ref.to
+      return `${objectId ?? ''}|${ref.database ?? ''}|${ref.schema ?? ''}|${ref.name}`
+    }),
+  ).map((key) => {
+    const [objectId, database, schema, name] = key.split('|')
+    return { objectId, database, schema, name }
+  })
   return (
     <div className="server-link-list">
       <h3>{title}</h3>
@@ -125,9 +130,9 @@ function RelationshipList({
       ) : (
         <ul>
           {rows.map((row) => (
-            <li key={`${row.to}-${row.name}`}>
-              {row.to && index.byId.has(row.to) ? (
-                <Link to={`/object/${row.to}`}>{index.byId.get(row.to)!.qualifiedName}</Link>
+            <li key={`${row.objectId}-${row.name}`}>
+              {row.objectId && index.byId.has(row.objectId) ? (
+                <Link to={`/object/${row.objectId}`}>{index.byId.get(row.objectId)!.qualifiedName}</Link>
               ) : (
                 [row.database, row.schema, row.name].filter(Boolean).join('.')
               )}

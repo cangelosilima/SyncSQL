@@ -14,6 +14,23 @@ public class LinkedServerFollowUpPlannerTests
         Assert.Equal(["SQLPROD01", "LinkedServers", "REMOTE", "LinkedServers", "NEXT"], nested.ExportPath);
         Assert.Null(Parent.ExportPath);
     }
+
+    [Fact]
+    public void Plan_RegisteredServer_PreservesEnvironmentAndTags()
+    {
+        ServerConfig registered = Parent with { Name = "SQLPROD02", Host = "sqlprod02.example.com", Environment = "Production", Tags = ["critical", "payments"] };
+
+        ServerConfig followUp = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            Parent,
+            "svc_syncsql",
+            [Link("REMOTE", dataSource: registered.Host)],
+            Enabled,
+            [Parent, registered],
+            coveredServers: [Parent]).FollowUps).Server;
+
+        Assert.Equal(registered.Environment, followUp.Environment);
+        Assert.Equal(registered.Tags, followUp.Tags);
+    }
     private static readonly ServerConfig Parent = new()
     {
         Name = "SQLPROD01",

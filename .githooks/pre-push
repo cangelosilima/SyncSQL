@@ -52,7 +52,11 @@ try {
     }
 
     Invoke-CheckedCommand dotnet @(
-        'test', 'cli/SyncSql.slnx', '--configuration', 'Release',
+        'build', 'cli/SyncSql.slnx', '--configuration', 'Release', '--no-restore', '-m:1'
+    ) $repoRoot
+
+    Invoke-CheckedCommand dotnet @(
+        'test', 'cli/SyncSql.slnx', '--configuration', 'Release', '--no-restore', '--no-build', '-m:1',
         '--collect', 'XPlat Code Coverage', '--settings', 'cli/coverage.runsettings',
         '--results-directory', 'TestResults/pre-push', '--logger', 'console;verbosity=minimal'
     ) $repoRoot

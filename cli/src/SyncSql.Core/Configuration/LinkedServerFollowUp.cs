@@ -141,6 +141,8 @@ public static class LinkedServerFollowUpPlanner
                 Aliases = registered is not null ? identities.Describe(ServerIdentity.FromConfig(registered)).Addresses : [],
                 HostNameSuffix = registered?.HostNameSuffix ?? parent.HostNameSuffix,
                 Port = registered is not null ? registered.Port : port,
+                Environment = registered?.Environment,
+                Tags = registered?.Tags ?? [],
                 Encrypt = parent.Encrypt,
                 TrustServerCertificate = parent.TrustServerCertificate,
                 // The same credentials prefix as the parent: same username, same password, on the other
