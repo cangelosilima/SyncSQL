@@ -202,6 +202,120 @@ a {
   color: var(--text-muted);
 }
 
+.server-workbench {
+  padding-bottom: 3rem;
+}
+.server-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  margin: 1rem 0 0;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  background: var(--surface);
+}
+.server-kicker {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.server-hero h2 {
+  margin: 0.25rem 0;
+  font-size: 1.7rem;
+}
+.server-hostname {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.server-facts {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+.server-facts span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.server-facts small {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.server-tags {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0 1.5rem;
+}
+.server-tag {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.server-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.server-section h2 {
+  margin: 0.25rem 0 0.35rem;
+}
+.server-topology {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 1rem 0;
+}
+.server-topology-node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 150px;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  text-decoration: none;
+}
+.server-topology-node--current {
+  border-color: var(--accent);
+}
+.server-topology-node small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+.server-link-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.server-link-list {
+  min-height: 120px;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.server-link-list h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+.server-link-list ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.server-link-list li {
+  margin: 0.35rem 0;
+}
+
 .object-quick-facts {
   display: flex;
   flex-wrap: wrap;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import type { CatalogLinkedServerReference, CatalogNode } from '../types'
 import { isLinkNode } from '../lib/catalog'
 import Button from './Button'
@@ -77,6 +77,7 @@ function Branch({
   linkEngines: Map<string, string>
 }) {
   const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
   const engines =
     level === 0
       ? [
@@ -98,6 +99,23 @@ function Branch({
         </span>
         <small>{nodes.length}</small>
       </button>
+      {level === 0 && (
+        <span
+          tabIndex={0}
+          className="catalog-server-open"
+          onClick={() => navigate(`/server/${encodeURIComponent(name)}`)}
+          aria-label="Open server explorer"
+          title={`Open server explorer for ${name}`}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              navigate(`/server/${encodeURIComponent(name)}`)
+            }
+          }}
+        >
+          ↗
+        </span>
+      )}
       {open && <Branches nodes={nodes} level={level + 1} linkEngines={linkEngines} />}
     </li>
   )

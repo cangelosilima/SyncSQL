@@ -39,6 +39,7 @@ export function makeCatalog(overrides: Partial<Catalog> = {}): Catalog {
   return {
     generatedAt: overrides.generatedAt ?? '2026-01-01T00:00:00Z',
     servers: overrides.servers ?? [...new Set(nodes.map((n) => n.server))],
+    serverDetails: overrides.serverDetails,
     typeCounts: overrides.typeCounts ?? {},
     nodes,
     edges: overrides.edges ?? [],

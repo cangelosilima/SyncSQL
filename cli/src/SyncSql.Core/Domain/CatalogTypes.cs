@@ -253,6 +253,10 @@ public sealed record Catalog
     [JsonPropertyName("servers")]
     public required IReadOnlyList<string> Servers { get; init; }
 
+    /// <summary>Configured metadata for each server. Optional for compatibility with older catalogs.</summary>
+    [JsonPropertyName("serverDetails")]
+    public IReadOnlyList<CatalogServer> ServerDetails { get; init; } = [];
+
     [JsonPropertyName("typeCounts")]
     public required IReadOnlyDictionary<string, int> TypeCounts { get; init; }
 
@@ -276,4 +280,23 @@ public sealed record Catalog
 
     [JsonPropertyName("linkedServerReferences")]
     public IReadOnlyList<CatalogLinkedServerReference> LinkedServerReferences { get; init; } = [];
+}
+
+/// <summary>Display and topology metadata for one configured server.</summary>
+public sealed record CatalogServer
+{
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+
+    [JsonPropertyName("hostname")]
+    public string? Hostname { get; init; }
+
+    [JsonPropertyName("environment")]
+    public string? Environment { get; init; }
+
+    [JsonPropertyName("tags")]
+    public IReadOnlyList<string> Tags { get; init; } = [];
+
+    [JsonPropertyName("engine")]
+    public DatabaseEngine? Engine { get; init; }
 }
