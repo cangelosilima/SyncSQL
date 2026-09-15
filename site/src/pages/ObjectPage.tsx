@@ -203,6 +203,9 @@ export default function ObjectPage() {
       </h1>
       <p className="breadcrumb">
         {node.server} &rarr; {node.database}
+        {node.actualServerName && node.actualServerName !== node.server && (
+          <span className="muted"> (actual server: {node.actualServerName})</span>
+        )}
         {node.schema ? ` → ${node.schema}` : ''}
       </p>
       {node.description && <p className="object-description">{node.description}</p>}

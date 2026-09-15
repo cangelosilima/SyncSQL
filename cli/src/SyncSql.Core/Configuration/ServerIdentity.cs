@@ -7,6 +7,9 @@ namespace SyncSql.Core.Configuration;
 /// <summary>Connection identity carried with exports so link aliases do not become physical servers.</summary>
 public sealed record ServerIdentity
 {
+    /// <summary>The configured server name, distinct from the physical endpoint and its aliases.</summary>
+    public string? Name { get; init; }
+
     public required DatabaseEngine Engine { get; init; }
     public required string Endpoint { get; init; }
     public IReadOnlyList<string> Addresses { get; init; } = [];
@@ -19,6 +22,7 @@ public sealed record ServerIdentity
             : $"{server.Host.Trim().ToUpperInvariant()}:{server.EffectivePort.ToString(CultureInfo.InvariantCulture)}/{server.ServiceName}";
         return new ServerIdentity
         {
+            Name = server.Name,
             Engine = server.Type,
             Endpoint = endpoint,
             HostNameSuffix = server.HostNameSuffix,

@@ -28,6 +28,11 @@ public sealed record CatalogNode
     [JsonIgnore]
     public IReadOnlyList<string> ServerNames { get; init; } = [];
 
+    /// <summary>Configured server name when this object was exported through an alias-based path.</summary>
+    [JsonPropertyName("actualServerName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ActualServerName { get; init; }
+
     [JsonPropertyName("id")]
     public required string Id { get; init; }
 

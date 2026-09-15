@@ -69,6 +69,8 @@ export interface CatalogObjectVersion {
 export interface CatalogNode {
   id: string
   server: string
+  /** Configured server name when the object was exported through an alias-based path. */
+  actualServerName?: string | null
   /** Engine of the owning server; absent in older catalog snapshots. */
   engine?: string | null
   database: string
