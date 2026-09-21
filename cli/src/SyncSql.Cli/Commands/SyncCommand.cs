@@ -218,7 +218,7 @@ internal static class SyncCommand
                     DatabaseCredentials credentials;
                     try
                     {
-                        credentials = credentialProvider.Resolve(server.CredentialsVariablePrefix);
+                        credentials = ResolveCredentials(server, credentialProvider);
                     }
                     catch (InvalidOperationException ex)
                     {
@@ -368,6 +368,24 @@ internal static class SyncCommand
     }
 
     private sealed record ServerExtractionResult(int FileCount, IReadOnlyList<DiscoveredLinkedServer> LinkedServers, bool Failed, bool Partial = false);
+
+    private static DatabaseCredentials ResolveCredentials(ServerConfig server, ICredentialProvider provider)
+    {
+        if (!server.IntegratedSecurity)
+        {
+            return provider.Resolve(server.CredentialsVariablePrefix);
+        }
+
+        // Retain the identity name for linked-server matching; SqlClient authenticates with
+        // the operating system identity and receives neither a username nor a password.
+        if (OperatingSystem.IsWindows())
+        {
+            using System.Security.Principal.WindowsIdentity identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return new DatabaseCredentials(identity.Name, "");
+        }
+
+        return new DatabaseCredentials(Environment.UserName, "");
+    }
 
     /// <summary>
     /// Turns the linked servers one extraction reported into the next round of work, logging both what

@@ -145,6 +145,7 @@ public static class LinkedServerFollowUpPlanner
                 Tags = registered?.Tags ?? [],
                 Encrypt = parent.Encrypt,
                 TrustServerCertificate = parent.TrustServerCertificate,
+                IntegratedSecurity = parent.IntegratedSecurity,
                 // The same credentials prefix as the parent: same username, same password, on the other
                 // side of the link. That reuse is the whole point of the matching-login rule above.
                 CredentialsVariablePrefix = parent.CredentialsVariablePrefix,

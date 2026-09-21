@@ -58,7 +58,11 @@ public static class SyncSqlConfigLoader
             {
                 throw new ConfigValidationException($"Config file '{path}' has server '{server.Name}' missing required key 'host'.");
             }
-            if (string.IsNullOrWhiteSpace(server.CredentialsVariablePrefix))
+            if (server.IntegratedSecurity && server.Type != Domain.DatabaseEngine.MsSql)
+            {
+                throw new ConfigValidationException($"Config file '{path}' has server '{server.Name}' with integratedSecurity enabled - only MSSQL servers support this setting.");
+            }
+            if (!server.IntegratedSecurity && string.IsNullOrWhiteSpace(server.CredentialsVariablePrefix))
             {
                 throw new ConfigValidationException($"Config file '{path}' has server '{server.Name}' missing required key 'credentialsVariablePrefix'.");
             }

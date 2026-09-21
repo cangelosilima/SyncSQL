@@ -19,12 +19,17 @@ internal static class MsSqlConnectionFactory
         {
             DataSource = dataSource,
             InitialCatalog = database,
-            UserID = credentials.Username,
-            Password = credentials.Password,
+            IntegratedSecurity = server.IntegratedSecurity,
             Encrypt = server.Encrypt ?? true,
             TrustServerCertificate = server.TrustServerCertificate ?? false,
             ConnectTimeout = 30,
         };
+
+        if (!server.IntegratedSecurity)
+        {
+            builder.UserID = credentials.Username;
+            builder.Password = credentials.Password;
+        }
 
         SqlConnection connection = new(builder.ConnectionString);
         return connection;

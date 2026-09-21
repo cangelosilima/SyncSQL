@@ -5,6 +5,20 @@ namespace SyncSql.Core.Tests.Configuration;
 
 public class LinkedServerFollowUpPlannerTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Plan_InheritsIntegratedSecurityAndMatchesCurrentIdentity(bool usesLocalLogin)
+    {
+        ServerConfig parent = Parent with { IntegratedSecurity = true, CredentialsVariablePrefix = "" };
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, @"DOMAIN\user",
+            [Link("REMOTE", usesLocalLogin: usesLocalLogin, remoteLogins: [@"DOMAIN\user"])], Enabled, [parent]);
+        ServerConfig remote = Assert.Single(plan.FollowUps).Server;
+        Assert.True(remote.IntegratedSecurity);
+        Assert.Empty(remote.CredentialsVariablePrefix);
+        Assert.Empty(plan.Skipped);
+    }
+
     [Fact]
     public void Plan_ExportPath_PreservesRootAndLinkAncestry()
     {
