@@ -51,6 +51,28 @@ public sealed class ExtractionProgressDisplayTests
     }
 
     [Fact]
+    public async Task PartialServer_IsFinishedAndKeepsItsWarningAfterDisposal()
+    {
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        SyncSqlTerminal terminal = new(output, animated: true, colorEnabled: true);
+        ExtractionProgressDisplay display = terminal.StartExtraction();
+        display.Add("SQL");
+        IProgress<ExtractionProgress> observer = display.Start("SQL");
+        display.Complete("SQL", "Partially complete", "Failed databases: broken", 12);
+        observer.Report(new("Late update", 999));
+        await display.DisposeAsync();
+
+        string rendered = output.ToString();
+        Assert.Contains("100% | 1/1 finished | 0 active | 0 failed | 1 partial", rendered);
+        Assert.Contains("Partially complete", rendered);
+        Assert.Contains("Failed databases: broken", rendered);
+        Assert.Contains("12 objects", rendered);
+        Assert.Contains(TerminalColors.Yellow, rendered);
+        Assert.DoesNotContain("Late update", rendered);
+        Assert.DoesNotContain("Cancelled", rendered);
+    }
+
+    [Fact]
     public async Task ReplacedDisplay_DoesNotClearNewSessionAndUsesTerminalDimensions()
     {
         using StringWriter output = new(CultureInfo.InvariantCulture);

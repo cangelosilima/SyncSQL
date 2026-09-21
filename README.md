@@ -1539,6 +1539,14 @@ stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
 - `sys.extended_properties` extraction (MSSQL) covers object- and
   column-level properties (class 1) only — database- and schema-level
   properties are not collected.
+- A failure while extracting one MSSQL database is logged with its database
+  name and the remaining databases continue. Objects and metrics collected
+  before the failure are retained, and the server and run are marked
+  **partially complete**. After all servers and linked-server follow-ups finish,
+  `syncsql sync` returns exit code 1 if a configured server is partially complete,
+  so publishing does not treat an incomplete extraction as a complete snapshot.
+  Partial discovered servers remain best-effort warnings. Server-level connection
+  or database-list failures still fail that server; cancellation still stops the run.
 - MSSQL replication extraction covers publications and their articles
   only (best-effort, requires `dbo.syspublications`/`dbo.sysarticles` to
   exist and be readable) — subscriber enumeration is intentionally left

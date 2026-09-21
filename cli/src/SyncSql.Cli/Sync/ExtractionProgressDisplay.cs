@@ -116,7 +116,7 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
         public string Status { get; set; } = "Queued";
         public ExtractionProgress Progress { get; set; } = new("Waiting for a slot");
         public Stopwatch Elapsed { get; } = new();
-        public bool Finished => Status is "Done" or "Failed" or "Skipped" or "Cancelled";
+        public bool Finished => Status is "Done" or "Partially complete" or "Failed" or "Skipped" or "Cancelled";
     }
 
     private sealed class Observer(ExtractionProgressDisplay display, string server) : IProgress<ExtractionProgress>
@@ -189,12 +189,13 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
             int percent = total == 0 ? 0 : finished * 100 / total;
             int active = _servers.Values.Count(s => !s.Finished && s.Status != "Queued");
             int failed = _servers.Values.Count(s => s.Status == "Failed");
+            int partial = _servers.Values.Count(s => s.Status == "Partially complete");
             int objects = _servers.Values.Sum(s => s.Progress.ObjectsExtracted);
             char spinner = "|/-\\"[(int)(_elapsed.ElapsedMilliseconds / 100 % 4)];
             string bar = new string('#', percent / 5).PadRight(20, '-');
             List<string> lines =
             [
-                TerminalColors.Wrap(FormattableString.Invariant($"Extraction [{bar}] {percent}% | {finished}/{total} finished | {active} active | {failed} failed"), TerminalColors.Cyan, _terminal.ColorEnabled),
+                TerminalColors.Wrap(FormattableString.Invariant($"Extraction [{bar}] {percent}% | {finished}/{total} finished | {active} active | {failed} failed | {partial} partial"), TerminalColors.Cyan, _terminal.ColorEnabled),
                 TerminalColors.Wrap(FormattableString.Invariant($"{objects} objects extracted | elapsed {_elapsed.Elapsed:hh\\:mm\\:ss} | totals include discovered servers"), TerminalColors.Dim, _terminal.ColorEnabled),
             ];
             int capacity = Math.Max(1, height - 3);
@@ -210,6 +211,7 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
                 {
                     "Done" => TerminalColors.Green,
                     "Failed" => TerminalColors.Red,
+                    "Partially complete" => TerminalColors.Yellow,
                     "Skipped" => TerminalColors.Yellow,
                     "Cancelled" => TerminalColors.Yellow,
                     "Queued" => TerminalColors.Gray,

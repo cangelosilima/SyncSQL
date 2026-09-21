@@ -3,6 +3,7 @@ using System.Reflection;
 using System.CommandLine.Invocation;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using SyncSql.Cli.Commands;
 using SyncSql.Cli.Composition;
@@ -164,6 +165,47 @@ public sealed class CommandBehaviorTests : IDisposable
         _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<ExtractionOutcome>(new InvalidOperationException("unavailable")));
         Assert.Equal(1, await Run("sync"));
+    }
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public async Task Sync_PartialExtractionWritesResultsAndContinuesDiscovery(bool configuredPartial, int expectedExitCode)
+    {
+        using StringWriter output = new(System.Globalization.CultureInfo.InvariantCulture);
+        _services.GetRequiredService<ILoggerFactory>().AddProvider(new SyncSqlConsoleLoggerProvider(new(output, animated: false)));
+        WriteConfig(new SyncSqlConfig
+        {
+            Servers = [Server],
+            Defaults = new ObjectFilterSet { ObjectTypes = ["Tables"] },
+            Discovery = new DiscoveryConfig { LinkedServers = new LinkedServerDiscoveryConfig { Enabled = true, MaxDepth = 1 } },
+        });
+        _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                ServerConfig server = call.Arg<ServerConfig>();
+                bool configured = server.Name == "SQL";
+                return new ExtractionOutcome
+                {
+                    Objects = [new ExtractedObject { Server = server.Name, Database = "db", Schema = "dbo", Type = "Tables", Name = "orders", Ddl = "CREATE TABLE dbo.orders (id int);", Engine = DatabaseEngine.MsSql }],
+                    MetricsSnapshots = new Dictionary<string, MetricsSnapshot>
+                    {
+                        [$"{server.Name}/db/Tables/dbo/orders"] = new() { CapturedAt = DateTimeOffset.UnixEpoch, RowCount = 42 },
+                    },
+                    FailedDatabases = configured == configuredPartial ? [new("broken", "Database unavailable")] : [],
+                    DiscoveredLinkedServers = configured ? [new DiscoveredLinkedServer { Name = "remote", Product = "SQL Server", DataSource = "remote" }] : [],
+                };
+            });
+
+        Assert.Equal(expectedExitCode, await Run("sync"));
+        Assert.Equal(2, Directory.GetFiles("MSSQL", "*.sql", SearchOption.AllDirectories).Length);
+        Assert.Equal(2, Directory.GetFiles("MSSQL/metrics-snapshot", "*.json", SearchOption.AllDirectories).Length);
+        Assert.Contains("CREATE TABLE", await File.ReadAllTextAsync("MSSQL/SQL/db/dbo/Tables/orders.sql"));
+        string logs = output.ToString();
+        Assert.Contains("/broken] Partially complete: Database unavailable", logs);
+        Assert.Contains("Extraction partially complete: 2 object file(s) across 2 server(s)", logs);
+        Assert.Contains("1 partially complete server(s); 0 failure(s)", logs);
+        await _extractor.Received(2).ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

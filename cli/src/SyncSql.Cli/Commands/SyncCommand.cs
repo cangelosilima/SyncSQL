@@ -138,6 +138,8 @@ internal static class SyncCommand
             }
 
             List<string> failedServers = [];
+            List<string> partialServers = [];
+            List<string> partialDiscoveredServers = [];
             // A server nobody configured is a lead this run chose to chase; failing to reach one says
             // something about the fleet, not about this run's job, so it's reported without failing it.
             List<string> failedDiscoveredServers = [];
@@ -248,8 +250,14 @@ internal static class SyncCommand
 
                         await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress, identities.Describe(ServerIdentity.FromConfig(server)));
 
-                        results[index] = new(outcome.Objects.Count, discoverHere ? outcome.DiscoveredLinkedServers : [], Failed: false);
-                        progress.Complete(server.Name, "Done", captureMetrics ? "Objects and snapshots written" : "Objects written", outcome.Objects.Count);
+                        results[index] = new(outcome.Objects.Count, discoverHere ? outcome.DiscoveredLinkedServers : [], Failed: false, Partial: outcome.IsPartial);
+                        progress.Complete(server.Name, outcome.IsPartial ? "Partially complete" : "Done",
+                            outcome.IsPartial ? $"Failed databases: {string.Join(", ", outcome.FailedDatabases.Select(failure => failure.Database))}"
+                                : captureMetrics ? "Objects and snapshots written" : "Objects written", outcome.Objects.Count);
+                        foreach (DatabaseExtractionFailure failure in outcome.FailedDatabases)
+                        {
+                            logger.LogWarning("[{Server}/{Database}] Partially complete: {Message}", server.Name, failure.Database, failure.Message);
+                        }
                         logger.LogInformation("- {Server} ({Engine}): {Count} object file(s)", server.Name, server.Type.ToConfigString(), outcome.Objects.Count);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
@@ -288,6 +296,10 @@ internal static class SyncCommand
                     }
 
                     totalFiles += result.FileCount;
+                    if (result.Partial)
+                    {
+                        (depth == 0 ? partialServers : partialDiscoveredServers).Add(server.Name);
+                    }
                     if (result.LinkedServers.Count > 0)
                     {
                         discoveredServers += QueueLinkedServers(
@@ -302,8 +314,15 @@ internal static class SyncCommand
 
             await progress.DisposeAsync();
             logger.LogInformation(
-                "Extraction complete: {TotalFiles} object file(s) across {ServerCount} server(s) ({DiscoveredCount} reached through a linked server); {FailureCount} failure(s).",
-                totalFiles, attemptedServers - failedServers.Count - failedDiscoveredServers.Count, discoveredServers, failedServers.Count);
+                "Extraction {Completion}: {TotalFiles} object file(s) across {ServerCount} server(s) ({DiscoveredCount} reached through a linked server); {PartialCount} partially complete server(s); {FailureCount} failure(s).",
+                partialServers.Count + partialDiscoveredServers.Count > 0 ? "partially complete" : "complete",
+                totalFiles, attemptedServers - failedServers.Count - failedDiscoveredServers.Count, discoveredServers,
+                partialServers.Count + partialDiscoveredServers.Count, failedServers.Count);
+
+            if (partialServers.Count + partialDiscoveredServers.Count > 0)
+            {
+                logger.LogWarning("Partially complete server(s): {Servers}", string.Join(", ", partialServers.Concat(partialDiscoveredServers)));
+            }
 
             if (failedDiscoveredServers.Count > 0)
             {
@@ -318,13 +337,13 @@ internal static class SyncCommand
                 return 1;
             }
 
-            return 0;
+            return partialServers.Count > 0 ? 1 : 0;
         });
 
         return command;
     }
 
-    private sealed record ServerExtractionResult(int FileCount, IReadOnlyList<DiscoveredLinkedServer> LinkedServers, bool Failed);
+    private sealed record ServerExtractionResult(int FileCount, IReadOnlyList<DiscoveredLinkedServer> LinkedServers, bool Failed, bool Partial = false);
 
     /// <summary>
     /// Turns the linked servers one extraction reported into the next round of work, logging both what
