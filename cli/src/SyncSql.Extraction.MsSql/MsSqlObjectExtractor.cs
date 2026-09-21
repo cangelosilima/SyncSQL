@@ -70,6 +70,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         List<ExtractedObject> objects = [];
         Dictionary<string, MetricsSnapshot> metrics = [];
         List<DiscoveredLinkedServer> discoveredLinkedServers = [];
+        List<DatabaseExtractionFailure> failedDatabases = [];
 
         // One read of sys.servers serves both callers: the LinkedServers objects to diff, and the leads
         // the caller may want to follow up on (see LinkedServerFollowUpPlanner).
@@ -98,18 +99,30 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         int completed = 0;
         foreach (string database in allowedDatabases)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             options.Progress?.Report(new($"Database {database}", objects.Count, completed, allowedDatabases.Length));
             _logger.LogInformation("[{Server}/{Database}] Extracting", server.Name, database);
-            await using DbConnection connection = await OpenAsync(server, database, options.Credentials, cancellationToken);
-            await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
-            options.Progress?.Report(new("Databases extracted", objects.Count, ++completed, allowedDatabases.Length));
+            try
+            {
+                await using DbConnection connection = await OpenAsync(server, database, options.Credentials, cancellationToken);
+                await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            {
+                failedDatabases.Add(new(database, ex.Message));
+                _logger.LogWarning("[{Server}/{Database}] Extraction partially complete: {Message}. Continuing with remaining databases.", server.Name, database, ex.Message);
+            }
+            options.Progress?.Report(new(failedDatabases.Count == 0 ? "Databases extracted" : "Databases processed (partially complete)", objects.Count, ++completed, allowedDatabases.Length));
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         return new ExtractionOutcome
         {
             Objects = objects,
             MetricsSnapshots = metrics,
             DiscoveredLinkedServers = discoveredLinkedServers,
+            FailedDatabases = failedDatabases,
         };
     }
 

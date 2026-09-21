@@ -94,4 +94,11 @@ public sealed record ExtractionOutcome
 
     /// <summary>Empty unless <see cref="Abstractions.ExtractionOptions.DiscoverLinkedServers"/> asked for it.</summary>
     public IReadOnlyList<DiscoveredLinkedServer> DiscoveredLinkedServers { get; init; } = [];
+
+    /// <summary>Databases that could not be fully extracted; successfully extracted objects are still available.</summary>
+    public IReadOnlyList<DatabaseExtractionFailure> FailedDatabases { get; init; } = [];
+
+    public bool IsPartial => FailedDatabases.Count > 0;
 }
+
+public sealed record DatabaseExtractionFailure(string Database, string Message);

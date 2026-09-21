@@ -222,4 +222,109 @@ public sealed class ExtractorTests
         Assert.True(setupFailureDb.WasDisposed);
     }
 
+    [Theory]
+    [InlineData("open")]
+    [InlineData("setup")]
+    [InlineData("catalog")]
+    [InlineData("late")]
+    public async Task Extract_DatabaseFailureRetainsResultsAndContinues(string failure)
+    {
+        using var master = Database();
+        master.Rows(MsSqlQueries.Databases, new { Name = "before" }, new { Name = "broken" }, new { Name = "after" });
+        master.Rows(MsSqlQueries.LinkedServers, new LinkedServerRow { LinkedServerName = "remote", DataSource = "remote", UsesSelfCredential = true });
+        using var before = Database();
+        using var broken = Database();
+        using var after = Database();
+        foreach (FakeDatabase db in new[] { before, broken, after })
+        {
+            db.Rows(MsSqlQueries.Tables, new TableRow { ObjectId = 1, SchemaName = "dbo", TableName = "orders" });
+            db.Rows(MsSqlQueries.TableVolume, new TableVolumeRow { SchemaName = "dbo", TableName = "orders", RowCount = 42 });
+        }
+        broken.FailOpen = failure == "open";
+        if (failure != "open")
+        {
+            broken.FailQueries.Add(failure switch
+            {
+                "setup" => "SET NUMERIC_ROUNDABORT OFF;",
+                "catalog" => MsSqlQueries.Schemas,
+                _ => ServiceBrokerReader.Query,
+            });
+        }
+        List<string> opened = [];
+        var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System, (_, database, _) =>
+        {
+            opened.Add(database);
+            return database switch { "before" => before, "broken" => broken, "after" => after, _ => master };
+        });
+        var server = Server with { ObjectTypes = AllTypes };
+        ProgressRecorder progress = new();
+        ExtractionOutcome result = await extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
+            new ExtractionOptions { Credentials = Credentials, DiscoverLinkedServers = true, Progress = progress }, CancellationToken.None);
+
+        Assert.Equal(["master", "master", "before", "broken", "after"], opened);
+        Assert.True(result.IsPartial);
+        Assert.Equal(new DatabaseExtractionFailure("broken", "Database unavailable"), Assert.Single(result.FailedDatabases));
+        Assert.Contains(result.Objects, o => o.Database == "before" && o.Name == "orders");
+        Assert.Contains(result.Objects, o => o.Database == "after" && o.Name == "orders");
+        Assert.Equal(42, result.MetricsSnapshots["SQL/before/Tables/dbo/orders"].RowCount);
+        Assert.Equal(42, result.MetricsSnapshots["SQL/after/Tables/dbo/orders"].RowCount);
+        Assert.Equal(failure == "late", result.MetricsSnapshots.ContainsKey("SQL/broken/Tables/dbo/orders"));
+        Assert.Single(result.DiscoveredLinkedServers);
+        Assert.True(broken.WasDisposed);
+        Assert.True(after.WasDisposed);
+        Assert.Equal(new ExtractionProgress("Databases processed (partially complete)", result.Objects.Count, 3, 3), progress.Updates[^1]);
+    }
+
+    [Fact]
+    public async Task Extract_AllDatabasesFail_ReturnsPartialOutcome()
+    {
+        using var master = Database();
+        using var broken = Database();
+        broken.FailOpen = true;
+        var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System,
+            (_, database, _) => database == "master" ? master : broken);
+        ExtractionOutcome result = await extractor.ExtractAsync(Server, EffectiveFilters.Resolve(null, Server),
+            new ExtractionOptions { Credentials = Credentials }, CancellationToken.None);
+
+        Assert.True(result.IsPartial);
+        Assert.Equal(["db", "excluded"], result.FailedDatabases.Select(f => f.Database));
+        Assert.Empty(result.Objects);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Extract_CancellationDoesNotBecomeADatabaseFailure(bool databaseException)
+    {
+        using var master = Database();
+        using CancellationTokenSource cancellation = new();
+        List<string> opened = [];
+        var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System, (_, database, _) =>
+        {
+            opened.Add(database);
+            if (database != "master")
+            {
+                if (databaseException)
+                {
+                    cancellation.Cancel();
+                    throw new FakeDatabaseException();
+                }
+                throw new OperationCanceledException();
+            }
+            return master;
+        });
+        Task<ExtractionOutcome> extraction = extractor.ExtractAsync(Server, EffectiveFilters.Resolve(null, Server),
+            new ExtractionOptions { Credentials = Credentials }, cancellation.Token);
+
+        if (databaseException)
+        {
+            await Assert.ThrowsAsync<FakeDatabaseException>(() => extraction);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<OperationCanceledException>(() => extraction);
+        }
+        Assert.Equal(["master", "db"], opened);
+    }
+
 }
