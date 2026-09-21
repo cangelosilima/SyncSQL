@@ -92,6 +92,59 @@ public sealed class CommandBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task Sync_OutputLogAppendsAndPreservesTerminalLogs()
+    {
+        using StringWriter terminalOutput = new(System.Globalization.CultureInfo.InvariantCulture);
+        _services.GetRequiredService<ILoggerFactory>().AddProvider(new SyncSqlConsoleLoggerProvider(new(terminalOutput, animated: false)));
+        string relativePath = Path.Combine("run logs", "nested", "extraction.log");
+        string absolutePath = Path.GetFullPath(relativePath);
+        _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
+            .Returns(new ExtractionOutcome
+            {
+                Objects = [],
+                MetricsSnapshots = new Dictionary<string, MetricsSnapshot>(),
+                FailedDatabases = [new("broken", "Database unavailable")],
+            });
+
+        Assert.Equal(1, await Run("sync", "--output-log", relativePath));
+        string firstRun = await File.ReadAllTextAsync(absolutePath);
+        Assert.Contains("Loading config", firstRun);
+        Assert.Contains("[WARN]", firstRun);
+        Assert.Contains("[SQL/broken] Partially complete: Database unavailable", firstRun);
+        Assert.Contains("Extraction partially complete", firstRun);
+        Assert.DoesNotContain('\e', firstRun);
+        Assert.Equal(firstRun, terminalOutput.ToString());
+
+        Assert.Equal(1, await Run("sync", "--output-log", absolutePath));
+        Assert.Equal(firstRun + firstRun, await File.ReadAllTextAsync(absolutePath));
+        Assert.Equal(1, await Run("sync"));
+        Assert.Equal(firstRun + firstRun, await File.ReadAllTextAsync(absolutePath));
+        using FileStream exclusive = File.Open(absolutePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Assert.True(exclusive.Length > 0);
+    }
+
+    [Fact]
+    public async Task Sync_OutputLogCapturesConfigurationErrorsAndAcceptsBareFilename()
+    {
+        Assert.Equal(1, await Run("sync", "--config", "missing.json", "--output-log", "sync.log"));
+        string log = await File.ReadAllTextAsync("sync.log");
+        Assert.Contains("[ERROR]", log);
+        Assert.Contains("missing.json", log);
+        await _extractor.DidNotReceiveWithAnyArgs().ExtractAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task Sync_InvalidOutputLogStopsBeforeExtraction()
+    {
+        using StringWriter output = new(System.Globalization.CultureInfo.InvariantCulture);
+        _services.GetRequiredService<ILoggerFactory>().AddProvider(new SyncSqlConsoleLoggerProvider(new(output, animated: false)));
+        Directory.CreateDirectory("logs");
+        Assert.Equal(1, await Run("sync", "--output-log", "logs"));
+        Assert.Contains("Cannot open output log:", output.ToString());
+        await _extractor.DidNotReceiveWithAnyArgs().ExtractAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
     public async Task Sync_SkipMetrics_DisablesCaptureAndSnapshotOutput()
     {
         Assert.Equal(0, await Run("sync", "--skip-metrics"));

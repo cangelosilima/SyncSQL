@@ -32,6 +32,10 @@ internal static class SyncCommand
             DefaultValueFactory = _ => SyncSqlPaths.DefaultConfigPath,
         };
         Option<string?> outputRootOption = SyncSqlPaths.OutputRootOption();
+        Option<string?> outputLogOption = new("--output-log")
+        {
+            Description = "Append run logs to this file as well as the terminal. Accepts an absolute or relative file path; missing parent directories are created.",
+        };
         Option<string?> stagingRootOption = new("--staging-root")
         {
             Description = "Directory each extracted object is written to, as <server>/<database>/<schema>/<type>/<object>.sql. Default: uppercase servers.type (MSSQL/ORACLE), or --output-root when supplied.",
@@ -78,6 +82,7 @@ internal static class SyncCommand
         {
             configOption,
             outputRootOption,
+            outputLogOption,
             stagingRootOption,
             metricsSnapshotRootOption,
             skipMetricsOption,
@@ -92,6 +97,25 @@ internal static class SyncCommand
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             ILogger logger = services.GetLogger(nameof(SyncCommand));
+
+            SyncSqlFileLoggerProvider? fileLog = null;
+            try
+            {
+                if (parseResult.GetValue(outputLogOption) is { } logPath)
+                {
+                    fileLog = new(logPath);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                logger.LogError("Cannot open output log: {Message}", ex.Message);
+                return 1;
+            }
+            using SyncSqlFileLoggerProvider? logScope = fileLog;
+            if (fileLog is not null)
+            {
+                services.GetRequiredService<ILoggerFactory>().AddProvider(fileLog);
+            }
 
             string configPath = Path.GetFullPath(parseResult.GetValue(configOption) ?? SyncSqlPaths.DefaultConfigPath);
             logger.LogInformation("Loading config from {Path}", configPath);

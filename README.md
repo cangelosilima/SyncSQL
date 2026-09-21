@@ -199,7 +199,7 @@ local files (`SyncSql.Catalog`'s history mining is a read-only `git log`/
 syncsql validate-config [--config <path>]
 syncsql sync [--config <path>] [--output-root] [--staging-root] [--metrics-snapshot-root] [--skip-metrics]
              [--db-user PREFIX=value] [--db-password PREFIX=value] [--credentials-file <path>]
-             [--server-include/--server-exclude] [--max-parallelism <count>]
+             [--server-include/--server-exclude] [--max-parallelism <count>] [--output-log <file>]
 syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
@@ -227,6 +227,13 @@ per-table metrics queries and does not create a metrics snapshot tree.
 Interactive terminals show live overall and per-server progress, including the
 current extraction activity, object counts, file writes, and elapsed time.
 Redirected output remains plain log lines.
+
+Use `syncsql sync --output-log "./logs/extraction.log"` to also save run logs
+to a file. Relative paths resolve from the current directory; absolute paths
+are accepted. Missing parent directories are created, and logs append to an
+existing file in UTF-8. The file includes warnings, errors, and the final
+summary without terminal colors or progress animations. An unwritable log path
+stops the command before extraction starts.
 
 `sync` extracts (purely local - no git of any kind); `catalog build` and
 `metrics update` are the other two pure, composable steps (rebuild the
