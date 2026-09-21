@@ -77,6 +77,51 @@ public sealed class CommandBehaviorTests : IDisposable
     public async Task Sync_RejectsMalformedCredentials(string option, string value) =>
         Assert.Equal(1, await Run("sync", option, value));
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("TEST")]
+    public async Task Sync_IntegratedSecurity_DoesNotReadPasswordCredentials(string prefix)
+    {
+        WriteConfig(new SyncSqlConfig
+        {
+            Servers = [Server with { IntegratedSecurity = true, CredentialsVariablePrefix = prefix }],
+            Defaults = new ObjectFilterSet { ObjectTypes = ["Tables"] },
+        });
+        _credentials.ClearReceivedCalls();
+
+        Assert.Equal(0, await Run("validate-config"));
+        Assert.Equal(0, await Run("sync"));
+
+        string expectedUsername = Environment.UserName;
+        if (OperatingSystem.IsWindows())
+        {
+            using System.Security.Principal.WindowsIdentity identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            expectedUsername = identity.Name;
+        }
+
+        _credentials.DidNotReceiveWithAnyArgs().Read(default!);
+        await _extractor.Received().ExtractAsync(Arg.Is<ServerConfig>(s => s.IntegratedSecurity),
+            Arg.Any<EffectiveFilters>(),
+            Arg.Is<ExtractionOptions>(o => o.Credentials.Username == expectedUsername && o.Credentials.Password == ""),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IntegratedSecurity_ResolvesPlatformIdentityWithoutReadingPasswordCredentials(bool isWindows)
+    {
+        _credentials.ClearReceivedCalls();
+
+        DatabaseCredentials credentials = SyncCommand.ResolveCredentials(
+            Server with { IntegratedSecurity = true }, _credentials, isWindows);
+
+        Assert.Equal(isWindows ? $"{Environment.UserDomainName}\\{Environment.UserName}" : Environment.UserName,
+            credentials.Username);
+        Assert.Empty(credentials.Password);
+        _credentials.DidNotReceiveWithAnyArgs().Read(default!);
+    }
+
     [Fact]
     public async Task Sync_CombinesExplicitAndFileCredentialsAndWritesMetrics()
     {

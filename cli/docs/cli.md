@@ -31,13 +31,14 @@ section. This keeps the tool a pure, git-agnostic data pipeline you can
 run and test anywhere, with exactly one place deciding how and where
 results get published.
 
-**Nothing about a run comes from the environment.** Every input - the
+**Run settings are explicit.** Every input - the
 config path, the credentials for each server, every output path, and
 every tuning limit - is a command-line parameter with a sensible local
 default, so the same commands work identically on a workstation and in a
 pipeline. The only environment fallback left is the pre-existing
 `<prefix>_DB_USER`/`<prefix>_DB_PASSWORD` credential pair, kept as the
-last-resort layer so an existing CI setup keeps working unchanged.
+last-resort layer so an existing CI setup keeps working unchanged. SQL Server
+Windows authentication can instead use the identity running the CLI.
 
 ## Install
 
@@ -377,7 +378,37 @@ what gets logged.
 
 ## Credentials
 
-Credentials are **never** stored in the config. Each server entry has a
+For SQL Server Windows authentication, set `integratedSecurity` to `true`
+on a server in `config/servers.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "SQLPROD01",
+      "type": "mssql",
+      "host": "SQLPROD01",
+      "integratedSecurity": true,
+      "objectTypes": ["Tables", "Views", "StoredProcedures", "Functions"]
+    }
+  ]
+}
+```
+
+Run `syncsql sync --config ./config/servers.json` from the Windows account
+that has access to the database. No `credentialsVariablePrefix`, `--db-user`,
+`--db-password`, credentials file, or credential environment variables are
+needed for that server. A configured prefix and its username/password are
+ignored when integrated security is enabled. TLS options (`encrypt` and
+`trustServerCertificate`) still apply. Linked-server follow-ups inherit
+integrated security and use the same identity.
+
+`integratedSecurity` defaults to `false`, so existing password authentication
+continues to work. It is supported only for `mssql`; enabling it for Oracle
+fails configuration validation. A run can mix Windows-authenticated SQL Server
+entries with entries using database usernames and passwords.
+
+Credentials are **never** stored in the config. Each password-authenticated server entry has a
 `credentialsVariablePrefix`, and `syncsql sync` resolves that prefix
 against three sources, in order - each half (username, password)
 independently, so a username passed as a parameter can be completed by a

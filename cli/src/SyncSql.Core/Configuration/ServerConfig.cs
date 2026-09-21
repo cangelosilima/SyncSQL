@@ -66,9 +66,13 @@ public sealed record ServerConfig
     [JsonPropertyName("serviceName")]
     public string? ServiceName { get; init; }
 
-    /// <summary>Credentials are read from "&lt;prefix&gt;_DB_USER"/"&lt;prefix&gt;_DB_PASSWORD" environment variables - never stored in config.</summary>
+    /// <summary>MSSQL only - use the current operating system identity instead of a database username and password.</summary>
+    [JsonPropertyName("integratedSecurity")]
+    public bool IntegratedSecurity { get; init; }
+
+    /// <summary>Credentials are read from "&lt;prefix&gt;_DB_USER"/"&lt;prefix&gt;_DB_PASSWORD" environment variables - never stored in config. Optional with integrated security.</summary>
     [JsonPropertyName("credentialsVariablePrefix")]
-    public required string CredentialsVariablePrefix { get; init; }
+    public string CredentialsVariablePrefix { get; init; } = "";
 
     [JsonPropertyName("databases")]
     public NameFilter? Databases { get; init; }

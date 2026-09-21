@@ -31,6 +31,30 @@ public sealed class ExtractorTests
         Assert.False(new SqlConnectionStringBuilder(defaults.ConnectionString).TrustServerCertificate);
     }
 
+    [Theory]
+    [InlineData("host", null, "host,1433")]
+    [InlineData("host\\instance", null, "host\\instance")]
+    [InlineData("host\\instance", 1444, "host\\instance,1444")]
+    public void Connection_IntegratedSecurity_OmitsCredentials(string host, int? port, string expected)
+    {
+        using var connection = MsSqlConnectionFactory.Create(Server with
+        {
+            Host = host,
+            Port = port,
+            IntegratedSecurity = true,
+            Encrypt = false,
+            TrustServerCertificate = true,
+        }, "db", Credentials);
+        var builder = new SqlConnectionStringBuilder(connection.ConnectionString);
+        Assert.True(builder.IntegratedSecurity);
+        Assert.Equal(expected, builder.DataSource);
+        Assert.Equal("db", builder.InitialCatalog);
+        Assert.False(builder.ShouldSerialize("User ID"));
+        Assert.False(builder.ShouldSerialize("Password"));
+        Assert.Equal(SqlConnectionEncryptOption.Optional, builder.Encrypt);
+        Assert.True(builder.TrustServerCertificate);
+    }
+
     private static FakeDatabase Database()
     {
         FakeDatabase db = new();

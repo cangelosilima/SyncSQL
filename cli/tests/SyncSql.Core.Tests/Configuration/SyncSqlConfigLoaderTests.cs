@@ -6,6 +6,30 @@ namespace SyncSql.Core.Tests.Configuration;
 public class SyncSqlConfigLoaderTests
 {
     [Fact]
+    public async Task LoadAsync_IntegratedSecurity_DoesNotRequireCredentialsPrefix()
+    {
+        string path = await WriteTempConfigAsync("""
+            {"servers":[{"name":"SQL","type":"mssql","host":"host","integratedSecurity":true}]}
+            """);
+        SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(path);
+        Assert.True(Assert.Single(config.Servers).IntegratedSecurity);
+        Assert.Empty(config.Servers[0].CredentialsVariablePrefix);
+    }
+
+    [Theory]
+    [InlineData("mssql", "", "credentialsVariablePrefix")]
+    [InlineData("mssql", ",\"integratedSecurity\":false", "credentialsVariablePrefix")]
+    [InlineData("oracle", ",\"serviceName\":\"APP\",\"integratedSecurity\":true", "only MSSQL")]
+    public async Task LoadAsync_InvalidAuthentication_Throws(string engine, string properties, string expected)
+    {
+        string path = await WriteTempConfigAsync($$"""
+            {"servers":[{"name":"DB","type":"{{engine}}","host":"host"{{properties}}}]}
+            """);
+        var error = await Assert.ThrowsAsync<ConfigValidationException>(() => SyncSqlConfigLoader.LoadAsync(path));
+        Assert.Contains(expected, error.Message);
+    }
+
+    [Fact]
     public async Task LoadAsync_MissingFile_Throws()
     {
         await Assert.ThrowsAsync<ConfigValidationException>(

@@ -317,7 +317,12 @@ for the full schema; in short:
 Filtering is regex-based and works at every level mentioned in the
 config: server, database, schema, and individual object name.
 
-Credentials are **never** stored in the config. Each server entry has a
+For SQL Server Windows authentication, set `"integratedSecurity": true` on
+the server entry. The CLI uses the current Windows identity; omit
+`credentialsVariablePrefix` and the database username/password. Linked-server
+follow-ups inherit this setting.
+
+Credentials are **never** stored in the config. Each password-authenticated server entry has a
 `credentialsVariablePrefix`, and `syncsql sync` resolves it from, in order,
 `--db-user`/`--db-password PREFIX=value` parameters, a `--credentials-file`
 JSON file, then the `<prefix>_DB_USER` / `<prefix>_DB_PASSWORD` environment
