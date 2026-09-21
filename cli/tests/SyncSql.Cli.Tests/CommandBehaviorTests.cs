@@ -92,11 +92,34 @@ public sealed class CommandBehaviorTests : IDisposable
         Assert.Equal(0, await Run("validate-config"));
         Assert.Equal(0, await Run("sync"));
 
+        string expectedUsername = Environment.UserName;
+        if (OperatingSystem.IsWindows())
+        {
+            using System.Security.Principal.WindowsIdentity identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            expectedUsername = identity.Name;
+        }
+
         _credentials.DidNotReceiveWithAnyArgs().Read(default!);
         await _extractor.Received().ExtractAsync(Arg.Is<ServerConfig>(s => s.IntegratedSecurity),
             Arg.Any<EffectiveFilters>(),
-            Arg.Is<ExtractionOptions>(o => !string.IsNullOrEmpty(o.Credentials.Username) && o.Credentials.Password == ""),
+            Arg.Is<ExtractionOptions>(o => o.Credentials.Username == expectedUsername && o.Credentials.Password == ""),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IntegratedSecurity_ResolvesPlatformIdentityWithoutReadingPasswordCredentials(bool isWindows)
+    {
+        _credentials.ClearReceivedCalls();
+
+        DatabaseCredentials credentials = SyncCommand.ResolveCredentials(
+            Server with { IntegratedSecurity = true }, _credentials, isWindows);
+
+        Assert.Equal(isWindows ? $"{Environment.UserDomainName}\\{Environment.UserName}" : Environment.UserName,
+            credentials.Username);
+        Assert.Empty(credentials.Password);
+        _credentials.DidNotReceiveWithAnyArgs().Read(default!);
     }
 
     [Fact]

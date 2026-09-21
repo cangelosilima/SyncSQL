@@ -218,7 +218,7 @@ internal static class SyncCommand
                     DatabaseCredentials credentials;
                     try
                     {
-                        credentials = ResolveCredentials(server, credentialProvider);
+                        credentials = ResolveCredentials(server, credentialProvider, OperatingSystem.IsWindows());
                     }
                     catch (InvalidOperationException ex)
                     {
@@ -369,22 +369,19 @@ internal static class SyncCommand
 
     private sealed record ServerExtractionResult(int FileCount, IReadOnlyList<DiscoveredLinkedServer> LinkedServers, bool Failed, bool Partial = false);
 
-    private static DatabaseCredentials ResolveCredentials(ServerConfig server, ICredentialProvider provider)
+    internal static DatabaseCredentials ResolveCredentials(ServerConfig server, ICredentialProvider provider, bool isWindows)
     {
         if (!server.IntegratedSecurity)
         {
             return provider.Resolve(server.CredentialsVariablePrefix);
         }
 
-        // Retain the identity name for linked-server matching; SqlClient authenticates with
-        // the operating system identity and receives neither a username nor a password.
-        if (OperatingSystem.IsWindows())
-        {
-            using System.Security.Principal.WindowsIdentity identity = System.Security.Principal.WindowsIdentity.GetCurrent();
-            return new DatabaseCredentials(identity.Name, "");
-        }
-
-        return new DatabaseCredentials(Environment.UserName, "");
+        // Environment resolves the current OS account. Keep Windows domain qualification
+        // for linked-server login matching; SqlClient itself uses the OS identity token.
+        string username = isWindows
+            ? $"{Environment.UserDomainName}\\{Environment.UserName}"
+            : Environment.UserName;
+        return new DatabaseCredentials(username, "");
     }
 
     /// <summary>
