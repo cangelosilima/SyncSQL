@@ -14,12 +14,17 @@ internal sealed class FakeOracleDatabase : DbConnection
     public Func<string, IReadOnlyDictionary<string, object>, CancellationToken, Task<object?>>? ExecuteAsync { get; set; }
     public List<string> Queries { get; } = [];
     public bool WasDisposed { get; private set; }
+    public Exception? OpenFailure { get; init; }
     [AllowNull] public override string ConnectionString { get; set; } = "";
     public override string Database => "APP";
     public override string DataSource => "fake";
     public override string ServerVersion => "23";
     public override ConnectionState State => _state;
-    public override void Open() => _state = ConnectionState.Open;
+    public override void Open()
+    {
+        if (OpenFailure is { } failure) { throw failure; }
+        _state = ConnectionState.Open;
+    }
     public override void Close() => _state = ConnectionState.Closed;
     public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();

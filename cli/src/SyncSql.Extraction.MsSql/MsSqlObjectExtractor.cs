@@ -120,7 +120,7 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
             {
                 await using DbConnection connection = await OpenAsync(server, database, options.Credentials, workerToken);
                 await ExtractDatabaseAsync(connection, server, database, filters,
-                    options with { WorkContext = context, Progress = databaseProgress }, databaseObjects, databaseMetrics);
+                    options with { WorkContext = context, Progress = options.Progress is null ? null : databaseProgress }, databaseObjects, databaseMetrics);
                 workerToken.ThrowIfCancellationRequested();
             }
             catch (Exception ex) when (ex is not OperationCanceledException && !workerToken.IsCancellationRequested)
