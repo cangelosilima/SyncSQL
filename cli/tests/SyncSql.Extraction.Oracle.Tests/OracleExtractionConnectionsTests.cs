@@ -15,32 +15,50 @@ public sealed class OracleExtractionConnectionsTests
             OpenFailure = failOpen ? failure : null,
             Execute = (_, _) => throw failure,
         };
-        using FakeOracleDatabase healthy = new() { Execute = (_, _) => null };
+        using FakeOracleDatabase first = new() { Execute = (_, _) => null };
+        using FakeOracleDatabase second = new() { Execute = (_, _) => null };
+        FakeOracleDatabase[] sessions = [failed, first, second];
         int created = 0, executed = 0;
-        await using (OracleExtractionConnections pool = new(() => ++created == 1 ? failed : healthy))
+        OracleExtractionConnections connections = new(() => sessions[created++]);
+        OracleException actual = await Assert.ThrowsAsync<OracleException>(() => connections.UseAsync(_ =>
         {
-            OracleException actual = await Assert.ThrowsAsync<OracleException>(() => pool.UseAsync(_ =>
-            {
-                executed++;
-                return Task.FromResult(0);
-            }, CancellationToken.None));
-            Assert.Same(failure, actual);
-            Assert.True(failed.WasDisposed);
-            Assert.Equal(0, executed);
+            executed++;
+            return Task.FromResult(0);
+        }, CancellationToken.None));
+        Assert.Same(failure, actual);
+        Assert.True(failed.WasDisposed);
+        Assert.Equal(0, executed);
 
-            for (int i = 0; i < 2; i++)
+        for (int i = 1; i < sessions.Length; i++)
+        {
+            int result = await connections.UseAsync(connection =>
             {
-                int result = await pool.UseAsync(connection =>
-                {
-                    Assert.Same(healthy, connection);
-                    return Task.FromResult(++executed);
-                }, CancellationToken.None);
-                Assert.Equal(i + 1, result);
-            }
-            Assert.Equal(2, created);
-            Assert.Single(healthy.Queries);
-            Assert.False(healthy.WasDisposed);
+                Assert.Same(sessions[i], connection);
+                Assert.False(sessions[i].WasDisposed);
+                return Task.FromResult(++executed);
+            }, CancellationToken.None);
+            Assert.Equal(i, result);
+            Assert.Single(sessions[i].Queries);
+            Assert.True(sessions[i].WasDisposed);
         }
-        Assert.True(healthy.WasDisposed);
+        Assert.Equal(3, created);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WorkFailureOrCancellationDisposesLeaseBeforeReturning(bool cancel)
+    {
+        using CancellationTokenSource cancellation = new();
+        using FakeOracleDatabase session = new() { Execute = (_, _) => null };
+        OracleExtractionConnections connections = new(() => session);
+        Exception failure = cancel ? new OperationCanceledException(cancellation.Token) : FakeOracleDatabase.Error(3113);
+        Exception? actual = await Record.ExceptionAsync(() => connections.UseAsync(_ =>
+        {
+            if (cancel) { cancellation.Cancel(); }
+            return Task.FromException<int>(failure);
+        }, cancellation.Token));
+        Assert.Same(failure, actual);
+        Assert.True(session.WasDisposed);
     }
 }

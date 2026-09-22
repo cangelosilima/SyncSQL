@@ -202,7 +202,7 @@ public sealed class OracleExtractorTests
     [InlineData(null, 4, 7)]
     [InlineData(1, 1, 1)]
     [InlineData(2, 2, 7)]
-    public async Task Extract_SchemasAndObjectsShareTheBudgetAndReuseExclusiveSessions(int? limit, int expectedConcurrency, int ownerCount)
+    public async Task Extract_SchemasAndObjectsShareTheBudgetWithExclusiveSessionLeases(int? limit, int expectedConcurrency, int ownerCount)
     {
         string[] owners = [.. Enumerable.Range(0, ownerCount).Select(i => $"OWNER{i}")];
         System.Collections.Concurrent.ConcurrentBag<FakeOracleDatabase> sessions = [];
@@ -258,7 +258,7 @@ public sealed class OracleExtractorTests
         {
             await slotsFilled.Task.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal(expectedConcurrency, Volatile.Read(ref started));
-            Assert.Equal(expectedConcurrency, sessions.Count);
+            Assert.Equal(expectedConcurrency, sessions.Count(session => !session.WasDisposed));
         }
         finally
         {
@@ -283,26 +283,28 @@ public sealed class OracleExtractorTests
         Assert.Equal(ownerCount == 1 ? 0 : 1, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllDatabaseLinks)));
         Assert.Equal(ownerCount, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllObjectGrants)));
         Assert.Equal(ownerCount, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.ColumnList)));
-        Assert.InRange(sessions.Count, 1, expectedConcurrency);
+        Assert.Equal(1 + ownerCount + expectedObjects, sessions.Count);
         Assert.All(sessions, session => Assert.True(session.WasDisposed));
     }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Extract_SequentialWorkReusesDiscoverySession(bool linksOnly)
+    public async Task Extract_SequentialWorkReleasesDiscoveryBeforeOpeningObjectConnections(bool linksOnly)
     {
-        int created = 0;
-        using FakeOracleDatabase db = new() { Execute = Respond };
+        List<FakeOracleDatabase> sessions = [];
         OracleObjectExtractor extractor = new(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) =>
         {
-            Assert.Equal(1, ++created);
+            Assert.All(sessions, session => Assert.True(session.WasDisposed));
+            FakeOracleDatabase db = new() { Execute = Respond };
+            sessions.Add(db);
             return db;
         });
         ServerConfig server = Server with { ObjectTypes = linksOnly ? ["DatabaseLinks"] : [] };
         ExtractionOutcome result = await extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
             new ExtractionOptions { Credentials = Credentials, MaxParallelism = 1 }, CancellationToken.None);
         Assert.Equal(linksOnly ? 4 : 0, result.Objects.Count);
-        Assert.True(db.WasDisposed);
+        Assert.Equal(linksOnly ? 5 : 1, sessions.Count);
+        Assert.All(sessions, session => Assert.True(session.WasDisposed));
     }
 
     [Theory]
@@ -360,7 +362,7 @@ public sealed class OracleExtractorTests
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
             }
             Assert.Equal(2, started);
-            Assert.Equal(2, created);
+            Assert.Equal(3, created);
             Assert.All(connections, db => Assert.True(db.WasDisposed));
         }
         finally
@@ -370,5 +372,64 @@ public sealed class OracleExtractorTests
             catch (OperationCanceledException) { }
             catch (OracleException) when (fail) { }
         }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public async Task Extract_QueuedServersAndSchemasDoNotRetainConnectionsOutsideSharedBudget(int limit)
+    {
+        // Model repeated server entries sharing an Oracle pool whose capacity equals the budget.
+        // Retaining any idle discovery/metadata session can strand all slots in OpenAsync.
+        using SemaphoreSlim poolCapacity = new(limit);
+        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(10));
+        System.Collections.Concurrent.ConcurrentBag<FakeOracleDatabase> sessions = [];
+        int open = 0, peak = 0;
+        object gate = new();
+        OracleObjectExtractor extractor = new(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) =>
+        {
+            bool leased = false;
+            FakeOracleDatabase session = new()
+            {
+                BeforeOpenAsync = async token =>
+                {
+                    await poolCapacity.WaitAsync(token);
+                    leased = true;
+                    lock (gate) { peak = Math.Max(peak, ++open); }
+                },
+                OnDispose = () =>
+                {
+                    if (!leased) { return; }
+                    lock (gate) { open--; }
+                    poolCapacity.Release();
+                    leased = false;
+                },
+                Execute = (sql, p) => sql == OracleQueries.Schemas
+                    ? FakeOracleDatabase.Rows(new { OWNER = "APP" }, new { OWNER = "AUX" }) : Respond(sql, p),
+            };
+            sessions.Add(session);
+            return session;
+        });
+        ServerConfig[] servers = [.. Enumerable.Range(0, 12).Select(i => Server with
+        {
+            Name = $"ORA{i}", ObjectTypes = ["Tables"], ObjectNames = new NameFilter { Exclude = ["^skip$"] },
+        })];
+        ExtractionWorkScheduler scheduler = new(limit);
+        ExtractionOutcome[] results = await scheduler.RunAsync(servers.Select(server =>
+            (DatabaseEngine.Oracle, (Func<ExtractionWorkContext, Task<ExtractionOutcome>>)(context =>
+                extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
+                    new ExtractionOptions { Credentials = Credentials, WorkContext = context, MaxParallelism = limit },
+                    context.CancellationToken)))), cancellation.Token);
+
+        Assert.Equal(servers.Length, results.Length);
+        Assert.All(results, result =>
+        {
+            Assert.Equal(4, result.Objects.Count);
+            Assert.Equal(4, result.MetricsSnapshots.Count);
+        });
+        Assert.InRange(peak, 1, limit);
+        Assert.Equal(0, open);
+        Assert.Equal(limit, poolCapacity.CurrentCount);
+        Assert.All(sessions, session => Assert.True(session.WasDisposed));
     }
 }

@@ -15,6 +15,8 @@ internal sealed class FakeOracleDatabase : DbConnection
     public List<string> Queries { get; } = [];
     public bool WasDisposed { get; private set; }
     public Exception? OpenFailure { get; init; }
+    public Func<CancellationToken, Task>? BeforeOpenAsync { get; init; }
+    public Action? OnDispose { get; init; }
     [AllowNull] public override string ConnectionString { get; set; } = "";
     public override string Database => "APP";
     public override string DataSource => "fake";
@@ -25,11 +27,22 @@ internal sealed class FakeOracleDatabase : DbConnection
         if (OpenFailure is { } failure) { throw failure; }
         _state = ConnectionState.Open;
     }
+    public override async Task OpenAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (BeforeOpenAsync is { } beforeOpen) { await beforeOpen(cancellationToken); }
+        Open();
+    }
     public override void Close() => _state = ConnectionState.Closed;
     public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
     protected override DbCommand CreateDbCommand() => new FakeCommand(this);
-    protected override void Dispose(bool disposing) { WasDisposed = true; base.Dispose(disposing); }
+    protected override void Dispose(bool disposing)
+    {
+        if (!WasDisposed) { OnDispose?.Invoke(); }
+        WasDisposed = true;
+        base.Dispose(disposing);
+    }
 
     public static OracleException Error(int number) => (OracleException)typeof(OracleException)
         .GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null, [typeof(int), typeof(string), typeof(string), typeof(string), typeof(int)], null)!
