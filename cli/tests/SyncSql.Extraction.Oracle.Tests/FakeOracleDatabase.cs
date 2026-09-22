@@ -11,14 +11,20 @@ internal sealed class FakeOracleDatabase : DbConnection
 {
     private ConnectionState _state;
     public Func<string, IReadOnlyDictionary<string, object>, object?> Execute { get; set; } = (_, _) => throw new InvalidOperationException("Unexpected query");
+    public Func<string, IReadOnlyDictionary<string, object>, CancellationToken, Task<object?>>? ExecuteAsync { get; set; }
     public List<string> Queries { get; } = [];
     public bool WasDisposed { get; private set; }
+    public Exception? OpenFailure { get; init; }
     [AllowNull] public override string ConnectionString { get; set; } = "";
     public override string Database => "APP";
     public override string DataSource => "fake";
     public override string ServerVersion => "23";
     public override ConnectionState State => _state;
-    public override void Open() => _state = ConnectionState.Open;
+    public override void Open()
+    {
+        if (OpenFailure is { } failure) { throw failure; }
+        _state = ConnectionState.Open;
+    }
     public override void Close() => _state = ConnectionState.Closed;
     public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
@@ -60,6 +66,21 @@ internal sealed class FakeOracleDatabase : DbConnection
         public override int ExecuteNonQuery() { Run(); return 0; }
         public override object? ExecuteScalar() => Run();
         protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => ((DataTable)Run()!).CreateDataReader();
+        private Task<object?> RunAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (database.ExecuteAsync is not { } execute) { return Task.FromResult(Run()); }
+            database.Queries.Add(CommandText);
+            return execute(CommandText, _parameters.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName, p => p.Value!), cancellationToken);
+        }
+        public override Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken) => RunAsync(cancellationToken);
+        public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
+        {
+            await RunAsync(cancellationToken);
+            return 0;
+        }
+        protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken) =>
+            ((DataTable)(await RunAsync(cancellationToken))!).CreateDataReader();
         protected override void Dispose(bool disposing) { if (disposing) { _parameters.Dispose(); } base.Dispose(disposing); }
     }
 }

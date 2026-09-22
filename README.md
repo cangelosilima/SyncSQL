@@ -218,10 +218,17 @@ to an engine folder named after uppercase `servers.type` (`./MSSQL` or
 `./ORACLE`). `--output-root` overrides this location. Catalog and metrics
 commands visit both existing engine folders by default; T-SQL lint defaults to `./MSSQL`.
 
-`sync` extracts up to four servers concurrently by default. Set
-`--max-parallelism <count>` to tune this limit, or `--max-parallelism 1`
-for sequential extraction. Linked-server discovery runs in depth rounds,
-with the same concurrency limit in each round.
+`sync` uses one shared `--max-parallelism <count>` budget (default `4`) across
+all engines. Runnable engines share slots equally, with any remainder assigned
+in rotation. When an engine has less runnable work or finishes, its slots go to
+the others. Running queries finish before their slots are reassigned.
+SQL Server work splits into databases; Oracle work splits into schemas and then
+individual objects, including packages, package bodies, and database links.
+One Oracle server with one schema can therefore use all four slots for object
+DDL. Oracle sessions are reused exclusively by one job at a time, and schema
+metadata is loaded once. Set `--max-parallelism 1` for sequential extraction
+across all engines. Linked-server discovery still runs in depth rounds using
+the same shared budget.
 Use `--skip-metrics` when only object definitions are needed; it skips the
 per-table metrics queries and does not create a metrics snapshot tree.
 Interactive terminals show live overall and per-server progress, including the

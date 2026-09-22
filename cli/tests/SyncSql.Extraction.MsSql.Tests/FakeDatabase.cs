@@ -13,6 +13,7 @@ internal sealed class FakeDatabase : DbConnection
     public HashSet<string> FailQueries { get; } = new(StringComparer.Ordinal);
     public List<string> Queries { get; } = [];
     public bool FailOpen { get; set; }
+    public Func<CancellationToken, Task>? BeforeOpenAsync { get; set; }
     public bool WasDisposed { get; private set; }
     [AllowNull] public override string ConnectionString { get; set; } = "";
     public override string Database => "db";
@@ -23,6 +24,12 @@ internal sealed class FakeDatabase : DbConnection
     {
         if (FailOpen) { throw new FakeDatabaseException(); }
         _state = ConnectionState.Open;
+    }
+    public override async Task OpenAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (BeforeOpenAsync is { } beforeOpen) { await beforeOpen(cancellationToken); }
+        Open();
     }
     public override void Close() => _state = ConnectionState.Closed;
     public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();

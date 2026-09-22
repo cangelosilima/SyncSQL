@@ -52,6 +52,12 @@ public sealed record ExtractionOptions
 {
     public required DatabaseCredentials Credentials { get; init; }
 
+    /// <summary>Shared extraction budget, or the local budget when an extractor is called directly.</summary>
+    public int MaxParallelism { get; init; } = 4;
+
+    /// <summary>Current scheduler slot. Extractors may replace it with database/schema/object jobs.</summary>
+    public ExtractionWorkContext? WorkContext { get; init; }
+
     /// <summary>Optional synchronous progress observer; totals are supplied only when known.</summary>
     public IProgress<ExtractionProgress>? Progress { get; init; }
 

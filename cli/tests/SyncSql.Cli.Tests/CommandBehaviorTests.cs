@@ -392,6 +392,77 @@ public sealed class CommandBehaviorTests : IDisposable
         await _extractor.DidNotReceiveWithAnyArgs().ExtractAsync(default!, default!, default!, default);
     }
 
+    [Theory]
+    [InlineData(null, 4)]
+    [InlineData("2", 2)]
+    public async Task Sync_ForwardsSchemaParallelism(string? limit, int expected)
+    {
+        WriteConfig(new SyncSqlConfig
+        {
+            Servers = [Server with { Type = DatabaseEngine.Oracle, ServiceName = "APP" }],
+            Defaults = new ObjectFilterSet { ObjectTypes = ["Tables"] },
+        });
+        Assert.Equal(0, limit is null ? await Run("sync") : await Run("sync", "--max-parallelism", limit));
+        await _extractor.Received(1).ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(),
+            Arg.Is<ExtractionOptions>(options => options.MaxParallelism == expected), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(DatabaseEngine.MsSql)]
+    [InlineData(DatabaseEngine.Oracle)]
+    public async Task Sync_SharesOneBudgetAndTransfersSlotsBetweenEngines(DatabaseEngine finishingEngine)
+    {
+        ServerConfig[] servers = [.. new[] { DatabaseEngine.MsSql, DatabaseEngine.Oracle }.SelectMany(engine =>
+            Enumerable.Range(0, engine == finishingEngine ? 2 : 6).Select(i => Server with
+            {
+                Name = $"{engine}{i}", Type = engine, ServiceName = engine == DatabaseEngine.Oracle ? "APP" : null,
+            }))];
+        WriteConfig(new SyncSqlConfig { Servers = servers, Defaults = new ObjectFilterSet { ObjectTypes = ["Tables"] } });
+        TaskCompletionSource initial = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource transferred = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource finishFirst = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource finishRest = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        object gate = new();
+        int shortActive = 0, longActive = 0, peak = 0, started = 0;
+        _extractor.ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                bool shortJob = call.Arg<ServerConfig>().Type == finishingEngine;
+                Assert.Equal(4, call.Arg<ExtractionOptions>().MaxParallelism);
+                Assert.NotNull(call.Arg<ExtractionOptions>().WorkContext);
+                lock (gate)
+                {
+                    started++;
+                    if (shortJob) { shortActive++; } else { longActive++; }
+                    peak = Math.Max(peak, shortActive + longActive);
+                    if (shortActive == 2 && longActive == 2) { initial.TrySetResult(); }
+                    if (longActive == 4) { transferred.TrySetResult(); }
+                }
+                try
+                {
+                    await (shortJob ? finishFirst.Task : finishRest.Task).WaitAsync(call.Arg<CancellationToken>());
+                    return new ExtractionOutcome { Objects = [], MetricsSnapshots = new Dictionary<string, MetricsSnapshot>() };
+                }
+                finally { lock (gate) { if (shortJob) { shortActive--; } else { longActive--; } } }
+            });
+        Task<int> run = Run("sync", "--max-parallelism", "4");
+        try
+        {
+            await initial.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            lock (gate) { Assert.Equal(2, shortActive); Assert.Equal(2, longActive); }
+            finishFirst.SetResult();
+            await transferred.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            lock (gate) { Assert.Equal(0, shortActive); Assert.Equal(4, longActive); }
+        }
+        finally
+        {
+            finishFirst.TrySetResult(); finishRest.TrySetResult();
+            await run.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        Assert.Equal(0, await run);
+        Assert.Equal(4, peak);
+        Assert.Equal(servers.Length, started);
+    }
     private sealed class WaitingExtractor : IDatabaseObjectExtractor
     {
         public DatabaseEngine Engine => DatabaseEngine.MsSql;
