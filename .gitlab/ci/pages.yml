@@ -4,7 +4,7 @@
 pages:
   extends: .sync_rules
   stage: pages
-  image: node:20-alpine
+  image: node:22-alpine
   dependencies:
     - sync-database-objects
   cache:

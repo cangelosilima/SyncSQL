@@ -6,11 +6,11 @@ import { createInterface } from 'node:readline'
 import { compose } from 'node:stream'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import streamJson from 'stream-json'
-import pick from 'stream-json/filters/Pick.js'
-import ignore from 'stream-json/filters/Ignore.js'
-import streamArray from 'stream-json/streamers/StreamArray.js'
-import streamObject from 'stream-json/streamers/StreamObject.js'
+import { parser } from 'stream-json'
+import { pick } from 'stream-json/filters/pick.js'
+import { ignore } from 'stream-json/filters/ignore.js'
+import { streamArray } from 'stream-json/streamers/stream-array.js'
+import { streamObject } from 'stream-json/streamers/stream-object.js'
 
 const hash = (value) => createHash('sha256').update(value).digest('hex')
 const partPath = /^_catalog\/[a-f0-9]{64}\.json(?:\.gz)?$/
@@ -18,9 +18,9 @@ const partPath = /^_catalog\/[a-f0-9]{64}\.json(?:\.gz)?$/
 async function* items(input, field) {
   const stream = compose(
     createReadStream(input),
-    streamJson.parser({ streamValues: false }),
-    pick.pick({ filter: field }),
-    streamArray.streamArray(),
+    parser.asStream({ streamValues: false }),
+    pick.asStream({ filter: field }),
+    streamArray.asStream(),
   )
   for await (const { value } of stream) yield value
 }
@@ -29,9 +29,9 @@ async function metadata(input) {
   const result = {}
   const stream = compose(
     createReadStream(input),
-    streamJson.parser({ streamValues: false }),
-    ignore.ignore({ filter: /^(nodes|edges)$/ }),
-    streamObject.streamObject(),
+    parser.asStream({ streamValues: false }),
+    ignore.asStream({ filter: /^(nodes|edges)$/ }),
+    streamObject.asStream(),
   )
   for await (const { key, value } of stream) result[key] = value
   return result

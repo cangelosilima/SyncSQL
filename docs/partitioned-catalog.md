@@ -9,6 +9,8 @@ of the upstream catalog committed by the extraction pipeline.
 
 ## Build and preview
 
+Requires Node.js 22 or newer.
+
 ```sh
 cd site
 npm ci

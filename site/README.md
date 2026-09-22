@@ -15,6 +15,8 @@ permissions, not effective authorization through remote login mappings.
 
 ## Run locally
 
+Use Node.js 22 or newer for the site build and catalog publisher.
+
 ```sh
 cd site
 npm ci

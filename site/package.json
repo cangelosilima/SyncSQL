@@ -52,7 +52,7 @@
     "globals": "^16.5.0",
     "jsdom": "^26.1.0",
     "prettier": "^3.9.6",
-    "stream-json": "^1.9.1",
+    "stream-json": "^3.7.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.70.0",
     "vite": "^6.0.5",
