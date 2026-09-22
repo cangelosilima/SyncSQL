@@ -4,7 +4,7 @@
 pages:
   extends: .sync_rules
   stage: pages
-  image: node:20-alpine
+  image: node:22-alpine
   dependencies:
     - sync-database-objects
   cache:
@@ -25,7 +25,12 @@ pages:
     # A ${PATH_PREFIX:-objects} style default would be wrong twice over here: it
     # fires on an empty value as well as an unset one, and the default is no
     # longer "objects".
-    - cp "${PATH_PREFIX:+$PATH_PREFIX/}${CATALOG_FILE_NAME:-catalog.json}" site/public/data/catalog.json
+    - catalog_input="${PATH_PREFIX:+$PATH_PREFIX/}${CATALOG_FILE_NAME:-catalog.json}"
+    - cp "$catalog_input" site/public/data/catalog.json
+    # A pre-partitioned input needs its content-addressed files as well. Legacy
+    # JSON is partitioned by npm run build using the same Pages output format.
+    - catalog_dir=$(dirname "$catalog_input")
+    - if [ -d "$catalog_dir/_catalog" ]; then cp -R "$catalog_dir/_catalog" site/public/data/; fi
     - cd site
     - npm ci
     - npm test

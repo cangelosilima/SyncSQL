@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
-import FilterBar, { useFilteredNodes } from '../components/FilterBar'
+import FilterBar from '../components/FilterBar'
+import { useCatalogFilter } from '../lib/useCatalogData'
+import CatalogLoadStatus from '../components/CatalogLoadStatus'
 import TypeBadge from '../components/TypeBadge'
 import CsvExportButton from '../components/CsvExportButton'
 import HelpButton from '../components/HelpButton'
@@ -40,7 +42,7 @@ export default function Explorer() {
   const [sortDir, setSortDir] = useState<1 | -1>(1)
 
   const nodes = index?.catalog.nodes ?? []
-  const filtered = useFilteredNodes(nodes, tokens)
+  const { nodes: filtered, loading, error } = useCatalogFilter(index, tokens)
 
   const sorted = useMemo(() => {
     const copy = [...filtered]
@@ -90,7 +92,7 @@ export default function Explorer() {
         />
       </div>
       <p className="muted" role="status" aria-live="polite">
-        {filtered.length} of {nodes.length} object(s) match
+        {loading ? 'Searching' : error ? 'Search unavailable' : `${filtered.length} of ${nodes.length} object(s) match`}
         {tokens.length > 0 ? ' the current filter' : ''}.
       </p>
       <FilterBar
@@ -102,6 +104,7 @@ export default function Explorer() {
       <p className="muted">
         Choose an attribute to narrow your search, or type text and press Enter to search object details and DDL.
       </p>
+      <CatalogLoadStatus loading={loading} error={error} />
 
       {sorted.length > ROW_CAP && (
         <p className="lineage-warning" style={{ marginTop: '0.75rem' }}>
@@ -171,7 +174,7 @@ export default function Explorer() {
             ))}
           </tbody>
         </table>
-        {visible.length === 0 && (
+        {!loading && !error && visible.length === 0 && (
           <p className="sidebar-empty" style={{ padding: '1rem' }}>
             No objects match this filter.
           </p>

@@ -183,7 +183,9 @@ function planColumnReference(query: string, nodes: CatalogNode[]): FilterPlanV1 
         ? 'More than one object matches. Qualify the object as server.database.schema.object.'
         : 'The object was not found. Use its catalog name, optionally qualified as server.database.schema.object.',
     )
-  const columns = candidates[0].columns.filter((column) => column.name.toLowerCase() === columnName.toLowerCase())
+  const columns = (candidates[0].columnNames ?? candidates[0].columns.map((column) => column.name)).filter(
+    (name) => name.toLowerCase() === columnName.toLowerCase(),
+  )
   if (columns.length !== 1)
     return reject(
       'The column could not be uniquely resolved in the catalog for this object. Check its Columns workspace.',
@@ -194,7 +196,7 @@ function planColumnReference(query: string, nodes: CatalogNode[]): FilterPlanV1 
     contentQuery: '',
     confidence: 'high',
     unsupportedFragments: [],
-    columnReference: { objectId: candidates[0].id, column: columns[0].name },
+    columnReference: { objectId: candidates[0].id, column: columns[0] },
     warnings: [
       'Column references use recorded dependency evidence, not a DDL phrase search. Detection is best-effort and can miss SELECT *, computed expressions and dynamic SQL; this is not a complete list of all references.',
     ],

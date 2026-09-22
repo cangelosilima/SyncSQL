@@ -1382,6 +1382,12 @@ npm run test    # Vitest, watch mode
 has something to render before any pipeline has actually run; replace it
 with a real one (see below) to preview actual data.
 
+Production builds partition that input into compressed static summaries,
+details, SQL, permissions and edges. GitHub/GitLab Pages continue serving only
+static files. Use `npm run build` followed by `npm run preview` to validate the
+published format; see [partitioned catalog architecture](docs/partitioned-catalog.md)
+for deployment, compatibility and scale limits.
+
 The site uses Transformers.js 3.8.1 until its newer releases stop depending on
 the unpatched `adm-zip` extraction vulnerability
 ([GHSA-vwc7-r8mq-g2x9](https://github.com/advisories/GHSA-vwc7-r8mq-g2x9)).

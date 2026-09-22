@@ -67,6 +67,14 @@ export interface CatalogObjectVersion {
 }
 
 export interface CatalogNode {
+  /** Precomputed counts available without downloading details or lineage. */
+  dependsOnCount?: number
+  usedByCount?: number
+  linkTargetEngines?: string[]
+  columnNames?: string[]
+  columnCount?: number
+  grantCount?: number
+  granteeNames?: string[]
   id: string
   server: string
   /** Configured server name when the object was exported through an alias-based path. */
@@ -173,6 +181,10 @@ export interface CatalogLinkedServerReference {
 }
 
 export interface Catalog {
+  /** Totals from a partitioned snapshot, independent of currently loaded edges. */
+  edgeCount?: number
+  orphanedReferenceCount?: number
+  topReferencedTables?: { id: string; directUsers: number; indirectUsers: number }[]
   /** Present only for the explicitly published synthetic benchmark snapshot. */
   example?: {
     scenario: string

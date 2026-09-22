@@ -148,6 +148,10 @@ export default function CatalogSidebar({
     }
     const result = new Map<string, string>()
     for (const node of nodes.filter(isLinkNode)) {
+      if (node.linkTargetEngines?.length) {
+        result.set(node.id, node.linkTargetEngines.map(engineLabel).sort().join(', '))
+        continue
+      }
       // A link's own engine belongs to its host, not its destination.
       const engines = targets.get(node.id) ?? serverEngines.get(node.name.toLowerCase())
       if (engines?.size) result.set(node.id, [...engines].sort().join(', '))

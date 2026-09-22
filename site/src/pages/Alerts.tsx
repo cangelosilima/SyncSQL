@@ -1,12 +1,15 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
+import { useCatalogSelection } from '../lib/useCatalogData'
+import CatalogLoadStatus from '../components/CatalogLoadStatus'
 import { detectMetricAnomalies } from '../lib/anomalies'
 import { qualifiedRefName } from '../lib/catalog'
 import HelpButton from '../components/HelpButton'
 
 export default function Alerts() {
-  const { index } = useCatalog()
+  const { index: baseIndex } = useCatalog()
+  const { index, loading, error } = useCatalogSelection(baseIndex, { alerts: true })
   const [params, setParams] = useSearchParams()
   const category = params.get('category') ?? 'all'
   const query = params.get('q') ?? ''
@@ -54,6 +57,12 @@ export default function Alerts() {
       ),
     [alerts, category, query],
   )
+  if (loading || error)
+    return (
+      <div className="page">
+        <CatalogLoadStatus loading={loading} error={error} />
+      </div>
+    )
   if (!index) return null
   function update(key: string, value: string) {
     const next = new URLSearchParams(params)

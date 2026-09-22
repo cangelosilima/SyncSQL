@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
+import { useCatalogSelection } from '../lib/useCatalogData'
+import CatalogLoadStatus from '../components/CatalogLoadStatus'
 import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
 import LineageGraph from '../components/LineageGraph'
@@ -36,7 +38,8 @@ type Workspace = (typeof WORKSPACES)[number]
 export default function ObjectPage() {
   const params = useParams()
   const id = params['*'] ?? ''
-  const { index } = useCatalog()
+  const { index: baseIndex } = useCatalog()
+  const { index, loading, error } = useCatalogSelection(baseIndex, { objectId: id, focus: id })
 
   const node = index?.byId.get(id)
   const outgoing = index?.outgoing.get(id) ?? []
@@ -98,6 +101,12 @@ export default function ObjectPage() {
     return getDirectionalNeighborhood(index, id, 1, 1)
   }, [index, id])
 
+  if (loading || error)
+    return (
+      <div className="page">
+        <CatalogLoadStatus loading={loading} error={error} />
+      </div>
+    )
   if (!index) return null
 
   if (!node) {

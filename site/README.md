@@ -15,6 +15,8 @@ permissions, not effective authorization through remote login mappings.
 
 ## Run locally
 
+Use Node.js 22 or newer for the site build and catalog publisher.
+
 ```sh
 cd site
 npm ci
@@ -41,6 +43,12 @@ Only the catalog and safe example metadata are copied; connection files, databas
 contents, raw logs and Oracle installation media are not part of the site.
 
 ## Publish
+
+`npm run build` converts the input catalog into compressed summary, detail,
+search, permission and edge partitions in `dist/data`. Startup loads summaries;
+object details and lineage load on demand. Preview this output with
+`npm run preview`. The CLI's original JSON format remains supported.
+See [partitioned catalog deployment and limits](../docs/partitioned-catalog.md).
 
 [Site - deploy catalog demo](../.github/workflows/site-deploy.yml) tests and builds the
 committed snapshot on GitHub-hosted Linux, including the vendored browser AI model.

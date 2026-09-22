@@ -84,7 +84,9 @@ export function getSuggestedValues(
   const scanCap = limit * 20
   for (const node of nodes) {
     const values =
-      attribute === 'grantee' ? node.grants.map((grant) => grant.grantee) : [getFieldValue(node, attribute)]
+      attribute === 'grantee'
+        ? (node.granteeNames ?? node.grants.map((grant) => grant.grantee))
+        : [getFieldValue(node, attribute)]
     for (const value of values) {
       if (value && (!needle || value.toLowerCase().includes(needle))) set.add(value)
       if (set.size >= scanCap) break
@@ -95,7 +97,7 @@ export function getSuggestedValues(
 }
 
 export function matchesToken(node: CatalogNode, token: FilterToken): boolean {
-  if (token.attribute === 'grantee') return matchingGrants(node, [token]).length > 0
+  if (token.attribute === 'grantee') return matchesGrantee(node, [token])
   if (!token.attribute) {
     const needle = (token.values[0] ?? '').toLowerCase()
     if (!needle) return true
@@ -137,9 +139,14 @@ export function applyFilters(nodes: CatalogNode[], tokens: FilterToken[]): Catal
   const objectTokens = tokens.filter((token) => token.attribute !== 'grantee')
   const hasGrantee = tokens.some((token) => token.attribute === 'grantee')
   return nodes.filter(
-    (node) =>
-      objectTokens.every((token) => matchesToken(node, token)) &&
-      (!hasGrantee || matchingGrants(node, tokens).length > 0),
+    (node) => objectTokens.every((token) => matchesToken(node, token)) && (!hasGrantee || matchesGrantee(node, tokens)),
+  )
+}
+
+function matchesGrantee(node: CatalogNode, tokens: FilterToken[]): boolean {
+  const grantees = tokens.filter((token) => token.attribute === 'grantee')
+  return (node.granteeNames ?? node.grants.map((grant) => grant.grantee)).some((name) =>
+    grantees.every((token) => matchesValue(name, token)),
   )
 }
 
