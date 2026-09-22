@@ -46,7 +46,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
         string serviceName = server.ServiceName
             ?? throw new InvalidOperationException($"Oracle server '{server.Name}' is missing required key 'serviceName'.");
         ExtractionProgressAggregator progress = new(options.Progress);
-        await using OracleExtractionConnections connections = new(() => _createConnection(server, options.Credentials));
+        OracleExtractionConnections connections = new(() => _createConnection(server, options.Credentials));
         progress.Report(new($"Connecting to {serviceName}"));
         var (owners, links) = await connections.UseAsync(async connection =>
         {

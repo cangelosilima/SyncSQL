@@ -225,8 +225,10 @@ the others. Running queries finish before their slots are reassigned.
 SQL Server work splits into databases; Oracle work splits into schemas and then
 individual objects, including packages, package bodies, and database links.
 One Oracle server with one schema can therefore use all four slots for object
-DDL. Oracle sessions are reused exclusively by one job at a time, and schema
-metadata is loaded once. Set `--max-parallelism 1` for sequential extraction
+DDL. Each Oracle job returns its connection to the provider pool before releasing
+its scheduler slot, keeping checked-out sessions within the shared budget even
+across many server entries. Schema metadata is loaded once. Set
+`--max-parallelism 1` for sequential extraction
 across all engines. Linked-server discovery still runs in depth rounds using
 the same shared budget.
 Use `--skip-metrics` when only object definitions are needed; it skips the
