@@ -6,6 +6,19 @@ namespace SyncSql.Core.Tests.Configuration;
 public class SyncSqlConfigLoaderTests
 {
     [Fact]
+    public async Task Network_sources_are_relative_to_config_not_the_working_directory()
+    {
+        string path = await WriteTempConfigAsync("""
+            {"servers":[{"name":"ORA","type":"oracle","host":"ora","serviceName":"APP","credentialsVariablePrefix":"ORA",
+            "oracleNetwork":{"tnsNamesFile":"network/tnsnames.ora","gateways":[{"sid":"orders","initFile":"network/initorders.ora","odbcIniFile":"network/odbc.ini"}]},
+            "linkTargets":[{"name":"DL","owner":"APP","targetEngine":"mssql","dataSource":"sql,1433","database":"Orders"}]}]}
+            """);
+        ServerConfig server = Assert.Single((await SyncSqlConfigLoader.LoadAsync(path)).Servers);
+        Assert.Equal(Path.GetFullPath("network/tnsnames.ora", Path.GetDirectoryName(path)!), server.OracleNetwork!.TnsNamesFile);
+        Assert.True(Path.IsPathFullyQualified(Assert.Single(server.OracleNetwork.Gateways).InitFile));
+        Assert.Equal(DatabaseEngine.MsSql, Assert.Single(server.LinkTargets).TargetEngine);
+    }
+    [Fact]
     public async Task LoadAsync_IntegratedSecurity_DoesNotRequireCredentialsPrefix()
     {
         string path = await WriteTempConfigAsync("""

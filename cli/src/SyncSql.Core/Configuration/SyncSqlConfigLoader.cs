@@ -33,7 +33,22 @@ public static class SyncSqlConfigLoader
         }
 
         Validate(config, path);
-        return config;
+        string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        return config with
+        {
+            Servers = [.. config.Servers.Select(server => server.OracleNetwork is not { } network ? server : server with
+        {
+            OracleNetwork = network with
+            {
+                TnsNamesFile = ResolvePath(network.TnsNamesFile),
+                Gateways = [.. network.Gateways.Select(gateway => gateway with
+                {
+                    InitFile = ResolvePath(gateway.InitFile)!, OdbcIniFile = ResolvePath(gateway.OdbcIniFile),
+                })],
+            },
+        })]
+        };
+        string? ResolvePath(string? value) => value is null ? null : Path.GetFullPath(value, directory);
     }
 
     private static void Validate(SyncSqlConfig config, string path)
@@ -46,6 +61,13 @@ public static class SyncSqlConfigLoader
         HashSet<string> seenNames = new(StringComparer.OrdinalIgnoreCase);
         foreach (ServerConfig server in config.Servers)
         {
+            if (server.LinkTargets is null || server.LinkTargets.Any(link => string.IsNullOrWhiteSpace(link.Name))
+                || server.LinkTargets.GroupBy(link => $"{link.Owner}::{link.Name}", StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1)
+                || server.OracleNetwork is { } network && (network.Gateways is null
+                    || network.Gateways.Any(gateway => string.IsNullOrWhiteSpace(gateway.Sid) || string.IsNullOrWhiteSpace(gateway.InitFile))))
+            {
+                throw new ConfigValidationException($"Server '{server.Name}' has invalid or duplicate link enrichment settings.");
+            }
             if (string.IsNullOrWhiteSpace(server.Name))
             {
                 throw new ConfigValidationException($"Config file '{path}' has a server entry missing required key 'name'.");

@@ -5,6 +5,7 @@ import { useCatalogSelection } from '../lib/useCatalogData'
 import CatalogLoadStatus from '../components/CatalogLoadStatus'
 import CodeBlock from '../components/CodeBlock'
 import TypeBadge from '../components/TypeBadge'
+import LinkConnectionDetails from '../components/LinkConnectionDetails'
 import LineageGraph from '../components/LineageGraph'
 import MetricsPanels from '../components/MetricsPanels'
 import DiffView from '../components/DiffView'
@@ -308,6 +309,7 @@ export default function ObjectPage() {
             </details>
           ))}
       </section>
+      <LinkConnectionDetails node={node} />
       <WorkspaceTabs
         panelPrefix="object-workspace"
         label="Object workspaces"
@@ -554,7 +556,17 @@ export default function ObjectPage() {
                             <Link to={`/object/${ref.to}`}>{qualifiedRefName(ref)}</Link>
                           ) : (
                             <>
-                              <code>{qualifiedRefName(ref)}</code> <span className="muted">(not extracted)</span>
+                              <code>{qualifiedRefName(ref)}</code>{' '}
+                              <span className="muted">
+                                ({ref.status === 'ambiguous' ? 'ambiguous destination' : 'not extracted'})
+                              </span>
+                              {ref.dataSource && (
+                                <span className="muted">
+                                  {' '}
+                                  — {ref.dataSource}
+                                  {ref.targetEngine && ` (${ref.targetEngine})`}
+                                </span>
+                              )}
                             </>
                           )}
                           {ref.dynamic && (

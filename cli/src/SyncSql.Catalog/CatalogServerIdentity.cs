@@ -86,5 +86,7 @@ internal static class CatalogServerIdentity
         node.Grants,
         node.Sections,
         node.ServiceBrokerGuid,
+        node.Link,
+        node.Principal,
     });
 }

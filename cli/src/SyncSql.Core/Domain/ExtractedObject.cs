@@ -37,6 +37,8 @@ public sealed record ExtractedSection(
 /// </summary>
 public sealed record ExtractedObject
 {
+    public LinkMetadata? Link { get; init; }
+    public PrincipalMetadata? Principal { get; init; }
     public Configuration.ServerIdentity? ServerIdentity { get; init; }
     public required string Server { get; init; }
     public required string Database { get; init; }

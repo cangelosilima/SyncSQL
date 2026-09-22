@@ -4,6 +4,10 @@
 public sealed record ObjectFileIdentity(string Server, string Database, string? Schema, string Type, string Name)
 {
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Domain.LinkMetadata? Link { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Domain.PrincipalMetadata? Principal { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public Configuration.ServerIdentity? ServerIdentity { get; init; }
     /// <summary>Optional extraction context; older files omit it without changing their identity.</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

@@ -15,8 +15,8 @@ internal static class OracleQueries
         ORDER BY object_name
         """;
 
-    public const string DatabaseLinks = "SELECT OWNER, DB_LINK FROM ALL_DB_LINKS ORDER BY OWNER, DB_LINK";
-    public const string AllDatabaseLinks = "SELECT OWNER, DB_LINK FROM DBA_DB_LINKS ORDER BY OWNER, DB_LINK";
+    public const string DatabaseLinks = "SELECT OWNER, DB_LINK, USERNAME, HOST FROM ALL_DB_LINKS ORDER BY OWNER, DB_LINK";
+    public const string AllDatabaseLinks = "SELECT OWNER, DB_LINK, USERNAME, HOST FROM DBA_DB_LINKS ORDER BY OWNER, DB_LINK";
 
     // ALL_TAB_PRIVS/ALL_COL_PRIVS name their owning-schema column TABLE_SCHEMA (OWNER only exists on
     // the DBA_*/`_MADE`/`_RECD` variants of these views).

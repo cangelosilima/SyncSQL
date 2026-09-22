@@ -22,7 +22,8 @@ internal sealed record LinkedServerLink(
     string? DataSource,
     string? DefaultDatabase,
     string? TargetServer,
-    bool IsDatabaseLink = false);
+    bool IsDatabaseLink = false,
+    LinkMetadata? Metadata = null);
 
 /// <summary>
 /// Maps a linked-server (MSSQL) or database-link (Oracle) name, as written in one object's DDL, onto the
@@ -45,11 +46,14 @@ internal sealed partial class LinkedServerMap
 {
     /// <summary>"&lt;fromServer&gt;::&lt;link name&gt;" -> that link.</summary>
     private readonly Dictionary<string, LinkedServerLink> _linksByName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, LinkMetadata> _metadataById = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Server -> every catalog server reachable from it in one hop, deduplicated and ordered.</summary>
     private readonly Dictionary<string, IReadOnlyList<string>> _reachableByServer = new(StringComparer.OrdinalIgnoreCase);
 
     public static LinkedServerMap Empty { get; } = new();
+
+    public LinkMetadata? MetadataFor(string nodeId) => _metadataById.GetValueOrDefault(nodeId);
 
     private LinkedServerMap()
     {
@@ -72,8 +76,9 @@ internal sealed partial class LinkedServerMap
 
         foreach (CatalogNode node in linkNodes)
         {
-            string? dataSource = FirstCapture(node.Ddl, MsSqlDataSource()) ?? FirstCapture(node.Ddl, OracleUsing());
-            string? catalog = FirstCapture(node.Ddl, MsSqlCatalog());
+            string? dataSource = node.Link?.DataSource ?? node.Link?.ConnectIdentifier
+                ?? FirstCapture(node.Ddl, MsSqlDataSource()) ?? FirstCapture(node.Ddl, OracleUsing());
+            string? catalog = node.Link?.Database ?? FirstCapture(node.Ddl, MsSqlCatalog());
             // The exported subtree identifies the exact followed server even when its catalog
             // name was suffixed to distinguish equal link aliases on different root servers.
             string linkPrefix = node.Path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
@@ -93,13 +98,16 @@ internal sealed partial class LinkedServerMap
                 _ => null,
             };
 
+            LinkMetadata metadata = EnrichFromCatalog(node, allNodes, targetServer, dataSource, catalog);
+            map._metadataById.TryAdd(node.Id, metadata);
+
             // Private Oracle links are scoped to both service and owner. Two owners
             // may use REMOTE for completely different destinations.
             map._linksByName.TryAdd(
                 node.Type == "DatabaseLinks"
                     ? $"{node.Server}::{node.Database}::{node.Schema}::{node.Name}"
                     : $"{node.Server}::{node.Name}",
-                new LinkedServerLink(node.Id, node.Name, node.Server, dataSource, NullIfBlank(catalog), targetServer, node.Type == "DatabaseLinks"));
+                new LinkedServerLink(node.Id, node.Name, node.Server, dataSource, metadata.Database, targetServer, node.Type == "DatabaseLinks", metadata));
 
             // A link that comes back to the server it's declared on adds no reachability - following it
             // would only find what the same-server lookup already does. It stays resolvable by name (a
@@ -196,6 +204,57 @@ internal sealed partial class LinkedServerMap
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
+    private static LinkMetadata EnrichFromCatalog(CatalogNode link, List<CatalogNode> nodes, string? server, string? dataSource, string? database)
+    {
+        LinkMetadata metadata = link.Link ?? new LinkMetadata
+        {
+            ConnectIdentifier = link.Type == "DatabaseLinks" ? dataSource : null,
+            DataSource = link.Type == "LinkedServers" ? dataSource : null,
+            Logins = link.Type == "DatabaseLinks" && FirstCapture(link.Ddl, OracleUser()) is { } user ? [new(user.Replace("\"\"", "\"", StringComparison.Ordinal))] : [],
+        };
+        List<LinkEvidence> evidence = [.. metadata.Evidence];
+        if (server is null) { return metadata with { Database = NullIfBlank(database) }; }
+        CatalogNode[] targets = [.. nodes.Where(node => node.Server.Equals(server, StringComparison.OrdinalIgnoreCase))];
+        DatabaseEngine? engine = metadata.TargetEngine ?? targets.Select(node => node.Engine ?? node.ServerIdentity?.Engine).FirstOrDefault(value => value is not null);
+        string[] users = [.. metadata.Logins.Where(login => !login.UsesSelf && login.RemoteUser is { Length: > 0 })
+            .Select(login => login.RemoteUser!).Distinct(StringComparer.OrdinalIgnoreCase)];
+        CatalogNode[] logins = [.. targets.Where(node => node.Type == "Logins" && users.Contains(node.Name, StringComparer.OrdinalIgnoreCase))];
+        bool fixedLogin = users.Length == 1 && !metadata.Logins.Any(login => login.UsesSelf);
+        CatalogNode[] userNodes = [.. targets.Where(node => node.Type == "Users" && node.Principal?.Login is { } login
+            && users.Contains(login, StringComparer.OrdinalIgnoreCase))];
+        if (string.IsNullOrWhiteSpace(database) && fixedLogin && logins.Length == 1 && logins[0].Principal?.DefaultDatabase is { Length: > 0 } defaultDatabase)
+        {
+            database = defaultDatabase;
+            evidence.Add(new("database", database, "catalog:" + logins[0].Id));
+        }
+        string? schema = metadata.DefaultSchema;
+        if (schema is null && fixedLogin)
+        {
+            if (engine == DatabaseEngine.Oracle) { schema = users[0]; }
+            else if (engine == DatabaseEngine.MsSql && database is not null)
+            {
+                CatalogNode[] mapped = [.. userNodes.Where(node => node.Database.Equals(database, StringComparison.OrdinalIgnoreCase))];
+                if (mapped.Length == 1 && mapped[0].Principal?.DefaultSchema is { Length: > 0 } defaultSchema)
+                {
+                    schema = defaultSchema;
+                    evidence.Add(new("defaultSchema", schema, "catalog:" + mapped[0].Id));
+                }
+            }
+        }
+        return metadata with
+        {
+            TargetServer = server,
+            TargetEngine = engine,
+            Database = NullIfBlank(database),
+            DefaultSchema = schema,
+            LoginNodeIds = [.. logins.Concat(userNodes).Select(node => node.Id).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal)],
+            Evidence = evidence,
+        };
+    }
+
+    [GeneratedRegex("\\bCONNECT\\s+TO\\s+\"((?:[^\"]|\"\")+)\"", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex OracleUser();
+
     /// <summary>
     /// Resolve an exact declared destination, preserving ports, instances and DNS suffixes.
     /// </summary>
@@ -204,11 +263,12 @@ internal sealed partial class LinkedServerMap
         // A declared destination wins over the local link alias. Ambiguous addresses stay unresolved.
         string address = dataSource ?? link.Name;
         string[] matches = [.. nodes.Where(node =>
-                string.Equals(node.Server, address, StringComparison.OrdinalIgnoreCase)
+                (link.Link?.TargetEngine is not { } targetEngine || (node.Engine ?? node.ServerIdentity?.Engine) == targetEngine)
+                && (string.Equals(node.Server, address, StringComparison.OrdinalIgnoreCase)
                 || node.ServerNames.Contains(address, StringComparer.OrdinalIgnoreCase)
                 || (node.ServerIdentity?.Matches(address, link.ServerIdentity?.HostNameSuffix) ?? false)
                 || (link.Type == "LinkedServers" && node.ServerIdentity is null
-                    && ServerIdentity.NormalizeSqlAddress(node.Server) == ServerIdentity.NormalizeSqlAddress(address)))
+                    && ServerIdentity.NormalizeSqlAddress(node.Server) == ServerIdentity.NormalizeSqlAddress(address))))
             .Select(node => node.Server).Distinct(StringComparer.OrdinalIgnoreCase)];
         return matches;
     }

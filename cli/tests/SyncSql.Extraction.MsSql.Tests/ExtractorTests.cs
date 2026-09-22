@@ -9,6 +9,20 @@ namespace SyncSql.Extraction.MsSql.Tests;
 
 public sealed class ExtractorTests
 {
+    [Fact]
+    public async Task Extracts_login_and_user_context_without_passwords()
+    {
+        FakeDatabase db = Database();
+        db.Rows(MsSqlQueries.Logins, new PrincipalRow { Name = "entitlements", LoginName = "entitlements", DefaultDatabase = "Orders" });
+        db.Rows(MsSqlQueries.Users, new PrincipalRow { Name = "order_reader", LoginName = "entitlements", DefaultSchema = "sales" });
+        ExtractionOutcome result = await Extract(db, ["Logins", "Users"], false, false);
+        ExtractedObject login = Assert.Single(result.Objects, obj => obj.Type == "Logins");
+        ExtractedObject user = Assert.Single(result.Objects, obj => obj.Type == "Users");
+        Assert.Equal("Orders", login.Principal?.DefaultDatabase);
+        Assert.Equal("entitlements", user.Principal?.Login);
+        Assert.Equal("sales", user.Principal?.DefaultSchema);
+        Assert.DoesNotContain("password_hash", MsSqlQueries.Logins);
+    }
     private static readonly ServerConfig Server = new() { Name = "SQL", Host = "host", Type = DatabaseEngine.MsSql, CredentialsVariablePrefix = "TEST" };
     private static readonly DatabaseCredentials Credentials = new("user", "password");
     private static readonly string[] AllTypes = ["Schemas", "Tables", "Types", "Views", "StoredProcedures", "Functions", "Triggers", "Synonyms", "Replication", "LinkedServers", "Queues", "Services", "Contracts", "MessageTypes"];

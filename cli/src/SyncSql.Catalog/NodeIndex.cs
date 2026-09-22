@@ -78,6 +78,7 @@ internal sealed class NodeIndex
         $"{server.ToUpperInvariant()}::{database.ToUpperInvariant()}::{type.ToUpperInvariant()}::{schema?.ToUpperInvariant()}."
         + (type == "Queues" ? name.ToUpperInvariant() : name);
     private readonly Dictionary<string, DatabaseEngine?> _enginesByServer = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<CatalogNode> _users;
 
     public NodeIndex(IEnumerable<CatalogNode> nodes)
         : this(nodes, LinkedServerMap.Empty)
@@ -89,6 +90,7 @@ internal sealed class NodeIndex
         _linkedServers = linkedServers;
 
         List<CatalogNode> allNodes = [.. nodes];
+        _users = [.. allNodes.Where(node => node.Type == "Users")];
         HashSet<string> packageSpecs = allNodes.Where(n => n.Type == "Packages")
             .Select(n => $"{n.Server}::{n.Database}::{n.Schema}.{n.Name}").ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (CatalogNode node in allNodes)
@@ -102,7 +104,7 @@ internal sealed class NodeIndex
                 _enginesByServer.TryAdd(node.Server, engine);
             }
             // Database-scoped Broker names are not candidates for ordinary table/routine references.
-            if (node.Type is "MessageTypes" or "Contracts" or "Services")
+            if (node.Type is "MessageTypes" or "Contracts" or "Services" or "Logins" or "Users")
             {
                 continue;
             }
@@ -232,16 +234,31 @@ internal sealed class NodeIndex
             // extracted. It is still a built-in, and saying so is more useful than "outside the catalog":
             // nothing was ever going to extract it. Nothing in the catalog can be shadowed by this, since
             // by definition no node lives in a database that isn't there.
-            return SystemObjectCatalog.IsSystemObject(fromNode.Engine, reference)
+            return SystemObjectCatalog.IsSystemObject(viaLink is null ? fromNode.Engine : viaLink.Metadata?.TargetEngine, reference)
                 ? ReferenceResolution.System
                 : ReferenceResolution.External(viaLink);
         }
 
         bool databaseWasStated = statedDatabase is not null;
 
+        if (string.IsNullOrWhiteSpace(reference.Schema) && RemoteDefaultSchema(viaLink, targetDatabase) is { Length: > 0 } defaultSchema)
+        {
+            // A remote login is not a schema. Only observed/mapped default-schema context qualifies it.
+            ReferenceResolution preferred = ResolveQualified(fromNode, reference with { Schema = defaultSchema }, targetServer, targetDatabase, databaseWasStated, viaLink);
+            if (preferred.Kind == ReferenceResolutionKind.Resolved) { return preferred; }
+            if (viaLink!.Metadata!.TargetEngine == DatabaseEngine.MsSql && !defaultSchema.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+            {
+                ReferenceResolution dbo = ResolveQualified(fromNode, reference with { Schema = "dbo" }, targetServer, targetDatabase, databaseWasStated, viaLink);
+                if (dbo.Kind == ReferenceResolutionKind.Resolved) { return dbo; }
+            }
+            return preferred with { ViaLink = viaLink };
+        }
+
         ReferenceResolution resolution = string.IsNullOrWhiteSpace(reference.Schema)
-            ? ResolveBare(reference.Name, targetServer, targetDatabase, viaLink)
+            ? ResolveBare(reference.Name, targetServer, targetDatabase, viaLink, databaseWasStated)
             : ResolveQualified(fromNode, reference, targetServer, targetDatabase, databaseWasStated, viaLink);
+
+        if (viaLink is not null) { return resolution with { ViaLink = viaLink }; }
 
         // Built-ins are recognized only once the real lookup has come up empty, never before it. That
         // ordering is the whole guard: a user object that happens to use a reserved-looking name - a
@@ -260,6 +277,24 @@ internal sealed class NodeIndex
                 ServerIdentity.NormalizeSqlAddress(identity.Endpoint, suffix: identity.HostNameSuffix),
                 ServerIdentity.NormalizeSqlAddress(name),
                 StringComparison.OrdinalIgnoreCase));
+
+    private string? RemoteDefaultSchema(LinkedServerLink? link, string? database)
+    {
+        if (link?.Metadata is not { } metadata) { return null; }
+        if (metadata.TargetEngine != DatabaseEngine.MsSql || database is null
+            || metadata.DefaultSchema is not null && (string.Equals(database, metadata.Database, StringComparison.OrdinalIgnoreCase) || metadata.Database is null))
+        {
+            return metadata.DefaultSchema;
+        }
+        // A four-part reference can choose another database with a different mapped user/schema.
+        string[] logins = [.. metadata.Logins.Where(login => !login.UsesSelf && login.RemoteUser is { Length: > 0 })
+            .Select(login => login.RemoteUser!).Distinct(StringComparer.OrdinalIgnoreCase)];
+        if (logins.Length != 1 || metadata.Logins.Any(login => login.UsesSelf)) { return null; }
+        CatalogNode[] users = [.. _users.Where(user => string.Equals(user.Server, link.TargetServer, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(user.Database, database, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(user.Principal?.Login, logins[0], StringComparison.OrdinalIgnoreCase))];
+        return users.Length == 1 ? users[0].Principal?.DefaultSchema : null;
+    }
 
     private ReferenceResolution ResolveQualified(
         CatalogNode fromNode,
@@ -330,7 +365,7 @@ internal sealed class NodeIndex
             : ReferenceResolution.NotFound;
     }
 
-    private ReferenceResolution ResolveBare(string name, string targetServer, string? targetDatabase, LinkedServerLink? viaLink)
+    private ReferenceResolution ResolveBare(string name, string targetServer, string? targetDatabase, LinkedServerLink? viaLink, bool databaseWasStated)
     {
         if (targetDatabase is not null && Unique(_bareInDatabase, $"{targetServer}::{targetDatabase}::{name}") is { } inDatabase)
         {
@@ -339,7 +374,7 @@ internal sealed class NodeIndex
                 : inDatabase;
         }
 
-        if (Unique(_bareOnServer, $"{targetServer}::{name}") is { } onServer)
+        if (!databaseWasStated && Unique(_bareOnServer, $"{targetServer}::{name}") is { } onServer)
         {
             return onServer.Kind == ReferenceResolutionKind.Resolved
                 ? ReferenceResolution.Found(onServer.NodeId!, viaLink)

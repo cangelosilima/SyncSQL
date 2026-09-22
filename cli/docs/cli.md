@@ -294,7 +294,7 @@ extracted.
 - **`defaults`** / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
   (`Schemas`, `Types`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
-  `Triggers`, `Synonyms`, `LinkedServers`, `Replication`, and the four
+  `Triggers`, `Synonyms`, `LinkedServers`, `Logins`, `Users`, `Replication`, and the four
   Service Broker types `MessageTypes`, `Contracts`, `Queues`, `Services`
   for MSSQL; `Schemas`, `Types`, `TypeBodies`, `Tables`, `Views`,
   `Procedures`, `Functions`, `Packages`, `PackageBodies`, `Triggers`,
@@ -307,6 +307,10 @@ extracted.
 - **`serverSelection`**: regex filter over which of the listed servers
   actually run in a given invocation (`sync --server-include`/`--server-exclude`
   override this per run).
+- **`oracleNetwork` / `linkTargets`** on a server: enrich database links from
+  copied Oracle Net/gateway/ODBC files or explicitly mapped destinations. See
+  [cross-engine lineage](cross-engine-lineage.md) for configuration and how
+  independently extracted login/user context joins the path across engines.
 - **`discovery.linkedServers`**: opt-in follow-up of the linked servers a
   run finds, so `sync` also extracts servers nobody listed by hand:
 

@@ -102,6 +102,10 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         string[] allowedDatabases;
         await using (DbConnection dbListConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken))
         {
+            if (filters.ObjectTypes.Contains("Logins"))
+            {
+                await AddPrincipalObjectsAsync(dbListConnection, server, "_ServerLevel", filters, objects, true);
+            }
             IEnumerable<string> databases = await MsSqlCatalogReader.GetDatabasesAsync(dbListConnection);
             allowedDatabases = [.. databases.Where(filters.Databases.IsAllowed)];
         }
@@ -194,7 +198,50 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
                 Name = group.Key,
                 Ddl = ddl,
                 Engine = DatabaseEngine.MsSql,
+                Link = LinkTargetEnrichment.Apply(server, group.Key, null, new LinkMetadata
+                {
+                    DataSource = first.DataSource,
+                    TargetEngine = InferLinkEngine(first),
+                    Database = string.IsNullOrWhiteSpace(first.Catalog) ? null : first.Catalog,
+                    Logins = [.. group.Where(row => row.UsesSelfCredential is not null)
+                        .Select(row => new LinkLogin(row.RemoteLoginName, row.LocalLoginName, row.UsesSelfCredential == true))],
+                    Evidence = [.. new[] { new LinkEvidence("dataSource", first.DataSource ?? "", "MSSQL:sys.servers.data_source"),
+                        new LinkEvidence("database", first.Catalog ?? "", "MSSQL:sys.servers.catalog") }.Where(item => item.Value.Length > 0)],
+                }),
             });
+        }
+    }
+
+    private static DatabaseEngine? InferLinkEngine(LinkedServerRow row) =>
+        string.Equals(row.Product, "SQL Server", StringComparison.OrdinalIgnoreCase)
+            || row.Provider is { } provider && (provider.StartsWith("SQLNCLI", StringComparison.OrdinalIgnoreCase)
+                || provider.StartsWith("MSOLEDBSQL", StringComparison.OrdinalIgnoreCase) || provider.Equals("SQLOLEDB", StringComparison.OrdinalIgnoreCase))
+            ? DatabaseEngine.MsSql
+            : row.Provider?.Contains("OraOLEDB", StringComparison.OrdinalIgnoreCase) == true ? DatabaseEngine.Oracle : null;
+
+    private async Task AddPrincipalObjectsAsync(DbConnection connection, ServerConfig server, string database,
+        EffectiveFilters filters, List<ExtractedObject> objects, bool logins)
+    {
+        try
+        {
+            foreach (PrincipalRow row in await MsSqlCatalogReader.GetPrincipalsAsync(connection, logins))
+            {
+                if (!filters.ObjectNames.IsAllowed(row.Name)) { continue; }
+                objects.Add(new ExtractedObject
+                {
+                    Server = server.Name,
+                    Database = database,
+                    Type = logins ? "Logins" : "Users",
+                    Name = row.Name,
+                    Engine = DatabaseEngine.MsSql,
+                    Ddl = "-- Observed principal metadata; authentication secrets are not extracted.",
+                    Principal = new() { Login = row.LoginName, DefaultDatabase = row.DefaultDatabase, DefaultSchema = row.DefaultSchema },
+                });
+            }
+        }
+        catch (DbException ex)
+        {
+            _logger.LogWarning("[{Server}/{Database}] Principal metadata unavailable: {Message}", server.Name, database, ex.Message);
         }
     }
 
@@ -210,6 +257,10 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         options.Progress?.Report(new($"{database}: reading catalog metadata", objects.Count));
         List<SchemaRow> schemaRows = [.. await MsSqlCatalogReader.GetSchemasAsync(connection)];
         int firstObject = objects.Count;
+        if (filters.ObjectTypes.Contains("Users"))
+        {
+            await AddPrincipalObjectsAsync(connection, server, database, filters, objects, false);
+        }
         Dictionary<string, bool> allowedSchemas = schemaRows.ToDictionary(
             r => r.SchemaName, r => filters.Schemas.IsAllowed(r.SchemaName), StringComparer.OrdinalIgnoreCase);
 

@@ -108,6 +108,8 @@ public static class ExtractedObjectFile
             {
                 ServiceBrokerGuid = obj.ServiceBrokerGuid,
                 ServerIdentity = obj.ServerIdentity,
+                Link = obj.Link,
+                Principal = obj.Principal,
             }));
         AppendLine(builder, Invariant($"-- Server:   {obj.Server}"));
         AppendLine(builder, Invariant($"-- Database: {obj.Database}"));

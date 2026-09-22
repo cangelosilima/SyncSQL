@@ -29,7 +29,9 @@
       "Functions",
       "Triggers",
       "Synonyms",
-      "LinkedServers"
+      "LinkedServers",
+      "Logins",
+      "Users"
     ]
   },
   "serverSelection": {

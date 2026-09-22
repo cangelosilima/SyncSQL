@@ -21,6 +21,12 @@ public sealed record CatalogObjectVersion
 /// <summary>One catalog node: a single extracted object plus everything Build/mining attaches to it.</summary>
 public sealed record CatalogNode
 {
+    [JsonPropertyName("link")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LinkMetadata? Link { get; init; }
+    [JsonPropertyName("principal")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PrincipalMetadata? Principal { get; init; }
     /// <summary>Extraction metadata used during catalog assembly, not part of the site's data contract.</summary>
     [JsonIgnore]
     public Configuration.ServerIdentity? ServerIdentity { get; init; }
@@ -218,6 +224,10 @@ public sealed record CatalogSystemReference
 /// </summary>
 public sealed record CatalogLinkedServerReference
 {
+    [JsonPropertyName("status")] public string? Status { get; init; }
+    [JsonPropertyName("targetServer")] public string? TargetServer { get; init; }
+    [JsonPropertyName("dataSource")] public string? DataSource { get; init; }
+    [JsonPropertyName("targetEngine")] public DatabaseEngine? TargetEngine { get; init; }
     /// <summary>Node id of the LinkedServers/DatabaseLinks object the reference crosses.</summary>
     [JsonPropertyName("linkedServer")]
     public required string LinkedServer { get; init; }

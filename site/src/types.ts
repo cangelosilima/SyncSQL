@@ -66,7 +66,25 @@ export interface CatalogObjectVersion {
   ddl: string | null
 }
 
+export interface LinkMetadata {
+  connectIdentifier: string | null
+  targetEngine: string | null
+  dataSource: string | null
+  database: string | null
+  defaultSchema: string | null
+  gatewayHost: string | null
+  gatewaySid: string | null
+  logins: { remoteUser: string | null; localUser: string | null; usesSelf: boolean }[]
+  passwordStatus: string
+  evidence: { field: string; value: string; source: string }[]
+  diagnostics: string[]
+  targetServer: string | null
+  loginNodeIds: string[]
+}
+
 export interface CatalogNode {
+  link?: LinkMetadata | null
+  principal?: { login: string | null; defaultDatabase: string | null; defaultSchema: string | null } | null
   /** Precomputed counts available without downloading details or lineage. */
   dependsOnCount?: number
   usedByCount?: number
@@ -167,6 +185,10 @@ export interface CatalogSystemReference {
  * lands outside the catalog's scope).
  */
 export interface CatalogLinkedServerReference {
+  status?: string | null
+  targetServer?: string | null
+  dataSource?: string | null
+  targetEngine?: string | null
   /** Node id of the LinkedServers/DatabaseLinks object the reference crosses. */
   linkedServer: string
   /** Node id of the object whose DDL makes the reference. */
