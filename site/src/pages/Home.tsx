@@ -31,7 +31,7 @@ export default function Home() {
   const mostChanged = getMostChanged(index, 10)
   const coChanges = getCoChangePairs(index, 10)
   const maxChangeCount = mostChanged[0]?.value ?? 0
-  const orphanedReferences = catalog.orphanedReferences ?? []
+  const orphanedCount = catalog.orphanedReferenceCount ?? catalog.orphanedReferences?.length ?? 0
   const metricAnomalies = detectMetricAnomalies(catalog.nodes, Infinity)
   const lastChangedNode = recentlyChanged[0]?.node
   const typeCounts = Object.entries(catalog.typeCounts).sort(([, a], [, b]) => b - a)
@@ -67,16 +67,16 @@ export default function Home() {
         </div>
         <div className="quick-stat">
           <div className="quick-stat-label">Lineage edges</div>
-          <div className="quick-stat-value">{catalog.edges.length}</div>
+          <div className="quick-stat-value">{catalog.edgeCount ?? catalog.edges.length}</div>
           <div className="quick-stat-sub">resolved references</div>
         </div>
         <div className="quick-stat">
           <div className="quick-stat-label">
             <Link to="/alerts">Alerts</Link>
           </div>
-          <div className="quick-stat-value">{metricAnomalies.length + orphanedReferences.length}</div>
+          <div className="quick-stat-value">{metricAnomalies.length + orphanedCount}</div>
           <div className="quick-stat-sub">
-            {metricAnomalies.length} anomalies · {orphanedReferences.length} orphaned references
+            {metricAnomalies.length} anomalies · {orphanedCount} orphaned references
           </div>
         </div>
         <div className="quick-stat">

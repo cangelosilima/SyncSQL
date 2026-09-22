@@ -48,6 +48,12 @@ export interface TableUsage {
  * graph - see lib/reachability.ts).
  */
 export function getTopReferencedTables(index: CatalogIndex, limit = 10): TableUsage[] {
+  if (index.source) {
+    return (index.catalog.topReferencedTables ?? []).slice(0, limit).flatMap((usage) => {
+      const node = index.byId.get(usage.id)
+      return node ? [{ ...usage, node }] : []
+    })
+  }
   const tableTypes = new Set(['Tables'])
   const usages: TableUsage[] = index.catalog.nodes
     .filter((n) => tableTypes.has(n.type))

@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useCatalog } from '../lib/CatalogContext'
+import { useCatalogSelection } from '../lib/useCatalogData'
+import CatalogLoadStatus from '../components/CatalogLoadStatus'
 import type { CatalogLinkedServerReference } from '../types'
 import type { CatalogIndex } from '../lib/catalog'
 
@@ -9,13 +11,20 @@ function unique<T>(values: T[]): T[] {
 }
 
 export default function ServerPage() {
-  const { index } = useCatalog()
+  const { index: baseIndex } = useCatalog()
   const { serverName = '' } = useParams()
   const server = serverName
   const nodes = useMemo(
-    () => index?.catalog.nodes.filter((node) => node.server.toLowerCase() === server.toLowerCase()) ?? [],
-    [index, server],
+    () => baseIndex?.catalog.nodes.filter((node) => node.server.toLowerCase() === server.toLowerCase()) ?? [],
+    [baseIndex, server],
   )
+  const { index, loading, error } = useCatalogSelection(baseIndex, { ids: nodes.map((node) => node.id) })
+  if (loading || error)
+    return (
+      <div className="page">
+        <CatalogLoadStatus loading={loading} error={error} />
+      </div>
+    )
   if (!index) return null
   const detail = index.catalog.serverDetails?.find((item) => item.name.toLowerCase() === server.toLowerCase())
   const outgoingLinks = nodes.filter((node) => node.type === 'LinkedServers' || node.type === 'DatabaseLinks')

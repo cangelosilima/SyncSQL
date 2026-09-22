@@ -5,8 +5,10 @@ import type {
   CatalogOrphanedReference,
   CatalogSystemReference,
 } from '../types'
+import type { PartitionedCatalog } from './partitionedCatalog'
 
 export interface CatalogIndex {
+  source?: PartitionedCatalog
   catalog: Catalog
   byId: Map<string, CatalogNode>
   outgoing: Map<string, string[]>
@@ -77,7 +79,11 @@ export async function loadCatalog(): Promise<CatalogIndex> {
   if (!res.ok) {
     throw new Error(`Failed to load catalog.json: ${res.status} ${res.statusText}`)
   }
-  const catalog = (await res.json()) as Catalog
+  const catalog = await res.json()
+  if (catalog.format !== undefined) {
+    const { loadPartitionedCatalog } = await import('./partitionedCatalog')
+    return loadPartitionedCatalog(catalog, `${import.meta.env.BASE_URL}data/`)
+  }
   return buildIndex(catalog)
 }
 

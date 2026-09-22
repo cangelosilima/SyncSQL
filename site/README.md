@@ -42,6 +42,12 @@ contents, raw logs and Oracle installation media are not part of the site.
 
 ## Publish
 
+`npm run build` converts the input catalog into compressed summary, detail,
+search, permission and edge partitions in `dist/data`. Startup loads summaries;
+object details and lineage load on demand. Preview this output with
+`npm run preview`. The CLI's original JSON format remains supported.
+See [partitioned catalog deployment and limits](../docs/partitioned-catalog.md).
+
 [Site - deploy catalog demo](../.github/workflows/site-deploy.yml) tests and builds the
 committed snapshot on GitHub-hosted Linux, including the vendored browser AI model.
 Pull requests build for validation; main-branch changes deploy to GitHub Pages.

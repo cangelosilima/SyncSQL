@@ -4,9 +4,10 @@ import HelpButton from '../components/HelpButton'
 import { useAi } from '../ai/AiContext'
 import type { FilterPlanV1 } from '../ai/types'
 import { useCatalog } from '../lib/CatalogContext'
-import { filterByContent } from '../lib/contentSearch'
+import { useCatalogFilter, useCatalogSelection } from '../lib/useCatalogData'
+import CatalogLoadStatus from '../components/CatalogLoadStatus'
 import { getColumnConsumers } from '../lib/columnLineage'
-import { applyFilters, describeToken, encodeTokensForUrl, type FilterToken } from '../lib/filters'
+import { describeToken, encodeTokensForUrl, type FilterToken } from '../lib/filters'
 
 const EXAMPLES = [
   'Show stored procedures in AppDb that mention Orders',
@@ -15,7 +16,7 @@ const EXAMPLES = [
 ]
 
 export default function AiPage() {
-  const { index } = useCatalog()
+  const { index: baseIndex } = useCatalog()
   const ai = useAi()
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<FilterPlanV1 | null>(null)
@@ -24,17 +25,26 @@ export default function AiPage() {
 
   useEffect(() => () => controllerRef.current?.abort(), [])
 
-  const nodes = useMemo(() => index?.catalog.nodes ?? [], [index])
+  const { index, loading, error } = useCatalogSelection(baseIndex, {
+    ids: plan?.columnReference ? [plan.columnReference.objectId] : [],
+  })
+  const nodes = useMemo(() => baseIndex?.catalog.nodes ?? [], [baseIndex])
   const previewTokens = useMemo<FilterToken[]>(
-    () => plan?.tokens.map((token, position) => ({ ...token, id: `ai-preview-${position}` })) ?? [],
+    () => [
+      ...(plan?.tokens.map((token, position) => ({ ...token, id: `ai-preview-${position}` })) ?? []),
+      ...(plan?.contentQuery
+        ? [{ id: 'ai-content', attribute: 'ddl' as const, operator: 'contains' as const, values: [plan.contentQuery] }]
+        : []),
+    ],
     [plan],
   )
+  const search = useCatalogFilter(baseIndex, previewTokens)
   const matchCount = useMemo(() => {
     if (!plan) return null
     if (plan.columnReference)
       return index ? getColumnConsumers(index, plan.columnReference.objectId, plan.columnReference.column).length : 0
-    return filterByContent(applyFilters(nodes, previewTokens), plan.contentQuery).length
-  }, [index, nodes, plan, previewTokens])
+    return search.nodes.length
+  }, [index, plan, search.nodes])
   const columnTarget = plan?.columnReference
   const columnObject = columnTarget ? index?.byId.get(columnTarget.objectId) : undefined
   const explorerUrl = useMemo(() => {
@@ -175,10 +185,15 @@ export default function AiPage() {
               <div>
                 <h2 id="ai-preview-title">{columnTarget ? 'Column references' : 'Filter preview'}</h2>
                 <p className="muted">
-                  {columnTarget
-                    ? `${matchCount} object(s) with recorded references`
-                    : `${matchCount} of ${nodes.length} object(s) match`}
+                  {loading || search.loading
+                    ? 'Loading matches...'
+                    : error || search.error
+                      ? 'Matches unavailable'
+                      : columnTarget
+                        ? `${matchCount} object(s) with recorded references`
+                        : `${matchCount} of ${nodes.length} object(s) match`}
                 </p>
+                <CatalogLoadStatus loading={false} error={error ?? search.error} />
               </div>
               <span className={`ai-confidence ai-confidence--${plan.confidence}`}>{plan.confidence} confidence</span>
             </div>
