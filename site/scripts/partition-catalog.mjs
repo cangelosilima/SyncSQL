@@ -298,7 +298,7 @@ export async function partitionCatalog(
       nodeCount: route.size,
       edgeCount,
       topReferencedTables,
-      orphanedReferenceCount: orphanedReferences?.length ?? 0,
+      orphanedReferenceCount: orphanedReferences?.length,
       summaries,
       partitions,
     })
