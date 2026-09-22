@@ -64,7 +64,7 @@ internal static class SyncCommand
         Option<string[]> serverExcludeOption = new("--server-exclude") { Description = "Regex override for which configured servers are skipped. Takes precedence over config.serverSelection." };
         Option<int> maxParallelismOption = new("--max-parallelism")
         {
-            Description = "Maximum number of servers extracted concurrently. Use 1 for sequential extraction.",
+            Description = "Maximum concurrent extraction jobs across all engines. Slots are shared fairly and reassigned as work finishes. Use 1 for sequential extraction.",
             DefaultValueFactory = _ => 4,
         };
         maxParallelismOption.Validators.Add(result =>
@@ -179,11 +179,7 @@ internal static class SyncCommand
             List<ServerConfig> coveredServers = [.. config.Servers.Where(server => serverSelection.IsAllowed(server.Name)
                 && EffectiveFilters.Resolve(config.Defaults, server).ObjectTypes.Count > 0)];
             Queue<(ServerConfig Server, int Depth)> pending = new(config.Servers.Select(server => (server, 0)));
-            ParallelOptions parallelOptions = new()
-            {
-                MaxDegreeOfParallelism = parseResult.GetValue(maxParallelismOption),
-                CancellationToken = cancellationToken,
-            };
+            ExtractionWorkScheduler scheduler = new(parseResult.GetValue(maxParallelismOption));
             SyncSqlTerminal terminal = services.GetService<SyncSqlTerminal>() ?? new(TextWriter.Null, animated: false);
             await using ExtractionProgressDisplay progress = terminal.StartExtraction();
             foreach (ServerConfig server in config.Servers)
@@ -236,8 +232,9 @@ internal static class SyncCommand
                 // order after the round so competing links always choose the same parent/credentials.
                 ServerExtractionResult[] results = new ServerExtractionResult[work.Count];
                 ServerIdentityRegistry identities = new(knownServers.Select(ServerIdentity.FromConfig));
-                await Parallel.ForEachAsync(Enumerable.Range(0, work.Count), parallelOptions, async (index, workerToken) =>
+                async Task<int> ExtractServerAsync(int index, ExtractionWorkContext context)
                 {
+                    CancellationToken workerToken = context.CancellationToken;
                     workerToken.ThrowIfCancellationRequested();
                     var (server, depth, filters, credentials) = work[index];
                     bool discoverHere = followLinkedServers && depth < discovery.MaxDepth && server.Type == DatabaseEngine.MsSql;
@@ -268,6 +265,8 @@ internal static class SyncCommand
                             {
                                 Credentials = credentials,
                                 CaptureMetrics = captureMetrics,
+                                MaxParallelism = scheduler.MaxParallelism,
+                                WorkContext = context,
                                 DiscoverLinkedServers = discoverHere,
                                 Progress = serverProgress,
                             }, workerToken);
@@ -297,8 +296,11 @@ internal static class SyncCommand
                         }
                         results[index] = new(0, [], Failed: true);
                     }
-                });
+                    return index;
+                }
 
+                await scheduler.RunAsync(work.Select((entry, index) =>
+                    (entry.Server.Type, (Func<ExtractionWorkContext, Task<int>>)(context => ExtractServerAsync(index, context)))), cancellationToken);
                 // Failed attempts establish no coverage, even when another worker in this round
                 // discovers a link back to them. Keep their address registrations for resolution.
                 for (int index = 0; index < work.Count; index++)

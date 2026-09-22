@@ -37,196 +37,167 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
 
     public async Task<ExtractionOutcome> ExtractAsync(ServerConfig server, EffectiveFilters filters, ExtractionOptions options, CancellationToken cancellationToken)
     {
+        if (options.WorkContext is null)
+        {
+            ExtractionWorkScheduler scheduler = new(options.MaxParallelism);
+            return (await scheduler.RunAsync<ExtractionOutcome>([(Engine, context =>
+                ExtractAsync(server, filters, options with { WorkContext = context }, context.CancellationToken))], cancellationToken))[0];
+        }
         string serviceName = server.ServiceName
             ?? throw new InvalidOperationException($"Oracle server '{server.Name}' is missing required key 'serviceName'.");
-
-        options.Progress?.Report(new($"Connecting to {serviceName}"));
-        await using DbConnection connection = _createConnection(server, options.Credentials);
-        await connection.OpenAsync(cancellationToken);
-        await OracleConnectionFactory.InitializeAsync(connection, cancellationToken);
-
-        List<ExtractedObject> objects = [];
-        Dictionary<string, MetricsSnapshot> metrics = [];
-
-        options.Progress?.Report(new($"{serviceName}: listing schemas"));
-        List<string> allOwners = await OracleCommandRunner.QueryAsync(connection, OracleQueries.Schemas, r => r.GetStringOrEmpty("OWNER"), cancellationToken);
-        List<string> allowedOwners = [.. allOwners.Where(filters.Schemas.IsAllowed)];
-
-        if (filters.ObjectTypes.Contains("Schemas"))
+        ExtractionProgressAggregator progress = new(options.Progress);
+        await using OracleExtractionConnections connections = new(() => _createConnection(server, options.Credentials));
+        progress.Report(new($"Connecting to {serviceName}"));
+        var (owners, links) = await connections.UseAsync(async connection =>
         {
-            options.Progress?.Report(new($"{serviceName}: schema definitions", objects.Count));
-            await ExtractSchemasAsync(connection, server, serviceName, allowedOwners, objects, cancellationToken);
-        }
-
-        // One query pass per owner regardless of how many object types are being extracted for that
-        // owner - each degrades to an empty index on failure, same "optional step never blocks the
-        // rest" posture as every other best-effort extraction step.
-        Dictionary<string, Dictionary<string, List<GrantEntry>>> grantsByOwner = [];
-        Dictionary<string, Dictionary<string, List<ExtractedColumn>>> columnListByOwner = [];
-        Dictionary<string, Dictionary<string, MetricsSnapshot>> metricsByOwner = [];
-
-        foreach ((string configType, string oracleType) in OracleTypeMaps.ObjectTypeMap)
-        {
-            if (!filters.ObjectTypes.Contains(configType))
+            progress.Report(new($"{serviceName}: listing schemas"));
+            List<string> allOwners = await OracleCommandRunner.QueryAsync(connection, OracleQueries.Schemas,
+                r => r.GetStringOrEmpty("OWNER"), cancellationToken);
+            List<(string Owner, string Name)> databaseLinks = [];
+            if (filters.ObjectTypes.Contains("DatabaseLinks"))
             {
-                continue;
+                progress.Report(new($"{serviceName}: database links"));
+                databaseLinks = await OracleCommandRunner.QueryDictionaryAsync(connection, OracleQueries.AllDatabaseLinks,
+                    OracleQueries.DatabaseLinks, r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK")), cancellationToken);
             }
+            return (allOwners.Where(filters.Schemas.IsAllowed).ToArray(), databaseLinks);
+        }, cancellationToken);
 
-            string ddlType = OracleTypeMaps.ToDdlType(oracleType);
-
-            foreach (string owner in allowedOwners)
+        List<Func<ExtractionWorkContext, Task<ExtractionOutcome>>> jobs = [];
+        if (filters.ObjectTypes.Contains("Schemas") || OracleTypeMaps.ObjectTypeMap.Any(type => filters.ObjectTypes.Contains(type.ConfigType)))
+        {
+            jobs.AddRange(owners.Select(owner => (Func<ExtractionWorkContext, Task<ExtractionOutcome>>)(context =>
+                ExtractOwnerAsync(connections, server, serviceName, owner, filters, options, progress, context))));
+        }
+        foreach ((string owner, string name) in links)
+        {
+            if (filters.Schemas.IsAllowed(owner) && filters.ObjectNames.IsAllowed(name))
             {
-                options.Progress?.Report(new($"{serviceName}/{owner}: {configType}", objects.Count));
-                if (!grantsByOwner.TryGetValue(owner, out Dictionary<string, List<GrantEntry>>? ownerGrants))
-                {
-                    ownerGrants = await TryLoadAsync(() => LoadGrantsAsync(connection, owner, cancellationToken), server.Name, owner, "ALL_TAB_PRIVS/ALL_COL_PRIVS");
-                    grantsByOwner[owner] = ownerGrants;
-                }
-                if (oracleType is "TABLE" or "VIEW" && !columnListByOwner.ContainsKey(owner))
-                {
-                    columnListByOwner[owner] = await TryLoadAsync(() => LoadColumnListAsync(connection, owner, cancellationToken), server.Name, owner, "ALL_TAB_COLUMNS");
-                }
-                if (options.CaptureMetrics && oracleType == "TABLE" && !metricsByOwner.ContainsKey(owner))
-                {
-                    metricsByOwner[owner] = await LoadMetricsSnapshotsAsync(connection, owner, server.Name, cancellationToken);
-                }
-
-                List<string> objectNames = await OracleCommandRunner.QueryAsync(
-                    connection, OracleQueries.ObjectList, r => r.GetStringOrEmpty("ObjectName"), cancellationToken,
-                    ("owner", owner), ("objType", oracleType));
-
-                string[] allowedNames = [.. objectNames.Where(filters.ObjectNames.IsAllowed)];
-                int processed = 0;
-                foreach (string objectName in allowedNames)
-                {
-                    options.Progress?.Report(new($"{owner}.{objectName}: {configType}", objects.Count, processed++, allowedNames.Length));
-                    string? ddl;
-                    try
-                    {
-                        ddl = await OracleCommandRunner.ExecuteScalarStringAsync(
-                            connection, OracleQueries.GetDdl, cancellationToken,
-                            ("objType", ddlType), ("objName", objectName), ("owner", owner));
-                    }
-                    catch (OracleException ex)
-                    {
-                        _logger.LogWarning("[{Server}/{ServiceName}] Failed to extract DDL for {Owner}.{ObjectName} ({ConfigType}): {Message}",
-                            server.Name, serviceName, owner, objectName, configType, ex.Message);
-                        continue;
-                    }
-
-                    string key = $"{owner}.{objectName}";
-                    IReadOnlyList<ExtractedColumn> columns = oracleType is "TABLE" or "VIEW"
-                        ? columnListByOwner[owner].GetValueOrDefault(key) ?? []
-                        : [];
-                    IReadOnlyList<GrantEntry> objectGrants = ownerGrants.GetValueOrDefault(key) ?? [];
-
-                    objects.Add(new ExtractedObject
-                    {
-                        Server = server.Name,
-                        Database = serviceName,
-                        Schema = owner,
-                        Type = configType,
-                        Name = objectName,
-                        Ddl = ddl ?? string.Empty,
-                        Engine = DatabaseEngine.Oracle,
-                        Columns = columns,
-                        Grants = objectGrants,
-                    });
-                    options.Progress?.Report(new($"{owner}: {configType}", objects.Count, processed, allowedNames.Length));
-
-                    if (options.CaptureMetrics && oracleType == "TABLE" &&
-                        metricsByOwner.TryGetValue(owner, out Dictionary<string, MetricsSnapshot>? ownerMetrics) &&
-                        ownerMetrics.TryGetValue(key, out MetricsSnapshot? snapshot))
-                    {
-                        string id = ExtractedObjectFile.ObjectId(server.Name, serviceName, owner, configType, objectName);
-                        metrics[id] = snapshot;
-                    }
-                }
+                ObjectWork work = new(owner, "DatabaseLinks", "DB_LINK", name, [], [], null);
+                jobs.Add(context => ExtractObjectAsync(connections, server, serviceName, work, progress.CreateChild(), context.CancellationToken));
             }
         }
-
-        if (filters.ObjectTypes.Contains("DatabaseLinks"))
-        {
-            options.Progress?.Report(new($"{serviceName}: database links", objects.Count));
-            await ExtractDatabaseLinksAsync(connection, server, serviceName, filters, objects, cancellationToken);
-        }
-
-        _logger.LogInformation("[{Server}] Wrote {Count} object(s)", server.Name, objects.Count);
-        return new ExtractionOutcome { Objects = objects, MetricsSnapshots = metrics };
+        ExtractionOutcome result = Merge(await options.WorkContext.RunChildrenAsync(jobs));
+        _logger.LogInformation("[{Server}] Wrote {Count} object(s)", server.Name, result.Objects.Count);
+        return result;
     }
 
-    private static async Task ExtractSchemasAsync(
-        DbConnection connection, ServerConfig server, string serviceName, IReadOnlyList<string> allowedOwners,
-        List<ExtractedObject> objects, CancellationToken cancellationToken)
+    private async Task<ExtractionOutcome> ExtractOwnerAsync(
+        OracleExtractionConnections connections, ServerConfig server, string serviceName, string owner,
+        EffectiveFilters filters, ExtractionOptions options, ExtractionProgressAggregator progress, ExtractionWorkContext context)
     {
-        foreach (string owner in allowedOwners)
+        CancellationToken token = context.CancellationToken;
+        List<ObjectWork> objects = await connections.UseAsync(async connection =>
         {
-            string definition;
-            try
+            List<ObjectWork> work = [];
+            if (filters.ObjectTypes.Contains("Schemas")) { work.Add(new(owner, "Schemas", "USER", owner, [], [], null)); }
+            Dictionary<string, List<GrantEntry>>? grants = null;
+            Dictionary<string, List<ExtractedColumn>>? columns = null;
+            Dictionary<string, MetricsSnapshot>? metrics = null;
+            foreach ((string configType, string oracleType) in OracleTypeMaps.ObjectTypeMap)
             {
-                definition = await OracleCommandRunner.ExecuteScalarStringAsync(
-                    connection, OracleQueries.GetDdl, cancellationToken, ("objType", "USER"), ("objName", owner), ("owner", owner))
-                    ?? $"-- Oracle schema/user: {owner}";
+                if (!filters.ObjectTypes.Contains(configType)) { continue; }
+                progress.Report(new($"{serviceName}/{owner}: {configType}"));
+                grants ??= await TryLoadAsync(() => LoadGrantsAsync(connection, owner, token), server.Name, owner, "ALL_TAB_PRIVS/ALL_COL_PRIVS");
+                if (oracleType is "TABLE" or "VIEW" && columns is null)
+                {
+                    columns = await TryLoadAsync(() => LoadColumnListAsync(connection, owner, token), server.Name, owner, "ALL_TAB_COLUMNS");
+                }
+                if (options.CaptureMetrics && oracleType == "TABLE" && metrics is null)
+                {
+                    metrics = await LoadMetricsSnapshotsAsync(connection, owner, server.Name, token);
+                }
+                List<string> names = await OracleCommandRunner.QueryAsync(connection, OracleQueries.ObjectList,
+                    r => r.GetStringOrEmpty("ObjectName"), token, ("owner", owner), ("objType", oracleType));
+                foreach (string name in names.Where(filters.ObjectNames.IsAllowed))
+                {
+                    string key = $"{owner}.{name}";
+                    work.Add(new(owner, configType, OracleTypeMaps.ToDdlType(oracleType), name,
+                        oracleType is "TABLE" or "VIEW" ? columns!.GetValueOrDefault(key) ?? [] : [],
+                        grants.GetValueOrDefault(key) ?? [], oracleType == "TABLE" ? metrics?.GetValueOrDefault(key) : null));
+                }
             }
-            catch (OracleException)
-            {
-                // Insufficient privileges to extract CREATE USER DDL - fall back to a bare comment
-                // rather than skipping the schema entirely (matches Export-SyncSqlOracleServer).
-                definition = $"-- Oracle schema/user: {owner}";
-            }
+            return work;
+        }, token);
 
-            objects.Add(new ExtractedObject
+        // Metadata is read once per schema. Release its session and slot before scheduling DDL,
+        // allowing even one schema (including packages and package bodies) to use the whole budget.
+        ExtractionProgressAggregator ownerProgress = new(progress.CreateChild());
+        int completed = 0;
+        object completionLock = new();
+        ExtractionOutcome[] results = await context.RunChildrenAsync(objects.Select(work =>
+            (Func<ExtractionWorkContext, Task<ExtractionOutcome>>)(async child =>
             {
-                Server = server.Name,
-                Database = serviceName,
-                Type = "Schemas",
-                Name = owner,
-                Ddl = definition,
-                Engine = DatabaseEngine.Oracle,
-            });
-        }
+                ExtractionOutcome result = await ExtractObjectAsync(connections, server, serviceName, work,
+                    ownerProgress.CreateChild(), child.CancellationToken);
+                lock (completionLock)
+                {
+                    ownerProgress.Report(new($"{owner}: objects", Completed: ++completed, Total: objects.Count));
+                }
+                return result;
+            })));
+        return Merge(results);
     }
 
-    private static async Task ExtractDatabaseLinksAsync(
-        DbConnection connection, ServerConfig server, string serviceName, EffectiveFilters filters,
-        List<ExtractedObject> objects, CancellationToken cancellationToken)
+    private sealed record ObjectWork(string Owner, string ConfigType, string DdlType, string Name,
+        IReadOnlyList<ExtractedColumn> Columns, IReadOnlyList<GrantEntry> Grants, MetricsSnapshot? Metrics);
+
+    private async Task<ExtractionOutcome> ExtractObjectAsync(OracleExtractionConnections connections, ServerConfig server,
+        string serviceName, ObjectWork work, IProgress<ExtractionProgress> progress, CancellationToken token)
     {
-        // ALL_DB_LINKS cannot expose another owner's private links.
-        List<(string Owner, string DbLink)> links = await OracleCommandRunner.QueryDictionaryAsync(
-            connection, OracleQueries.AllDatabaseLinks, OracleQueries.DatabaseLinks,
-            r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK")), cancellationToken);
-
-        foreach ((string owner, string dbLink) in links)
+        progress.Report(new(work.ConfigType == "Schemas" ? $"{serviceName}/{work.Owner}: schema definitions"
+            : $"{work.Owner}.{work.Name}: {work.ConfigType}"));
+        return await connections.UseAsync(async connection =>
         {
-            if (!filters.Schemas.IsAllowed(owner) || !filters.ObjectNames.IsAllowed(dbLink))
-            {
-                continue;
-            }
-
             string? ddl;
             try
             {
-                ddl = await OracleCommandRunner.ExecuteScalarStringAsync(
-                    connection, OracleQueries.GetDdl, cancellationToken, ("objType", "DB_LINK"), ("objName", dbLink), ("owner", owner));
+                ddl = await OracleCommandRunner.ExecuteScalarStringAsync(connection, OracleQueries.GetDdl, token,
+                    ("objType", work.DdlType), ("objName", work.Name), ("owner", work.Owner));
             }
-            catch (OracleException)
+            catch (OracleException ex) when (!token.IsCancellationRequested)
             {
-                continue;
+                if (work.ConfigType == "Schemas") { ddl = null; }
+                else
+                {
+                    _logger.LogWarning("[{Server}/{ServiceName}] Failed to extract DDL for {Owner}.{ObjectName} ({ConfigType}): {Message}",
+                        server.Name, serviceName, work.Owner, work.Name, work.ConfigType, ex.Message);
+                    return Merge([]);
+                }
             }
-
-            objects.Add(new ExtractedObject
+            ExtractedObject extracted = new()
             {
                 Server = server.Name,
                 Database = serviceName,
-                Schema = owner,
-                Type = "DatabaseLinks",
-                Name = dbLink,
-                Ddl = ddl ?? string.Empty,
+                Schema = work.ConfigType == "Schemas" ? null : work.Owner,
+                Type = work.ConfigType,
+                Name = work.Name,
+                Ddl = ddl ?? (work.ConfigType == "Schemas" ? $"-- Oracle schema/user: {work.Owner}" : string.Empty),
                 Engine = DatabaseEngine.Oracle,
-            });
-        }
+                Columns = work.Columns,
+                Grants = work.Grants,
+            };
+            Dictionary<string, MetricsSnapshot> metrics = [];
+            if (work.Metrics is { } snapshot)
+            {
+                metrics[ExtractedObjectFile.ObjectId(server.Name, serviceName, work.Owner, work.ConfigType, work.Name)] = snapshot;
+            }
+            progress.Report(new($"{work.Owner}: {work.ConfigType}", 1));
+            return new ExtractionOutcome { Objects = [extracted], MetricsSnapshots = metrics };
+        }, token);
     }
 
+    private static ExtractionOutcome Merge(IEnumerable<ExtractionOutcome> results)
+    {
+        List<ExtractedObject> objects = [];
+        Dictionary<string, MetricsSnapshot> metrics = [];
+        foreach (ExtractionOutcome result in results)
+        {
+            objects.AddRange(result.Objects);
+            foreach ((string id, MetricsSnapshot snapshot) in result.MetricsSnapshots) { metrics[id] = snapshot; }
+        }
+        return new ExtractionOutcome { Objects = objects, MetricsSnapshots = metrics };
+    }
     private static async Task<Dictionary<string, List<GrantEntry>>> LoadGrantsAsync(DbConnection connection, string owner, CancellationToken cancellationToken)
     {
         Dictionary<string, List<GrantEntry>> index = new(StringComparer.OrdinalIgnoreCase);

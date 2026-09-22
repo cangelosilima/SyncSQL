@@ -274,10 +274,10 @@ public sealed class ExtractorTests
                 _ => ServiceBrokerReader.Query,
             });
         }
-        List<string> opened = [];
+        System.Collections.Concurrent.ConcurrentQueue<string> opened = new();
         var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System, (_, database, _) =>
         {
-            opened.Add(database);
+            opened.Enqueue(database);
             return database switch { "before" => before, "broken" => broken, "after" => after, _ => master };
         });
         var server = Server with { ObjectTypes = AllTypes };
@@ -285,7 +285,7 @@ public sealed class ExtractorTests
         ExtractionOutcome result = await extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
             new ExtractionOptions { Credentials = Credentials, DiscoverLinkedServers = true, Progress = progress }, CancellationToken.None);
 
-        Assert.Equal(["master", "master", "before", "broken", "after"], opened);
+        Assert.Equal(new[] { "master", "master", "before", "broken", "after" }.Order(), opened.Order());
         Assert.True(result.IsPartial);
         Assert.Equal(new DatabaseExtractionFailure("broken", "Database unavailable"), Assert.Single(result.FailedDatabases));
         Assert.Contains(result.Objects, o => o.Database == "before" && o.Name == "orders");
@@ -297,6 +297,53 @@ public sealed class ExtractorTests
         Assert.True(broken.WasDisposed);
         Assert.True(after.WasDisposed);
         Assert.Equal(new ExtractionProgress("Databases processed (partially complete)", result.Objects.Count, 3, 3), progress.Updates[^1]);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public async Task Extract_OneServerUsesBudgetAcrossDatabases(int limit)
+    {
+        using FakeDatabase master = Database();
+        string[] names = [.. Enumerable.Range(0, 7).Select(i => $"db{i}")];
+        master.Rows(MsSqlQueries.Databases, names.Select(name => new { Name = name }).ToArray());
+        TaskCompletionSource full = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        System.Collections.Concurrent.ConcurrentBag<FakeDatabase> sessions = [];
+        int started = 0;
+        MsSqlObjectExtractor extractor = new(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System, (_, database, _) =>
+        {
+            if (database == "master") { return master; }
+            FakeDatabase session = Database();
+            session.Rows(MsSqlQueries.Tables, new TableRow { ObjectId = 1, SchemaName = "dbo", TableName = "orders" });
+            session.BeforeOpenAsync = async token =>
+            {
+                if (Interlocked.Increment(ref started) == limit) { full.TrySetResult(); }
+                await release.Task.WaitAsync(token);
+            };
+            sessions.Add(session);
+            return session;
+        });
+        ServerConfig server = Server with { ObjectTypes = ["Tables"] };
+        ProgressRecorder progress = new();
+        Task<ExtractionOutcome> run = extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
+            new ExtractionOptions { Credentials = Credentials, MaxParallelism = limit, Progress = progress }, CancellationToken.None);
+        try
+        {
+            await full.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(limit, Volatile.Read(ref started));
+        }
+        finally
+        {
+            release.TrySetResult();
+            await run.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        ExtractionOutcome result = await run;
+        Assert.False(result.IsPartial);
+        Assert.Equal(names, result.Objects.Select(o => o.Database));
+        Assert.All(sessions, session => Assert.True(session.WasDisposed));
+        Assert.Equal(result.Objects.Count, progress.Updates[^1].ObjectsExtracted);
+        Assert.Equal(progress.Updates.Select(p => p.ObjectsExtracted).Order(), progress.Updates.Select(p => p.ObjectsExtracted));
     }
 
     [Fact]
@@ -322,10 +369,10 @@ public sealed class ExtractorTests
     {
         using var master = Database();
         using CancellationTokenSource cancellation = new();
-        List<string> opened = [];
+        System.Collections.Concurrent.ConcurrentQueue<string> opened = new();
         var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System, (_, database, _) =>
         {
-            opened.Add(database);
+            opened.Enqueue(database);
             if (database != "master")
             {
                 if (databaseException)
@@ -338,7 +385,7 @@ public sealed class ExtractorTests
             return master;
         });
         Task<ExtractionOutcome> extraction = extractor.ExtractAsync(Server, EffectiveFilters.Resolve(null, Server),
-            new ExtractionOptions { Credentials = Credentials }, cancellation.Token);
+            new ExtractionOptions { Credentials = Credentials, MaxParallelism = 1 }, cancellation.Token);
 
         if (databaseException)
         {

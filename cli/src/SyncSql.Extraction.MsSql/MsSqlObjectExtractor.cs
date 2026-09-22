@@ -67,6 +67,12 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
 
     public async Task<ExtractionOutcome> ExtractAsync(ServerConfig server, EffectiveFilters filters, ExtractionOptions options, CancellationToken cancellationToken)
     {
+        if (options.WorkContext is null)
+        {
+            ExtractionWorkScheduler scheduler = new(options.MaxParallelism);
+            return (await scheduler.RunAsync<ExtractionOutcome>([(Engine, context =>
+                ExtractAsync(server, filters, options with { WorkContext = context }, context.CancellationToken))], cancellationToken))[0];
+        }
         List<ExtractedObject> objects = [];
         Dictionary<string, MetricsSnapshot> metrics = [];
         List<DiscoveredLinkedServer> discoveredLinkedServers = [];
@@ -93,27 +99,46 @@ public sealed class MsSqlObjectExtractor : IDatabaseObjectExtractor
         }
 
         options.Progress?.Report(new("Listing databases", objects.Count));
-        await using DbConnection dbListConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken);
-        IEnumerable<string> databases = await MsSqlCatalogReader.GetDatabasesAsync(dbListConnection);
-        string[] allowedDatabases = [.. databases.Where(filters.Databases.IsAllowed)];
-        int completed = 0;
-        foreach (string database in allowedDatabases)
+        string[] allowedDatabases;
+        await using (DbConnection dbListConnection = await OpenAsync(server, "master", options.Credentials, cancellationToken))
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            options.Progress?.Report(new($"Database {database}", objects.Count, completed, allowedDatabases.Length));
+            IEnumerable<string> databases = await MsSqlCatalogReader.GetDatabasesAsync(dbListConnection);
+            allowedDatabases = [.. databases.Where(filters.Databases.IsAllowed)];
+        }
+        ExtractionProgressAggregator progress = new(options.Progress, objects.Count);
+        ExtractionOutcome[] databaseResults = await options.WorkContext.RunChildrenAsync(allowedDatabases.Select(database =>
+            (Func<ExtractionWorkContext, Task<ExtractionOutcome>>)(async context =>
+        {
+            CancellationToken workerToken = context.CancellationToken;
+            List<ExtractedObject> databaseObjects = [];
+            Dictionary<string, MetricsSnapshot> databaseMetrics = [];
+            List<DatabaseExtractionFailure> failures = [];
+            IProgress<ExtractionProgress> databaseProgress = progress.CreateChild();
+            databaseProgress.Report(new($"Database {database}"));
             _logger.LogInformation("[{Server}/{Database}] Extracting", server.Name, database);
             try
             {
-                await using DbConnection connection = await OpenAsync(server, database, options.Credentials, cancellationToken);
-                await ExtractDatabaseAsync(connection, server, database, filters, options, objects, metrics);
+                await using DbConnection connection = await OpenAsync(server, database, options.Credentials, workerToken);
+                await ExtractDatabaseAsync(connection, server, database, filters,
+                    options with { WorkContext = context, Progress = databaseProgress }, databaseObjects, databaseMetrics);
+                workerToken.ThrowIfCancellationRequested();
             }
-            catch (Exception ex) when (ex is not OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (ex is not OperationCanceledException && !workerToken.IsCancellationRequested)
             {
-                failedDatabases.Add(new(database, ex.Message));
+                failures.Add(new(database, ex.Message));
                 _logger.LogWarning("[{Server}/{Database}] Extraction partially complete: {Message}. Continuing with remaining databases.", server.Name, database, ex.Message);
             }
-            options.Progress?.Report(new(failedDatabases.Count == 0 ? "Databases extracted" : "Databases processed (partially complete)", objects.Count, ++completed, allowedDatabases.Length));
+            databaseProgress.Report(new($"Database {database} processed", databaseObjects.Count));
+            return new ExtractionOutcome { Objects = databaseObjects, MetricsSnapshots = databaseMetrics, FailedDatabases = failures };
+        })));
+        foreach (ExtractionOutcome result in databaseResults)
+        {
+            objects.AddRange(result.Objects);
+            foreach ((string id, MetricsSnapshot snapshot) in result.MetricsSnapshots) { metrics[id] = snapshot; }
+            failedDatabases.AddRange(result.FailedDatabases);
         }
+        progress.Report(new(failedDatabases.Count == 0 ? "Databases extracted" : "Databases processed (partially complete)",
+            objects.Count, allowedDatabases.Length, allowedDatabases.Length));
 
         cancellationToken.ThrowIfCancellationRequested();
 

@@ -92,14 +92,15 @@ public sealed class OracleExtractorTests
 
     private static Task<ExtractionOutcome> Extract(FakeOracleDatabase db, bool metrics = true, string[]? types = null, ServerConfig? config = null, IProgress<ExtractionProgress>? progress = null)
     {
-        var extractor = new OracleObjectExtractor(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) => db);
+        var extractor = new OracleObjectExtractor(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System,
+            (_, _) => db);
         var server = config ?? Server with
         {
             ObjectTypes = types ?? ["Schemas", "Tables", "Views", "StoredProcedures", "Functions", "Packages", "PackageBodies", "Triggers", "Synonyms", "DatabaseLinks"],
             Schemas = new NameFilter { Exclude = ["^PRIVATE$"] },
             ObjectNames = new NameFilter { Exclude = ["^skip$"] }
         };
-        return extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server), new ExtractionOptions { Credentials = Credentials, CaptureMetrics = metrics, Progress = progress }, CancellationToken.None);
+        return extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server), new ExtractionOptions { Credentials = Credentials, CaptureMetrics = metrics, Progress = progress, MaxParallelism = 1 }, CancellationToken.None);
     }
 
     private sealed class ProgressRecorder : IProgress<ExtractionProgress>
@@ -114,7 +115,7 @@ public sealed class OracleExtractorTests
         using FakeOracleDatabase db = new() { Execute = Respond };
         ProgressRecorder progress = new();
         ExtractionOutcome result = await Extract(db, progress: progress);
-        Assert.Contains(progress.Updates, p => p.Activity == "APP: schema definitions");
+        Assert.Contains(progress.Updates, p => p.Activity == "APP/APP: schema definitions");
         Assert.Contains(progress.Updates, p => p.Activity == "APP: database links");
         Assert.Contains(result.Objects, o => o.Type == "DatabaseLinks");
         Assert.Contains(result.Objects, o => o.Type == "Schemas");
@@ -127,7 +128,7 @@ public sealed class OracleExtractorTests
         ProgressRecorder progress = new();
         ExtractionOutcome result = await Extract(db, types: ["Tables"], progress: progress);
         Assert.Contains(progress.Updates, p => p.Activity == "APP.orders: Tables");
-        Assert.Equal(new ExtractionProgress("APP: Tables", result.Objects.Count, 2, 2), progress.Updates[^1]);
+        Assert.Equal(new ExtractionProgress("APP: objects", result.Objects.Count, 2, 2), progress.Updates[^1]);
         Assert.DoesNotContain(progress.Updates, p => p.Activity.Contains("skip", StringComparison.Ordinal) || p.Activity.Contains("PRIVATE", StringComparison.Ordinal));
     }
 
@@ -194,5 +195,180 @@ public sealed class OracleExtractorTests
         using FakeOracleDatabase db = new() { Execute = Respond };
         Assert.Empty((await Extract(db, false, [])).Objects);
         await Assert.ThrowsAsync<InvalidOperationException>(() => Extract(db, config: Server with { ServiceName = null }));
+    }
+
+    [Theory]
+    [InlineData(null, 4, 1)]
+    [InlineData(null, 4, 7)]
+    [InlineData(1, 1, 1)]
+    [InlineData(2, 2, 7)]
+    public async Task Extract_SchemasAndObjectsShareTheBudgetAndReuseExclusiveSessions(int? limit, int expectedConcurrency, int ownerCount)
+    {
+        string[] owners = [.. Enumerable.Range(0, ownerCount).Select(i => $"OWNER{i}")];
+        System.Collections.Concurrent.ConcurrentBag<FakeOracleDatabase> sessions = [];
+        TaskCompletionSource slotsFilled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int started = 0, active = 0, exceeded = 0;
+        OracleObjectExtractor extractor = new(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) =>
+        {
+            bool initialized = false;
+            int sessionActive = 0;
+            FakeOracleDatabase session = new()
+            {
+                ExecuteAsync = async (sql, p, token) =>
+                {
+                    Assert.Equal(1, Interlocked.Increment(ref sessionActive));
+                    try
+                    {
+                        if (sql.StartsWith("BEGIN", StringComparison.Ordinal)) { Assert.False(initialized); initialized = true; return null; }
+                        Assert.True(initialized);
+                        if (sql == OracleQueries.Schemas)
+                        {
+                            return FakeOracleDatabase.Rows(owners.Append("PRIVATE").Select(owner => new { OWNER = owner }).ToArray());
+                        }
+                        if (sql == OracleQueries.GetDdl)
+                        {
+                            Assert.NotEqual("PRIVATE", p["owner"]);
+                            Assert.NotEqual("skip", p["objName"]);
+                            if (Interlocked.Increment(ref active) > expectedConcurrency) { Interlocked.Exchange(ref exceeded, 1); }
+                            if (Interlocked.Increment(ref started) == expectedConcurrency) { slotsFilled.TrySetResult(); }
+                            try { await release.Task.WaitAsync(token); }
+                            finally { Interlocked.Decrement(ref active); }
+                        }
+                        return Respond(sql, p);
+                    }
+                    finally { Interlocked.Decrement(ref sessionActive); }
+                },
+            };
+            sessions.Add(session);
+            return session;
+        });
+        ServerConfig server = Server with
+        {
+            ObjectTypes = ownerCount == 1 ? ["Schemas", "Tables", "Views", "Packages", "PackageBodies"]
+                : ["Schemas", "Tables", "Views", "Packages", "PackageBodies", "DatabaseLinks"],
+            Schemas = new NameFilter { Exclude = ["^PRIVATE$"] },
+            ObjectNames = new NameFilter { Exclude = ["^skip$"] },
+        };
+        ProgressRecorder progress = new();
+        ExtractionOptions options = new() { Credentials = Credentials, CaptureMetrics = true, Progress = progress };
+        if (limit is { } value) { options = options with { MaxParallelism = value }; }
+        Task<ExtractionOutcome> run = extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server), options, CancellationToken.None);
+        try
+        {
+            await slotsFilled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(expectedConcurrency, Volatile.Read(ref started));
+            Assert.Equal(expectedConcurrency, sessions.Count);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await run.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        ExtractionOutcome result = await run;
+        Assert.Equal(0, exceeded);
+        int expectedObjects = ownerCount * 9 + (ownerCount == 1 ? 0 : 2);
+        Assert.Equal(expectedObjects, started);
+        Assert.Equal(owners, result.Objects.Where(o => o.Type == "Schemas").Select(o => o.Name));
+        Assert.Equal(expectedObjects, result.Objects.Count);
+        Assert.Equal(ownerCount * 2, result.MetricsSnapshots.Count);
+        Assert.All(result.Objects.Where(o => o.Type == "Tables" && o.Name == "orders"), o =>
+        {
+            Assert.Equal(2, o.Columns.Count);
+            Assert.Equal(2, o.Grants.Count);
+            Assert.Equal(42, result.MetricsSnapshots[$"ORA/APP/Tables/{o.Schema}/orders"].RowCount);
+        });
+        Assert.Equal(progress.Updates.Select(p => p.ObjectsExtracted).Order(), progress.Updates.Select(p => p.ObjectsExtracted));
+        Assert.Equal(result.Objects.Count, progress.Updates[^1].ObjectsExtracted);
+        Assert.Equal(ownerCount == 1 ? 0 : 1, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllDatabaseLinks)));
+        Assert.Equal(ownerCount, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllObjectGrants)));
+        Assert.Equal(ownerCount, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.ColumnList)));
+        Assert.InRange(sessions.Count, 1, expectedConcurrency);
+        Assert.All(sessions, session => Assert.True(session.WasDisposed));
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Extract_SequentialWorkReusesDiscoverySession(bool linksOnly)
+    {
+        int created = 0;
+        using FakeOracleDatabase db = new() { Execute = Respond };
+        OracleObjectExtractor extractor = new(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) =>
+        {
+            Assert.Equal(1, ++created);
+            return db;
+        });
+        ServerConfig server = Server with { ObjectTypes = linksOnly ? ["DatabaseLinks"] : [] };
+        ExtractionOutcome result = await extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
+            new ExtractionOptions { Credentials = Credentials, MaxParallelism = 1 }, CancellationToken.None);
+        Assert.Equal(linksOnly ? 4 : 0, result.Objects.Count);
+        Assert.True(db.WasDisposed);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Extract_CancellationOrFailureStopsWorkersAndDisposesConnections(bool fail)
+    {
+        using CancellationTokenSource cancellation = new();
+        TaskCompletionSource slotsFilled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseFailure = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        System.Collections.Concurrent.ConcurrentBag<FakeOracleDatabase> connections = [];
+        int created = 0, started = 0;
+        OracleObjectExtractor extractor = new(NullLogger<OracleObjectExtractor>.Instance, TimeProvider.System, (_, _) =>
+        {
+            Interlocked.Increment(ref created);
+            FakeOracleDatabase db = new()
+            {
+                ExecuteAsync = async (sql, p, token) =>
+                {
+                    if (sql == OracleQueries.Schemas)
+                    {
+                        return FakeOracleDatabase.Rows(new { OWNER = "ONE" }, new { OWNER = "TWO" }, new { OWNER = "QUEUED" });
+                    }
+                    if (sql == OracleQueries.ObjectList)
+                    {
+                        int position = Interlocked.Increment(ref started);
+                        if (position == 2) { slotsFilled.TrySetResult(); }
+                        if (fail && position == 1)
+                        {
+                            await releaseFailure.Task.WaitAsync(token);
+                            throw FakeOracleDatabase.Error(3113);
+                        }
+                        await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                    }
+                    return Respond(sql, p);
+                },
+            };
+            connections.Add(db);
+            return db;
+        });
+        ServerConfig server = Server with { ObjectTypes = ["Tables"] };
+        Task<ExtractionOutcome> run = extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
+            new ExtractionOptions { Credentials = Credentials, MaxParallelism = 2 }, cancellation.Token);
+        try
+        {
+            await slotsFilled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            if (fail)
+            {
+                releaseFailure.TrySetResult();
+                await Assert.ThrowsAsync<OracleException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
+            }
+            else
+            {
+                await cancellation.CancelAsync();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(10)));
+            }
+            Assert.Equal(2, started);
+            Assert.Equal(2, created);
+            Assert.All(connections, db => Assert.True(db.WasDisposed));
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            try { await run.WaitAsync(TimeSpan.FromSeconds(10)); }
+            catch (OperationCanceledException) { }
+            catch (OracleException) when (fail) { }
+        }
     }
 }
