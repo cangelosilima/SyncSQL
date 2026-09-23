@@ -548,9 +548,15 @@ Enable the versioned Git hook once per checkout:
 pwsh ./scripts/Install-GitHooks.ps1
 ```
 
-After that, every push runs the CLI tests with their 100% line, branch, and
-method coverage gate, followed by the site tests and their configured coverage
-thresholds. Git LFS's pre-push transfer is preserved. The hook can still be
+After that, every push runs the CLI tests and merges their reports with the same
+pinned ReportGenerator version as CI. Both use `scripts/Assert-CliCoverage.ps1`
+to require 100% of lines, branches, methods, and full methods using raw counts.
+Run `dotnet tool restore` to install the pinned tool. Method metrics require a
+ReportGenerator PRO license, configured through `REPORTGENERATOR_LICENSE` or a
+locally registered license; missing metrics fail the gate. Reports are retained
+under `TestResults/pre-push/<run-id>/` for diagnosis, including failed pushes.
+The site tests and their configured coverage thresholds follow the CLI gate.
+Git LFS's pre-push transfer is preserved. The hook can still be
 intentionally bypassed with Git's standard `--no-verify` option.
 
 Scheduled production extraction, publishing objects to git, and the production
@@ -1275,8 +1281,13 @@ The suffix accepts an optional leading dot and is inherited by nested
 discoveries. It applies before checking for duplicate targets. Qualified
 names, IP addresses, local aliases, and named-pipe paths remain unchanged;
 transport prefixes, instance names, and ports are preserved. The configured
-server's own `host` is used as written. Omit the suffix or leave it blank to
-keep the existing behavior.
+server's own `host` is used as written.
+
+To set a shared fallback for discovery, use
+`discovery.linkedServers.hostSuffix` (for example, `"example.com"`). A parent's
+`hostNameSuffix` takes precedence; setting it to an empty string disables the
+fallback for that parent. The selected suffix is inherited by nested discoveries.
+Omit both suffix settings to keep the existing behavior.
 
 SyncSQL already reads the linked target from
 [`sys.servers.data_source`](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-servers-transact-sql).

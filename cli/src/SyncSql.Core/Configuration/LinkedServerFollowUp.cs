@@ -112,7 +112,8 @@ public static class LinkedServerFollowUpPlanner
                 continue;
             }
 
-            host = ApplyHostNameSuffix(host, parent.HostNameSuffix);
+            string? hostSuffix = parent.HostNameSuffix ?? config.HostSuffix;
+            host = ApplyHostNameSuffix(host, hostSuffix);
             string address = ServerIdentity.NormalizeSqlAddress(host, port);
             ServerIdentityRegistry identities = new(known.Select(ServerIdentity.FromConfig));
             ServerConfig[] matches = [.. known.Where(s => s.Type == DatabaseEngine.MsSql
@@ -139,7 +140,7 @@ public static class LinkedServerFollowUpPlanner
                 Type = DatabaseEngine.MsSql,
                 Host = registered?.Host ?? host,
                 Aliases = registered is not null ? identities.Describe(ServerIdentity.FromConfig(registered)).Addresses : [],
-                HostNameSuffix = registered?.HostNameSuffix ?? parent.HostNameSuffix,
+                HostNameSuffix = registered?.HostNameSuffix ?? hostSuffix,
                 Port = registered is not null ? registered.Port : port,
                 Environment = registered?.Environment,
                 Tags = registered?.Tags ?? [],

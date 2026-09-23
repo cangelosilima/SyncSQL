@@ -16,6 +16,10 @@ public sealed record LinkedServerDiscoveryConfig
     [JsonPropertyName("enabled")]
     public bool Enabled { get; init; }
 
+    /// <summary>Optional DNS suffix applied to short SQL Server hosts discovered through linked servers.</summary>
+    [JsonPropertyName("hostSuffix")]
+    public string? HostSuffix { get; init; }
+
     /// <summary>How many links deep to follow: 1 extracts the servers the configured ones link to, 2 also the ones *those* link to, and so on. Depth 0 disables follow-up.</summary>
     [JsonPropertyName("maxDepth")]
     public int MaxDepth { get; init; } = 1;

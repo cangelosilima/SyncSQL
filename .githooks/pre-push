@@ -38,8 +38,8 @@ function Invoke-CheckedCommand {
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'The pre-push checks require dotnet on PATH.' }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'The pre-push checks require npm on PATH.' }
 
-$coverageRoot = Join-Path $repoRoot 'TestResults/pre-push'
-if (Test-Path -LiteralPath $coverageRoot) { Remove-Item -LiteralPath $coverageRoot -Recurse -Force }
+$coverageRoot = Join-Path $repoRoot ('TestResults/pre-push/' + [guid]::NewGuid().ToString('N'))
+Write-Host "Coverage reports: $coverageRoot"
 New-Item -ItemType Directory -Path $coverageRoot -Force | Out-Null
 
 try {
@@ -51,6 +51,8 @@ try {
         }
     }
 
+    Invoke-CheckedCommand git @('lfs', 'fsck', '--pointers', 'HEAD') $repoRoot
+
     Invoke-CheckedCommand dotnet @(
         'build', 'cli/SyncSql.slnx', '--configuration', 'Release', '--no-restore', '-m:1'
     ) $repoRoot
@@ -58,63 +60,21 @@ try {
     Invoke-CheckedCommand dotnet @(
         'test', 'cli/SyncSql.slnx', '--configuration', 'Release', '--no-restore', '--no-build', '-m:1',
         '--collect', 'XPlat Code Coverage', '--settings', 'cli/coverage.runsettings',
-        '--results-directory', 'TestResults/pre-push', '--logger', 'console;verbosity=minimal'
+        '--results-directory', $coverageRoot, '--logger', 'console;verbosity=minimal'
     ) $repoRoot
 
     $reports = @(Get-ChildItem -LiteralPath $coverageRoot -Recurse -Filter 'coverage.cobertura.xml' -File)
     if ($reports.Count -eq 0) { throw 'CLI tests completed without producing a Cobertura coverage report.' }
 
-    # Each test project emits a report for the same product assemblies. The CI
-    # ReportGenerator job performs the authoritative multi-report merge.
-    # Keep this hook focused on test execution and report generation so it does
-    # not duplicate that merge with an incompatible local implementation.
-    <#
-    $lineHits = @{}
-    $branchCoverage = @{}
-    $methodLines = @{}
-    foreach ($report in $reports) {
-        [xml]$xml = Get-Content -LiteralPath $report.FullName -Raw
-        foreach ($class in @($xml.coverage.packages.package.classes.class)) {
-            $file = [string]$class.filename
-            foreach ($line in @($class.lines.line)) {
-                $key = "$file|$([string]$line.number)"
-                $hits = [long]$line.hits
-                if (-not $lineHits.ContainsKey($key) -or $hits -gt $lineHits[$key]) { $lineHits[$key] = $hits }
-                foreach ($condition in @($line.conditions.condition)) {
-                    $branchKey = "$key|$([string]$condition.number)"
-                    $coverageText = ([string]$condition.coverage) -replace '%.*$', ''
-                    $covered = [double]$coverageText -ge 100
-                    if (-not $branchCoverage.ContainsKey($branchKey) -or $covered) { $branchCoverage[$branchKey] = $covered }
-                }
-            }
-            foreach ($method in @($class.methods.method)) {
-                $methodKey = "$file|$([string]$method.name)|$([string]$method.signature)"
-                if (-not $methodLines.ContainsKey($methodKey)) { $methodLines[$methodKey] = @{} }
-                foreach ($line in @($method.lines.line)) {
-                    $lineKey = [string]$line.number
-                    $hits = [long]$line.hits
-                    if (-not $methodLines[$methodKey].ContainsKey($lineKey) -or $hits -gt $methodLines[$methodKey][$lineKey]) {
-                        $methodLines[$methodKey][$lineKey] = $hits
-                    }
-                }
-            }
-        }
-    }
-
-    [long]$linesCovered = @($lineHits.Values | Where-Object { $_ -gt 0 }).Count
-    [long]$linesValid = $lineHits.Count
-    [long]$branchesCovered = @($branchCoverage.Values | Where-Object { $_ }).Count
-    [long]$branchesValid = $branchCoverage.Count
-    [long]$methodsValid = $methodLines.Count
-    [long]$methodsCovered = @($methodLines.Values | Where-Object { @($_.Values | Where-Object { $_ -eq 0 }).Count -eq 0 }).Count
-    $coverageFailures = @()
-    if ($linesCovered -ne $linesValid) { $coverageFailures += "lines $linesCovered/$linesValid" }
-    if ($branchesCovered -ne $branchesValid) { $coverageFailures += "branches $branchesCovered/$branchesValid" }
-    if ($methodsCovered -ne $methodsValid) { $coverageFailures += "methods $methodsCovered/$methodsValid" }
-    if ($coverageFailures.Count -gt 0) { throw "CLI coverage gate failed: $($coverageFailures -join ', ')." }
-    #>
-    Write-Host "CLI coverage reports generated ($($reports.Count)); aggregate threshold is enforced by CI's ReportGenerator merge."
-
+    # Use CI's pinned ReportGenerator merge, then enforce its exact raw counts.
+    Invoke-CheckedCommand dotnet @('tool', 'restore') $repoRoot
+    Invoke-CheckedCommand dotnet @(
+        'tool', 'run', 'reportgenerator',
+        "-reports:$coverageRoot/**/coverage.cobertura.xml",
+        "-targetdir:$coverageRoot/report",
+        '-reporttypes:Html;Cobertura;JsonSummary'
+    ) $repoRoot
+    & (Join-Path $repoRoot 'scripts/Assert-CliCoverage.ps1') -SummaryPath (Join-Path $coverageRoot 'report/Summary.json')
     $sitePath = Join-Path $repoRoot 'site'
     if (-not (Test-Path -LiteralPath (Join-Path $sitePath 'node_modules'))) {
         throw 'Site dependencies are missing. Run npm ci in site/ before pushing.'
@@ -132,7 +92,7 @@ try {
     Invoke-CheckedCommand npm @('run', 'test:coverage') $sitePath
 }
 finally {
-    if (Test-Path -LiteralPath $coverageRoot) { Remove-Item -LiteralPath $coverageRoot -Recurse -Force }
+    Write-Host "Coverage reports: $coverageRoot"
 }
 
 POWERSHELL

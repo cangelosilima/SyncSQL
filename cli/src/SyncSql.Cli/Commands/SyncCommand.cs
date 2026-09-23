@@ -271,7 +271,7 @@ internal static class SyncCommand
                                 Progress = serverProgress,
                             }, workerToken);
 
-                        await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress, identities.Describe(ServerIdentity.FromConfig(server)));
+                        await ExtractionOutputWriter.WriteAsync(outcome, stagingRoot, metricsRoot, workerToken, server.ExportPath, serverProgress, identities.Describe(ServerIdentity.FromConfig(server)), logger);
 
                         results[index] = new(outcome.Objects.Count, discoverHere ? outcome.DiscoveredLinkedServers : [], Failed: false, Partial: outcome.IsPartial);
                         progress.Complete(server.Name, outcome.IsPartial ? "Partially complete" : "Done",

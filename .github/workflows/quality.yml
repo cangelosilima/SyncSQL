@@ -140,13 +140,8 @@ jobs:
       - name: Require every CLI line, branch, and method to be covered
         if: ${{ !cancelled() && hashFiles('TestResults/quality/report/Summary.json') != '' }}
         # Check raw counts as well, so rounding cannot hide an uncovered item.
-        run: |
-          jq -e '.summary |
-            (.coverablelines > 0 and .totalbranches > 0 and .totalmethods > 0) and
-            (.coveredlines == .coverablelines) and
-            (.coveredbranches == .totalbranches) and
-            (.coveredmethods == .totalmethods) and
-            (.fullcoveredmethods == .totalmethods)' TestResults/quality/report/Summary.json
+        shell: pwsh
+        run: ./scripts/Assert-CliCoverage.ps1 -SummaryPath TestResults/quality/report/Summary.json
       - name: Publish coverage summary
         if: ${{ !cancelled() && hashFiles('TestResults/quality/report/SummaryGithub.md') != '' }}
         run: cat TestResults/quality/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
@@ -198,6 +193,8 @@ jobs:
         working-directory: site
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
