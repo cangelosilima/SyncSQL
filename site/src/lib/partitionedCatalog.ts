@@ -85,7 +85,7 @@ export class PartitionedCatalog {
       edges: [],
       recentChanges: manifest.recentChanges ?? [],
       coChangePairs: manifest.coChangePairs ?? [],
-      orphanedReferences: [],
+      orphanedReferences: manifest.orphanedReferenceCount === undefined ? undefined : [],
       systemReferences: [],
       linkedServerReferences: [],
     })

@@ -179,6 +179,32 @@ it('uses stable content hashes, supports pre-partitioned inputs and rejects brok
   ).rejects.toThrow('path')
 })
 
+it.each([undefined, [], [{ from: 'orders', name: 'missing', schema: null }]])(
+  'preserves unavailable, empty and populated orphan analysis: %j',
+  async (orphanedReferences) => {
+    const source = path.join(temporary, 'orphan-state.json')
+    const destination = path.join(temporary, 'orphan-state')
+    await writeFile(source, JSON.stringify(makeCatalog({ nodes: [makeNode({ id: 'orders' })], orphanedReferences })))
+    await partitionCatalog(source, destination)
+    // Read the serialized manifest: undefined must remain absent after publication.
+    const published = JSON.parse(await readFile(path.join(destination, 'catalog.json'), 'utf8'))
+    expect(published.orphanedReferenceCount).toBe(orphanedReferences?.length)
+    expect(Object.hasOwn(published, 'orphanedReferenceCount')).toBe(orphanedReferences !== undefined)
+    vi.stubGlobal(
+      'fetch',
+      async (url: string | URL | Request) =>
+        new Response(await readFile(path.join(destination, String(url).replace('/project/data/', '')))),
+    )
+    const index = await loadPartitionedCatalog(published, '/project/data/')
+    expect(index.catalog.orphanedReferences).toEqual(orphanedReferences === undefined ? undefined : [])
+    const alerts = await index.source!.alerts()
+    expect(alerts.catalog.orphanedReferences).toEqual(orphanedReferences)
+    // Browsing an edge partition with an empty reference array must not invent analysis.
+    await index.source!.edges(['orders'])
+    expect(index.catalog.orphanedReferences).toEqual(orphanedReferences)
+  },
+)
+
 it('handles byte boundaries, Unicode identities, empty snapshots and orphan-only partitions', async () => {
   const source = path.join(temporary, 'boundary.json')
   const node = makeNode({
