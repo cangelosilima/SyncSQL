@@ -287,7 +287,19 @@ a {
   text-decoration: none;
 }
 .server-topology-node--current {
-  border-color: var(--accent);
+  border: 2px solid var(--accent);
+  border-left-width: 6px;
+  background: var(--selected);
+  color: var(--accent);
+  font-weight: 700;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  padding: 1rem 1.25rem;
+}
+.server-topology-node--current small {
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .server-topology-node small {
   color: var(--text-muted);

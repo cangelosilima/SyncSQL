@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { expect, it } from 'vitest'
 import CatalogSidebar from './CatalogSidebar'
 import { makeNode } from '../test/fixtures'
+import { decodeTokensFromUrl } from '../lib/filters'
 function Location() {
   const location = useLocation()
   return (
@@ -143,7 +144,7 @@ it('places all server-level types beside databases and keeps the original object
   expect(screen.getByRole('link', { name: /reader/ })).toHaveAttribute('href', `/object/${login.id}`)
   expect(screen.queryByRole('button', { name: /_ServerLevel/ })).not.toBeInTheDocument()
 })
-it('expands context without changing filters and exposes every object beyond the branch cap', () => {
+it('opens scoped explorer filters while expanding and exposes every object beyond the branch cap', () => {
   const nodes = Array.from({ length: 101 }, (_, i) =>
     makeNode({ id: `object${i}`, qualifiedName: `dbo.Object${String(i).padStart(3, '0')}` }),
   )
@@ -154,15 +155,51 @@ it('expands context without changing filters and exposes every object beyond the
     </MemoryRouter>,
   )
   fireEvent.click(screen.getByRole('button', { name: /SRV1/ }))
+  expect(screen.getByTestId('location')).toHaveTextContent('/server/SRV1')
   fireEvent.click(screen.getByRole('button', { name: /AppDb/ }))
   fireEvent.click(screen.getByRole('button', { name: /dbo/ }))
   fireEvent.click(screen.getByRole('button', { name: /Tables/ }))
-  expect(screen.getByTestId('location')).toHaveTextContent('/explorer?q=Orders')
+  const location = screen.getByTestId('location').textContent!
+  expect(location).toMatch(/^\/explorer\?filters=/)
+  expect(
+    decodeTokensFromUrl(new URLSearchParams(location.split('?')[1]).get('filters')).map(({ attribute, values }) => ({
+      attribute,
+      values,
+    })),
+  ).toEqual([
+    { attribute: 'server', values: ['SRV1'] },
+    { attribute: 'database', values: ['AppDb'] },
+    { attribute: 'schema', values: ['dbo'] },
+    { attribute: 'type', values: ['Tables'] },
+  ])
   expect(screen.getAllByRole('link')).toHaveLength(100)
   fireEvent.click(screen.getByRole('button', { name: 'Show more (1)' }))
   expect(screen.getAllByRole('link')).toHaveLength(101)
   fireEvent.click(screen.getByRole('link', { name: /dbo.Object100/ }))
   expect(screen.getByTestId('location')).toHaveTextContent('/object/object100')
+})
+
+it('resizes with the keyboard, clamps the width, and remembers the preference', () => {
+  window.localStorage.removeItem('catalog-sidebar-width')
+  const { unmount } = render(
+    <MemoryRouter>
+      <CatalogSidebar nodes={[]} />
+    </MemoryRouter>,
+  )
+  const handle = screen.getByRole('separator', { name: 'Resize catalog sidebar' })
+  fireEvent.keyDown(handle, { key: 'ArrowRight' })
+  expect(handle).toHaveAttribute('aria-valuenow', '300')
+  fireEvent.keyDown(handle, { key: 'End' })
+  fireEvent.keyDown(handle, { key: 'ArrowRight' })
+  expect(handle).toHaveAttribute('aria-valuenow', '600')
+  unmount()
+  render(
+    <MemoryRouter>
+      <CatalogSidebar nodes={[]} />
+    </MemoryRouter>,
+  )
+  expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '600')
+  window.localStorage.removeItem('catalog-sidebar-width')
 })
 
 it('groups database-level objects by type without a schema placeholder', () => {
