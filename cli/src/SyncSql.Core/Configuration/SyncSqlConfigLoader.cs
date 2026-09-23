@@ -98,7 +98,7 @@ public static class SyncSqlConfigLoader
             }
 
             ValidateFilterPatterns(server.Databases, path, $"server '{server.Name}' databases");
-            ValidateHostNameSuffix(server.HostNameSuffix, path, server.Name);
+            ValidateHostNameSuffix(server.HostNameSuffix, path, $"server '{server.Name}'");
             ValidateFilterPatterns(server.Schemas, path, $"server '{server.Name}' schemas");
             ValidateFilterPatterns(server.ObjectNames, path, $"server '{server.Name}' objectNames");
         }
@@ -107,6 +107,7 @@ public static class SyncSqlConfigLoader
         ValidateFilterPatterns(config.Defaults?.Schemas, path, "defaults.schemas");
         ValidateFilterPatterns(config.Defaults?.ObjectNames, path, "defaults.objectNames");
         ValidateFilterPatterns(config.ServerSelection, path, "serverSelection");
+        ValidateHostNameSuffix(config.Discovery.LinkedServers.HostSuffix, path, "discovery.linkedServers");
         ValidateFilterPatterns(config.Discovery.LinkedServers.LinkNames, path, "discovery.linkedServers.linkNames");
 
         if (config.Discovery.LinkedServers.MaxDepth < 0)
@@ -115,7 +116,7 @@ public static class SyncSqlConfigLoader
         }
     }
 
-    private static void ValidateHostNameSuffix(string? suffix, string path, string serverName)
+    private static void ValidateHostNameSuffix(string? suffix, string path, string location)
     {
         if (string.IsNullOrWhiteSpace(suffix))
         {
@@ -134,7 +135,7 @@ public static class SyncSqlConfigLoader
             || !char.IsAsciiLetterOrDigit(label[^1])
             || !label.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')))
         {
-            throw new ConfigValidationException($"Config file '{path}' has server '{serverName}' with an invalid hostNameSuffix - use a DNS suffix such as 'example.com' or '.example.com'.");
+            throw new ConfigValidationException($"Config file '{path}' has {location} with an invalid hostNameSuffix - use a DNS suffix such as 'example.com' or '.example.com'.");
         }
     }
 

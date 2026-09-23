@@ -129,6 +129,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test coverage gate failure handling
+        shell: pwsh
+        run: ./scripts/Test-CliCoverageGate.ps1
+
       - name: Parse
         shell: pwsh
         run: |

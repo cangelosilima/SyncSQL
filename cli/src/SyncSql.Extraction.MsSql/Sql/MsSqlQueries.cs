@@ -387,7 +387,7 @@ internal static class MsSqlQueries
             cc.name  AS CheckName,
             'ALTER TABLE ' + QUOTENAME(sch.name) + '.' + QUOTENAME(t.name) +
             CASE WHEN cc.is_not_trusted = 1 THEN ' WITH NOCHECK' ELSE ' WITH CHECK' END + ' ADD CONSTRAINT ' + QUOTENAME(cc.name) +
-            ' CHECK ' + CASE WHEN cc.is_not_for_replication = 1 THEN 'NOT FOR REPLICATION ' ELSE '' END + cc.definition + ';' +
+            ' CHECK ' + CASE WHEN cc.is_not_for_replication = 1 THEN 'NOT FOR REPLICATION ' ELSE '' END + (cc.definition COLLATE DATABASE_DEFAULT) + ';' +
             CASE WHEN cc.is_disabled = 1 THEN CHAR(10) + 'ALTER TABLE ' + QUOTENAME(sch.name) + '.' + QUOTENAME(t.name) +
                 ' NOCHECK CONSTRAINT ' + QUOTENAME(cc.name) + ';' ELSE '' END AS Definition
         FROM sys.check_constraints cc

@@ -254,6 +254,50 @@ public sealed class CommandBehaviorTests : IDisposable
         Assert.Equal(identity?.Endpoint, parsed.Identity?.ServerIdentity?.Endpoint);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OutputWriter_ReplacesUnpairedSurrogatesWithoutFailing(bool logWarnings)
+    {
+        const string validPair = "\U0001F642";
+        (string Ddl, string Expected, int Replacements)[] cases =
+        [
+            ($"CREATE PROCEDURE dbo.p AS SELECT N'{validPair}\uDF42';", $"CREATE PROCEDURE dbo.p AS SELECT N'{validPair}\uFFFD';", 1),
+            ("\uD800text\uDC00\uD800", "\uFFFDtext\uFFFD\uFFFD", 3),
+            ("\uDC00\uD800\uD800\uDC00", "\uFFFD\uFFFD\uD800\uDC00", 2),
+            ($"SELECT N'{validPair}';", $"SELECT N'{validPair}';", 0),
+        ];
+        foreach ((string ddl, string expected, int replacements) in cases)
+        {
+            using StringWriter output = new(System.Globalization.CultureInfo.InvariantCulture);
+            using var provider = new SyncSqlConsoleLoggerProvider(new(output, animated: false));
+            var outcome = new ExtractionOutcome
+            {
+                Objects = [new ExtractedObject
+                {
+                    Server = "SQL", Database = "db", Schema = "dbo", Type = "StoredProcedures", Name = "p",
+                    Ddl = ddl, Engine = DatabaseEngine.MsSql,
+                }],
+                MetricsSnapshots = new Dictionary<string, MetricsSnapshot>(),
+            };
+
+            await ExtractionOutputWriter.WriteAsync(outcome, "objects", "metrics", CancellationToken.None,
+                logger: logWarnings ? provider.CreateLogger("test") : null);
+
+            string content = await File.ReadAllTextAsync("objects/SQL/db/dbo/StoredProcedures/p.sql");
+            Assert.Contains(expected, content, StringComparison.Ordinal);
+            if (logWarnings && replacements > 0)
+            {
+                Assert.Contains("[WARN]", output.ToString());
+                Assert.Contains($"SQL/db/dbo/StoredProcedures/p contained {replacements} invalid UTF-16", output.ToString());
+            }
+            else
+            {
+                Assert.Equal("", output.ToString());
+            }
+        }
+    }
+
     [Fact]
     public async Task Sync_MissingCredentialsAndExtractionFailureFailTheRun()
     {

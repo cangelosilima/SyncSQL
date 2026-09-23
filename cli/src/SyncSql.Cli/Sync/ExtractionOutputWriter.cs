@@ -1,4 +1,6 @@
 ﻿using System.Text.Json;
+using System.Text;
+using Microsoft.Extensions.Logging;
 using SyncSql.Core.Domain;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Json;
@@ -15,7 +17,7 @@ namespace SyncSql.Cli.Sync;
 /// </summary>
 internal static class ExtractionOutputWriter
 {
-    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null, IProgress<ExtractionProgress>? progress = null, Core.Configuration.ServerIdentity? serverIdentity = null)
+    public static async Task WriteAsync(ExtractionOutcome outcome, string stagingRoot, string metricsRoot, CancellationToken cancellationToken, IReadOnlyList<string>? serverPath = null, IProgress<ExtractionProgress>? progress = null, Core.Configuration.ServerIdentity? serverIdentity = null, ILogger? logger = null)
     {
         int written = 0;
         int total = outcome.Objects.Count + outcome.MetricsSnapshots.Count;
@@ -25,7 +27,15 @@ internal static class ExtractionOutputWriter
             string relativePath = ExtractedObjectFile.RelativePath(obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, serverPath: serverPath);
             string path = Path.Combine(stagingRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllTextAsync(path, ExtractedObjectFile.Write(obj with { ServerIdentity = serverIdentity ?? obj.ServerIdentity }), cancellationToken);
+            string content = ExtractedObjectFile.Write(obj with { ServerIdentity = serverIdentity ?? obj.ServerIdentity });
+            string sanitizedContent = ReplaceUnpairedSurrogates(content, out int replacementCount);
+            if (replacementCount > 0)
+            {
+                logger?.LogWarning(
+                    "Object {Server}/{Database}/{Schema}/{Type}/{Name} contained {ReplacementCount} invalid UTF-16 surrogate(s); replaced with U+FFFD.",
+                    obj.Server, obj.Database, obj.Schema, obj.Type, obj.Name, replacementCount);
+            }
+            await File.WriteAllTextAsync(path, sanitizedContent, cancellationToken);
             progress?.Report(new("Writing files", outcome.Objects.Count, ++written, total));
         }
 
@@ -36,5 +46,29 @@ internal static class ExtractionOutputWriter
             await File.WriteAllTextAsync(path, JsonSerializer.Serialize(snapshot, SyncSqlJsonOptions.Default), cancellationToken);
             progress?.Report(new("Writing files", outcome.Objects.Count, ++written, total));
         }
+    }
+
+    private static string ReplaceUnpairedSurrogates(string value, out int replacementCount)
+    {
+        replacementCount = 0;
+        StringBuilder? sanitized = null;
+        for (int index = 0; index < value.Length; index++)
+        {
+            char current = value[index];
+            bool unpairedHigh = current is >= '\uD800' and <= '\uDBFF'
+                && (index + 1 >= value.Length || value[index + 1] is < '\uDC00' or > '\uDFFF');
+            bool unpairedLow = current is >= '\uDC00' and <= '\uDFFF'
+                && (index == 0 || value[index - 1] is < '\uD800' or > '\uDBFF');
+            if (!unpairedHigh && !unpairedLow)
+            {
+                continue;
+            }
+
+            sanitized ??= new StringBuilder(value);
+            sanitized[index] = '\uFFFD';
+            replacementCount++;
+        }
+
+        return sanitized?.ToString() ?? value;
     }
 }

@@ -331,6 +331,34 @@ public class LinkedServerFollowUpPlannerTests
     }
 
     [Fact]
+    public void Plan_DiscoveryHostSuffix_QualifiesShortLinkedServers()
+    {
+        LinkedServerDiscoveryConfig config = Enabled with { HostSuffix = "example.com" };
+        ServerConfig remote = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            Parent, "svc_syncsql", [Link("REMOTE", "SQLPROD02")], config, [Parent]).FollowUps).Server;
+        ServerConfig nested = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            remote, "svc_syncsql", [Link("NEXT", "SQLPROD03")], config, [Parent, remote]).FollowUps).Server;
+
+        Assert.Equal("SQLPROD02.example.com", remote.Host);
+        Assert.Equal("example.com", remote.HostNameSuffix);
+        Assert.Equal("SQLPROD03.example.com", nested.Host);
+    }
+
+    [Theory]
+    [InlineData("parent.example.com", "SQLPROD02.parent.example.com")]
+    [InlineData("", "SQLPROD02")]
+    public void Plan_ParentSuffix_OverridesDiscoverySuffix(string suffix, string expectedHost)
+    {
+        ServerConfig parent = Parent with { HostNameSuffix = suffix };
+        ServerConfig remote = Assert.Single(LinkedServerFollowUpPlanner.Plan(
+            parent, "svc_syncsql", [Link("REMOTE", "SQLPROD02")],
+            Enabled with { HostSuffix = "example.com" }, [parent]).FollowUps).Server;
+
+        Assert.Equal(expectedHost, remote.Host);
+        Assert.Equal(suffix, remote.HostNameSuffix);
+    }
+
+    [Fact]
     public void Plan_HostNameSuffix_DeduplicatesQualifiedTargetsAndCycles()
     {
         ServerConfig parent = Parent with { HostNameSuffix = "example.com" };

@@ -44,6 +44,7 @@
       "maxDepth": 1,
       "requireMatchingLogin": true,
       "restrictToLinkedCatalog": true,
+      "hostSuffix": "example.com",
       "linkNames": {
         "include": [".*"],
         "exclude": []

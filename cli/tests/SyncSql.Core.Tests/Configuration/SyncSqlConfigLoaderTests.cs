@@ -125,6 +125,7 @@ public class SyncSqlConfigLoaderTests
         Assert.Equal(1, config.Discovery.LinkedServers.MaxDepth);
         Assert.True(config.Discovery.LinkedServers.RequireMatchingLogin);
         Assert.True(config.Discovery.LinkedServers.RestrictToLinkedCatalog);
+        Assert.Null(config.Discovery.LinkedServers.HostSuffix);
         Assert.Null(Assert.Single(config.Servers).HostNameSuffix);
     }
 
@@ -182,6 +183,45 @@ public class SyncSqlConfigLoaderTests
         Assert.Equal(2, config.Discovery.LinkedServers.MaxDepth);
         Assert.False(config.Discovery.LinkedServers.RequireMatchingLogin);
         Assert.False(config.Discovery.LinkedServers.LinkNames.IsAllowed("TEMP_LINK"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_DiscoveryHostSuffix_IsParsed()
+    {
+        string path = await WriteTempConfigAsync("""
+            {
+              "discovery":{"linkedServers":{"hostSuffix":"example.com"}},
+              "servers":[{"name":"S","type":"mssql","host":"h","credentialsVariablePrefix":"S"}]
+            }
+            """);
+
+        SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(path);
+
+        Assert.Equal("example.com", config.Discovery.LinkedServers.HostSuffix);
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..example.com")]
+    [InlineData("example..com")]
+    [InlineData("example.com,1433")]
+    [InlineData("https://example.com")]
+    [InlineData("bad domain.com")]
+    [InlineData("-example.com")]
+    [InlineData("example-.com")]
+    public async Task LoadAsync_InvalidDiscoveryHostSuffix_Throws(string suffix)
+    {
+        string path = await WriteTempConfigAsync($$$"""
+            {
+              "discovery":{"linkedServers":{"hostSuffix":"{{{suffix}}}"}},
+              "servers":[{"name":"S","type":"mssql","host":"h","credentialsVariablePrefix":"S"}]
+            }
+            """);
+
+        ConfigValidationException ex = await Assert.ThrowsAsync<ConfigValidationException>(() => SyncSqlConfigLoader.LoadAsync(path));
+
+        Assert.Contains("discovery.linkedServers", ex.Message);
+        Assert.Contains("hostNameSuffix", ex.Message);
     }
 
     [Fact]
