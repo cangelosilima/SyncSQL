@@ -7,6 +7,19 @@
 /// </summary>
 internal static class MsSqlQueries
 {
+    public const string Logins = """
+        SELECT name AS Name, name AS LoginName, default_database_name AS DefaultDatabase,
+            CAST(NULL AS nvarchar(128)) AS DefaultSchema
+        FROM sys.server_principals WHERE type IN ('S', 'U', 'G', 'E', 'X') ORDER BY name;
+        """;
+
+    public const string Users = """
+        SELECT dp.name AS Name, sp.name AS LoginName, CAST(NULL AS nvarchar(128)) AS DefaultDatabase,
+            dp.default_schema_name AS DefaultSchema
+        FROM sys.database_principals dp
+        LEFT JOIN sys.server_principals sp ON sp.sid = dp.sid AND sp.type IN ('S', 'U', 'G', 'E', 'X')
+        WHERE dp.type IN ('S', 'U', 'G', 'E', 'X') ORDER BY dp.name;
+        """;
     public const string Databases = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name;";
 
     public const string ServiceBrokerGuid = "SELECT service_broker_guid FROM sys.databases WHERE database_id = DB_ID();";

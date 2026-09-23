@@ -220,7 +220,9 @@ Server executes Oracle OLE DB calls. Linux also rejects registration of the Orac
 provider. For the two Oracle-directed linked servers the Docker installer registers
 MSOLEDBSQL transport placeholders with product **Oracle (lineage metadata only)**,
 retaining the actual Oracle destination name. These are real sys.servers entries,
-but they cannot execute Oracle queries. The offline DDL retains OraOLEDB.Oracle.
+but they cannot execute Oracle queries. The scenario's `linkTargets` mappings explicitly
+identify their Oracle engine, overriding the placeholder provider's SQL Server engine.
+The offline DDL retains OraOLEDB.Oracle.
 The live test asserts the labels and records this distinction in benchmark.json.
 No extracted nodes are fabricated or merged in from the expected catalog.
 

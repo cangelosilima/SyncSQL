@@ -72,6 +72,96 @@ public sealed class ConfigurationBoundaryTests
         finally { File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData("\"linkTargets\":null")]
+    [InlineData("\"linkTargets\":[{\"name\":\" \"}]")]
+    [InlineData("\"linkTargets\":[{\"name\":\"DL\"},{\"name\":\"dl\"}]")]
+    [InlineData("\"oracleNetwork\":{\"gateways\":null}")]
+    [InlineData("\"oracleNetwork\":{\"gateways\":[{\"sid\":\"\",\"initFile\":\"init.ora\"}]}")]
+    [InlineData("\"oracleNetwork\":{\"gateways\":[{\"sid\":\"orders\",\"initFile\":\" \"}]}")]
+    public async Task Invalid_enrichment_configuration_is_rejected(string property) => await Reject(
+        $$"""{"servers":[{"name":"server","host":"host","type":"mssql","credentialsVariablePrefix":"TEST",{{property}}}]}""",
+        "link enrichment");
+
+    [Fact]
+    public async Task Optional_network_file_paths_remain_optional()
+    {
+        string path = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new SyncSqlConfig
+            {
+                Servers = [Server with
+            {
+                OracleNetwork = new() { Gateways = [new() { Sid = "orders", InitFile = "init.ora" }] },
+            }]
+            }));
+            ServerConfig loaded = Assert.Single((await SyncSqlConfigLoader.LoadAsync(path)).Servers);
+            Assert.Null(loaded.OracleNetwork!.TnsNamesFile);
+            Assert.Null(Assert.Single(loaded.OracleNetwork.Gateways).OdbcIniFile);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Partial_and_ownerless_overrides_keep_discovered_values_and_evidence()
+    {
+        LinkMetadata original = new()
+        {
+            DataSource = "observed",
+            Database = "Orders",
+            DefaultSchema = "sales",
+            TargetEngine = DatabaseEngine.MsSql,
+            Evidence = [new("dataSource", "observed", "dictionary")]
+        };
+        ServerConfig configured = Server with { LinkTargets = [new() { Name = "DL" }, new() { Name = "Other", Owner = "APP", DataSource = "unrelated" }] };
+        LinkMetadata unchanged = LinkTargetEnrichment.Apply(configured, "dl", "APP", original);
+        Assert.Equal(original.DataSource, unchanged.DataSource);
+        Assert.Equal(original.Database, unchanged.Database);
+        Assert.Equal(original.DefaultSchema, unchanged.DefaultSchema);
+        Assert.Equal(original.TargetEngine, unchanged.TargetEngine);
+        Assert.Equal(original.Evidence, unchanged.Evidence);
+        LinkMetadata schema = LinkTargetEnrichment.Apply(configured with { LinkTargets = [new() { Name = "DL", DefaultSchema = "archive" }] }, "DL", null, original);
+        Assert.Equal("archive", schema.DefaultSchema);
+        Assert.Equal("observed", schema.DataSource);
+        Assert.Equal("Orders", schema.Database);
+        Assert.Equal(DatabaseEngine.MsSql, schema.TargetEngine);
+        Assert.Contains(schema.Evidence, e => e.Field == "defaultSchema" && e.Value == "archive");
+        Assert.Contains(original.Evidence[0], schema.Evidence);
+        Assert.Same(original, LinkTargetEnrichment.Apply(configured with { LinkTargets = [new() { Name = "DL" }, new() { Name = "DL" }] }, "DL", "APP", original));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \t")]
+    public void Blank_optional_mappings_preserve_discovered_context(string? blank)
+    {
+        LinkMetadata original = new() { DataSource = "sql,1433", Database = "Orders", DefaultSchema = "sales", TargetEngine = DatabaseEngine.MsSql };
+        LinkMetadata result = LinkTargetEnrichment.Apply(Server with { LinkTargets = [new() { Name = "DL", DataSource = blank, Database = blank, DefaultSchema = blank }] }, "DL", "APP", original);
+        Assert.Equal(original.DataSource, result.DataSource);
+        Assert.Equal(original.Database, result.Database);
+        Assert.Equal(original.DefaultSchema, result.DefaultSchema);
+        Assert.Empty(result.Evidence);
+    }
+
+    [Fact]
+    public void Exact_owner_mapping_overrides_discovered_endpoint_and_engine()
+    {
+        LinkMetadata original = new() { DataSource = "placeholder", Database = "Orders", DefaultSchema = "sales", TargetEngine = DatabaseEngine.MsSql };
+        ServerConfig server = Server with
+        {
+            LinkTargets = [new() { Name = "DL", DataSource = "generic" },
+            new() { Name = "DL", Owner = "APP", DataSource = "oracle:1521/PDB", Database = "PDB", DefaultSchema = "APP", TargetEngine = DatabaseEngine.Oracle }]
+        };
+        LinkMetadata result = LinkTargetEnrichment.Apply(server, "DL", "APP", original);
+        Assert.Equal("oracle:1521/PDB", result.DataSource);
+        Assert.Equal(DatabaseEngine.Oracle, result.TargetEngine);
+        Assert.Equal("PDB", result.Database);
+        Assert.Equal("APP", result.DefaultSchema);
+        Assert.Equal(4, result.Evidence.Count);
+    }
+
     [Fact]
     public void EffectivePort_UsesEngineDefaultsAndRejectsUnknownEngine()
     {

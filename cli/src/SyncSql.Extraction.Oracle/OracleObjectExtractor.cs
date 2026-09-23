@@ -53,12 +53,13 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
             progress.Report(new($"{serviceName}: listing schemas"));
             List<string> allOwners = await OracleCommandRunner.QueryAsync(connection, OracleQueries.Schemas,
                 r => r.GetStringOrEmpty("OWNER"), cancellationToken);
-            List<(string Owner, string Name)> databaseLinks = [];
+            List<(string Owner, string Name, string? Username, string? Host)> databaseLinks = [];
             if (filters.ObjectTypes.Contains("DatabaseLinks"))
             {
                 progress.Report(new($"{serviceName}: database links"));
                 databaseLinks = await OracleCommandRunner.QueryDictionaryAsync(connection, OracleQueries.AllDatabaseLinks,
-                    OracleQueries.DatabaseLinks, r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK")), cancellationToken);
+                    OracleQueries.DatabaseLinks, r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK"),
+                        r.GetNullableString("USERNAME"), r.GetNullableString("HOST")), cancellationToken);
             }
             return (allOwners.Where(filters.Schemas.IsAllowed).ToArray(), databaseLinks);
         }, cancellationToken);
@@ -69,11 +70,13 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
             jobs.AddRange(owners.Select(owner => (Func<ExtractionWorkContext, Task<ExtractionOutcome>>)(context =>
                 ExtractOwnerAsync(connections, server, serviceName, owner, filters, options, progress, context))));
         }
-        foreach ((string owner, string name) in links)
+        OracleLinkEnricher linkEnricher = new(server);
+        foreach ((string owner, string name, string? username, string? host) in links)
         {
             if (filters.Schemas.IsAllowed(owner) && filters.ObjectNames.IsAllowed(name))
             {
-                ObjectWork work = new(owner, "DatabaseLinks", "DB_LINK", name, [], [], null);
+                LinkMetadata link = await linkEnricher.EnrichAsync(owner, name, username, host, cancellationToken);
+                ObjectWork work = new(owner, "DatabaseLinks", "DB_LINK", name, [], [], null, link);
                 jobs.Add(context => ExtractObjectAsync(connections, server, serviceName, work, progress.CreateChild(), context.CancellationToken));
             }
         }
@@ -140,7 +143,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
     }
 
     private sealed record ObjectWork(string Owner, string ConfigType, string DdlType, string Name,
-        IReadOnlyList<ExtractedColumn> Columns, IReadOnlyList<GrantEntry> Grants, MetricsSnapshot? Metrics);
+        IReadOnlyList<ExtractedColumn> Columns, IReadOnlyList<GrantEntry> Grants, MetricsSnapshot? Metrics, LinkMetadata? Link = null);
 
     private async Task<ExtractionOutcome> ExtractObjectAsync(OracleExtractionConnections connections, ServerConfig server,
         string serviceName, ObjectWork work, IProgress<ExtractionProgress> progress, CancellationToken token)
@@ -158,6 +161,11 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
             catch (OracleException ex) when (!token.IsCancellationRequested)
             {
                 if (work.ConfigType == "Schemas") { ddl = null; }
+                else if (work.Link is not null)
+                {
+                    ddl = "-- Database link definition unavailable; observed connection metadata is retained in the identity header.";
+                    _logger.LogWarning("[{Server}] DDL unavailable for database link {Owner}.{Name}; retaining dictionary metadata", server.Name, work.Owner, work.Name);
+                }
                 else
                 {
                     _logger.LogWarning("[{Server}/{ServiceName}] Failed to extract DDL for {Owner}.{ObjectName} ({ConfigType}): {Message}",
@@ -174,6 +182,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
                 Name = work.Name,
                 Ddl = ddl ?? (work.ConfigType == "Schemas" ? $"-- Oracle schema/user: {work.Owner}" : string.Empty),
                 Engine = DatabaseEngine.Oracle,
+                Link = work.Link,
                 Columns = work.Columns,
                 Grants = work.Grants,
             };

@@ -22,6 +22,10 @@ public sealed record ObjectFilterSet
 /// <summary>One entry in config.servers[]. A key present here fully replaces (not merges with) the corresponding config.defaults key - see <see cref="EffectiveFilters.Resolve"/>.</summary>
 public sealed record ServerConfig
 {
+    [JsonPropertyName("oracleNetwork")]
+    public OracleNetworkConfig? OracleNetwork { get; init; }
+    [JsonPropertyName("linkTargets")]
+    public IReadOnlyList<LinkTargetConfig> LinkTargets { get; init; } = [];
     /// <summary>Physical export ancestry for a discovered server; connection and catalog identity remain Name.</summary>
     [JsonIgnore]
     public IReadOnlyList<string>? ExportPath { get; init; }

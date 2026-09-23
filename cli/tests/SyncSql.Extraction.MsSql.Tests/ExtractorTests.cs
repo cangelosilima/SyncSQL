@@ -9,7 +9,60 @@ namespace SyncSql.Extraction.MsSql.Tests;
 
 public sealed class ExtractorTests
 {
+    [Fact]
+    public async Task Extracts_login_and_user_context_without_passwords()
+    {
+        FakeDatabase db = Database();
+        db.Rows(MsSqlQueries.Logins, new PrincipalRow { Name = "entitlements", LoginName = "entitlements", DefaultDatabase = "Orders" });
+        db.Rows(MsSqlQueries.Users, new PrincipalRow { Name = "order_reader", LoginName = "entitlements", DefaultSchema = "sales" });
+        ExtractionOutcome result = await Extract(db, ["Logins", "Users"], false, false);
+        ExtractedObject login = Assert.Single(result.Objects, obj => obj.Type == "Logins");
+        ExtractedObject user = Assert.Single(result.Objects, obj => obj.Type == "Users");
+        Assert.Equal("Orders", login.Principal?.DefaultDatabase);
+        Assert.Equal("entitlements", user.Principal?.Login);
+        Assert.Equal("sales", user.Principal?.DefaultSchema);
+        Assert.DoesNotContain("password_hash", MsSqlQueries.Logins);
+    }
     private static readonly ServerConfig Server = new() { Name = "SQL", Host = "host", Type = DatabaseEngine.MsSql, CredentialsVariablePrefix = "TEST" };
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Unavailable_principals_do_not_discard_other_objects(bool logins)
+    {
+        using FakeDatabase db = Database();
+        db.FailQueries.Add(logins ? MsSqlQueries.Logins : MsSqlQueries.Users);
+        ExtractionOutcome result = await Extract(db, [logins ? "Logins" : "Users", "Schemas"], false, false);
+        Assert.Contains(result.Objects, obj => obj.Type == "Schemas");
+        Assert.DoesNotContain(result.Objects, obj => obj.Type is "Logins" or "Users");
+    }
+
+    [Fact]
+    public async Task Principal_names_obey_object_filters()
+    {
+        using FakeDatabase db = Database();
+        db.Rows(MsSqlQueries.Logins, new PrincipalRow { Name = "skip" }, new PrincipalRow { Name = "visible" });
+        ExtractionOutcome result = await Extract(db, ["Logins"], false, false);
+        Assert.Equal("visible", Assert.Single(result.Objects).Name);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("other", null)]
+    [InlineData("OraOLEDB.Oracle", DatabaseEngine.Oracle)]
+    [InlineData("SQLNCLI11", DatabaseEngine.MsSql)]
+    [InlineData("MSOLEDBSQL", DatabaseEngine.MsSql)]
+    [InlineData("SQLOLEDB", DatabaseEngine.MsSql)]
+    public async Task Linked_server_provider_identifies_the_destination_engine(string? provider, DatabaseEngine? engine)
+    {
+        using FakeDatabase db = Database();
+        db.Rows(MsSqlQueries.LinkedServers, new LinkedServerRow { LinkedServerName = "remote", Provider = provider, Catalog = null, DataSource = null, UsesSelfCredential = false, RemoteLoginName = "reader" });
+        LinkMetadata metadata = Assert.Single((await Extract(db, ["LinkedServers"], false, false)).Objects).Link!;
+        Assert.Equal(engine, metadata.TargetEngine);
+        Assert.Null(metadata.Database);
+        Assert.Empty(metadata.Evidence);
+        Assert.Equal("reader", Assert.Single(metadata.Logins).RemoteUser);
+    }
     private static readonly DatabaseCredentials Credentials = new("user", "password");
     private static readonly string[] AllTypes = ["Schemas", "Tables", "Types", "Views", "StoredProcedures", "Functions", "Triggers", "Synonyms", "Replication", "LinkedServers", "Queues", "Services", "Contracts", "MessageTypes"];
     private static readonly Guid BrokerGuid = Guid.Parse("11111111-2222-3333-4444-555555555555");

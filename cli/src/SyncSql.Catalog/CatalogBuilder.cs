@@ -51,6 +51,7 @@ public sealed class CatalogBuilder(
         Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
         LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
         nodes = CatalogServerIdentity.MergeObjects(nodes);
+        nodes = [.. nodes.Select(node => linkedServers.MetadataFor(node.Id) is { } metadata ? node with { Link = metadata } : node)];
         NodeIndex nodeIndex = new(nodes, linkedServers);
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
@@ -220,6 +221,8 @@ public sealed class CatalogBuilder(
             Engine = parsed.Engine,
             ServiceBrokerGuid = parsed.Identity?.ServiceBrokerGuid,
             ServerIdentity = parsed.Identity?.ServerIdentity,
+            Link = parsed.Identity?.Link,
+            Principal = parsed.Identity?.Principal,
             SizeBytes = Encoding.UTF8.GetByteCount(parsed.Ddl),
         };
     }
@@ -336,6 +339,10 @@ public sealed class CatalogBuilder(
                             Schema = reference.Schema,
                             Name = reference.Name,
                             Dynamic = dynamic,
+                            Status = resolution.Kind == ReferenceResolutionKind.NotFound ? "not-observed" : resolution.Kind.ToString().ToLowerInvariant(),
+                            TargetServer = link.TargetServer,
+                            DataSource = link.Metadata.DataSource ?? link.DataSource,
+                            TargetEngine = link.Metadata.TargetEngine,
                         });
                     }
 
@@ -350,14 +357,9 @@ public sealed class CatalogBuilder(
                         AddEdge(link.NodeId, linkedTargetId, dynamic);
                     }
 
-                    // The link landed on a server and database the catalog does have, and the object
-                    // still isn't there - that's dangling in exactly the same way a local miss is, so it
-                    // belongs in the orphan list too (an out-of-scope hop resolves as External and
-                    // deliberately doesn't).
-                    if (resolution.Kind != ReferenceResolutionKind.NotFound)
-                    {
-                        continue;
-                    }
+                    // Remote inventories may be partial or collected with different credentials.
+                    // Keep the observed route and status without declaring the remote object dropped.
+                    continue;
                 }
 
                 if (resolution.Kind == ReferenceResolutionKind.NotFound)

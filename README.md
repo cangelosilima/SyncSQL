@@ -306,7 +306,7 @@ for the full schema; in short:
 - `defaults` / per-server overrides: `databases`, `schemas`,
   `objectNames` include/exclude regex lists, and an `objectTypes` list
   (`Schemas`, `Types`, `Tables`, `Views`, `StoredProcedures`, `Functions`,
-  `Triggers`, `Synonyms`, `LinkedServers`, `Replication`, `MessageTypes`,
+  `Triggers`, `Synonyms`, `LinkedServers`, `Logins`, `Users`, `Replication`, `MessageTypes`,
   `Contracts`, `Queues`, `Services` for MSSQL;
   `Schemas`, `Types`, `TypeBodies`, `Tables`, `Views`, `Procedures`, `Functions`, `Packages`,
   `PackageBodies`, `Triggers`, `Synonyms`, `DatabaseLinks` for Oracle).
@@ -1585,9 +1585,11 @@ stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
   A `BEGIN DIALOG` whose target instance is another database's Broker GUID,
   or a variable, stays unresolved rather than being bound to a same-named
   local service. See "Replication and Service Broker objects" above.
-- Oracle `DatabaseLinks` extraction requires privileges on `SYS.LINK$`
-  (or equivalent); without them, that object type is skipped with a
-  warning rather than failing the whole run.
+- Oracle `DatabaseLinks` retain visible dictionary metadata even when full DDL
+  is unavailable. Gateway configuration and explicit mappings can resolve the
+  destination and join independently extracted Oracle and SQL Server objects.
+  See [cross-engine lineage](cli/docs/cross-engine-lineage.md) for configuration,
+  login/user context, evidence and unresolved destination pointers.
 - Linked server / database link passwords are never extracted (not
   readable from the catalog) — the generated script has a placeholder
   that must be filled in manually if ever used to recreate the link.

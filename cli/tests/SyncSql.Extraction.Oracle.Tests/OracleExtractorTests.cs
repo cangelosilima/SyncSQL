@@ -86,7 +86,7 @@ public sealed class OracleExtractorTests
             new { TABLE_NAME = "orders", INDEX_NAME = "ix2", NUM_ROWS = (long?)null, DISTINCT_KEYS = (long?)null, LEAF_BLOCKS = (long?)null, LAST_ANALYZED = (DateTime?)null },
             new { TABLE_NAME = "missing", INDEX_NAME = "ix", NUM_ROWS = (long?)null, DISTINCT_KEYS = (long?)null, LEAF_BLOCKS = (long?)null, LAST_ANALYZED = (DateTime?)null });
         }
-        if (sql == OracleQueries.AllDatabaseLinks) { return FakeOracleDatabase.Rows(new { OWNER = "APP", DB_LINK = "remote" }, new { OWNER = "APP", DB_LINK = "empty" }, new { OWNER = "APP", DB_LINK = "skip" }, new { OWNER = "PRIVATE", DB_LINK = "private" }); }
+        if (sql == OracleQueries.AllDatabaseLinks) { return FakeOracleDatabase.Rows(new { OWNER = "APP", DB_LINK = "remote", USERNAME = "entitlements", HOST = "GATEWAY" }, new { OWNER = "APP", DB_LINK = "empty", USERNAME = "", HOST = "" }, new { OWNER = "APP", DB_LINK = "skip", USERNAME = "", HOST = "" }, new { OWNER = "PRIVATE", DB_LINK = "private", USERNAME = "", HOST = "" }); }
         throw new InvalidOperationException("Unexpected query: " + sql);
     }
 
@@ -185,7 +185,11 @@ public sealed class OracleExtractorTests
         };
         var result = await Extract(db, false);
         Assert.Equal("-- Oracle schema/user: APP", Assert.Single(result.Objects, o => o.Type == "Schemas").Ddl);
-        if (fail) { Assert.Single(result.Objects); }
+        if (fail)
+        {
+            Assert.Equal(2, result.Objects.Count(o => o.Type == "DatabaseLinks"));
+            Assert.All(result.Objects.Where(o => o.Type != "Schemas"), o => Assert.NotNull(o.Link));
+        }
         else { Assert.All(result.Objects.Where(o => o.Type != "Schemas"), o => Assert.Equal("", o.Ddl)); }
     }
 

@@ -10,6 +10,14 @@ internal sealed class SchemaRow
     public string OwnerName { get; set; } = string.Empty;
 }
 
+internal sealed class PrincipalRow
+{
+    public string Name { get; set; } = "";
+    public string? LoginName { get; set; }
+    public string? DefaultDatabase { get; set; }
+    public string? DefaultSchema { get; set; }
+}
+
 internal sealed class ModuleObjectRow
 {
     public string SchemaName { get; set; } = string.Empty;
