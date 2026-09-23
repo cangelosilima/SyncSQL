@@ -55,6 +55,7 @@
       "encrypt": true,
       "trustServerCertificate": true,
       "credentialsVariablePrefix": "LINEAGE_ATLAS",
+      "linkTargets": [{ "name": "HELIOS_ORACLE", "targetEngine": "oracle" }],
       "databases": {
         "include": [
           "^Commerce$",
@@ -72,6 +73,7 @@
       "encrypt": true,
       "trustServerCertificate": true,
       "credentialsVariablePrefix": "LINEAGE_MERIDIAN",
+      "linkTargets": [{ "name": "HELIOS_ORACLE", "targetEngine": "oracle" }],
       "databases": {
         "include": [
           "^Distribution$",

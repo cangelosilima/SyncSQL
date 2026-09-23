@@ -234,7 +234,7 @@ internal sealed class NodeIndex
             // extracted. It is still a built-in, and saying so is more useful than "outside the catalog":
             // nothing was ever going to extract it. Nothing in the catalog can be shadowed by this, since
             // by definition no node lives in a database that isn't there.
-            return SystemObjectCatalog.IsSystemObject(viaLink is null ? fromNode.Engine : viaLink.Metadata?.TargetEngine, reference)
+            return SystemObjectCatalog.IsSystemObject(viaLink is null ? fromNode.Engine : viaLink.Metadata.TargetEngine, reference)
                 ? ReferenceResolution.System
                 : ReferenceResolution.External(viaLink);
         }
@@ -246,7 +246,7 @@ internal sealed class NodeIndex
             // A remote login is not a schema. Only observed/mapped default-schema context qualifies it.
             ReferenceResolution preferred = ResolveQualified(fromNode, reference with { Schema = defaultSchema }, targetServer, targetDatabase, databaseWasStated, viaLink);
             if (preferred.Kind == ReferenceResolutionKind.Resolved) { return preferred; }
-            if (viaLink!.Metadata!.TargetEngine == DatabaseEngine.MsSql && !defaultSchema.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+            if (viaLink!.Metadata.TargetEngine == DatabaseEngine.MsSql && !defaultSchema.Equals("dbo", StringComparison.OrdinalIgnoreCase))
             {
                 ReferenceResolution dbo = ResolveQualified(fromNode, reference with { Schema = "dbo" }, targetServer, targetDatabase, databaseWasStated, viaLink);
                 if (dbo.Kind == ReferenceResolutionKind.Resolved) { return dbo; }
@@ -293,7 +293,7 @@ internal sealed class NodeIndex
         CatalogNode[] users = [.. _users.Where(user => string.Equals(user.Server, link.TargetServer, StringComparison.OrdinalIgnoreCase)
             && string.Equals(user.Database, database, StringComparison.OrdinalIgnoreCase)
             && string.Equals(user.Principal?.Login, logins[0], StringComparison.OrdinalIgnoreCase))];
-        return users.Length == 1 ? users[0].Principal?.DefaultSchema : null;
+        return users.Length == 1 ? users[0].Principal!.DefaultSchema : null;
     }
 
     private ReferenceResolution ResolveQualified(

@@ -22,8 +22,8 @@ internal sealed record LinkedServerLink(
     string? DataSource,
     string? DefaultDatabase,
     string? TargetServer,
-    bool IsDatabaseLink = false,
-    LinkMetadata? Metadata = null);
+    bool IsDatabaseLink,
+    LinkMetadata Metadata);
 
 /// <summary>
 /// Maps a linked-server (MSSQL) or database-link (Oracle) name, as written in one object's DDL, onto the
@@ -234,7 +234,7 @@ internal sealed partial class LinkedServerMap
             else if (engine == DatabaseEngine.MsSql && database is not null)
             {
                 CatalogNode[] mapped = [.. userNodes.Where(node => node.Database.Equals(database, StringComparison.OrdinalIgnoreCase))];
-                if (mapped.Length == 1 && mapped[0].Principal?.DefaultSchema is { Length: > 0 } defaultSchema)
+                if (mapped.Length == 1 && mapped[0].Principal!.DefaultSchema is { Length: > 0 } defaultSchema)
                 {
                     schema = defaultSchema;
                     evidence.Add(new("defaultSchema", schema, "catalog:" + mapped[0].Id));

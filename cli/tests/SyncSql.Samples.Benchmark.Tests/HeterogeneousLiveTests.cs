@@ -78,6 +78,8 @@ public sealed class HeterogeneousLiveTests(ITestOutputHelper output)
             {
                 Assert.Contains("Oracle (lineage metadata only)", link.Ddl, StringComparison.Ordinal);
                 Assert.Contains("MSOLEDBSQL", link.Ddl, StringComparison.Ordinal);
+                Assert.Equal(DatabaseEngine.Oracle, link.Link?.TargetEngine);
+                Assert.Equal("HELIOS_ORACLE", link.Link?.TargetServer);
             });
             foreach (CatalogNode node in catalog.Nodes)
             {

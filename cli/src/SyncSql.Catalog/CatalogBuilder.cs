@@ -341,8 +341,8 @@ public sealed class CatalogBuilder(
                             Dynamic = dynamic,
                             Status = resolution.Kind == ReferenceResolutionKind.NotFound ? "not-observed" : resolution.Kind.ToString().ToLowerInvariant(),
                             TargetServer = link.TargetServer,
-                            DataSource = link.Metadata?.DataSource ?? link.DataSource,
-                            TargetEngine = link.Metadata?.TargetEngine,
+                            DataSource = link.Metadata.DataSource ?? link.DataSource,
+                            TargetEngine = link.Metadata.TargetEngine,
                         });
                     }
 

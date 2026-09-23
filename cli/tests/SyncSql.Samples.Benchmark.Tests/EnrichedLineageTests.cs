@@ -65,6 +65,24 @@ public sealed class EnrichedLineageTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task A_partial_remote_inventory_retains_the_missing_reference_with_its_destination()
+    {
+        Write("ORACLE", Object("ORA", "PDB", "APP", "REPORT", "Views", DatabaseEngine.Oracle,
+            "CREATE VIEW APP.REPORT AS SELECT ID FROM \"Absent\"@DL_ORDER;"));
+        Write("ORACLE", Object("ORA", "PDB", "APP", "DL_ORDER", "DatabaseLinks", DatabaseEngine.Oracle, "-- dictionary link") with
+        { Link = new() { DataSource = "SQL.example.com,1433", TargetEngine = DatabaseEngine.MsSql, Database = "Orders" } });
+        Write("MSSQL", Object("SQL", "Orders", "dbo", "Other", "Tables", DatabaseEngine.MsSql, "CREATE TABLE dbo.Other (ID int);"));
+        Core.Domain.Catalog catalog = await HeterogeneousLineageTests.BuildCatalogAsync(_root);
+        var reference = Assert.Single(catalog.LinkedServerReferences);
+        Assert.Equal("not-observed", reference.Status);
+        Assert.Equal("SQL", reference.TargetServer);
+        Assert.Equal(DatabaseEngine.MsSql, reference.TargetEngine);
+        Assert.Null(reference.To);
+        Assert.Empty(catalog.OrphanedReferences);
+        Assert.Single(catalog.Edges);
+    }
+
     private static ExtractedObject Object(string server, string database, string? schema, string name, string type, DatabaseEngine engine, string ddl) => new()
     {
         Server = server,

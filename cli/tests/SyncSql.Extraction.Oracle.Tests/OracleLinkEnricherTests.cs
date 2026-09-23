@@ -94,6 +94,16 @@ public sealed class OracleLinkEnricherTests : IDisposable
     [InlineData("sql", "sql", null)]
     [InlineData("sql:99999//Orders", null, null)]
     [InlineData("sql:1433/INSTANCE/Orders", null, null)]
+    [InlineData("sql/instance/db/extra", null, null)]
+    [InlineData(" /instance/db", null, null)]
+    [InlineData("Server=sql", null, null)]
+    [InlineData("sql;Password=secret", null, null)]
+    [InlineData("sql;secret", null, null)]
+    [InlineData("sql:invalid", null, null)]
+    [InlineData("sql:99999999999999", null, null)]
+    [InlineData("sql:0", null, null)]
+    [InlineData("sql/", "sql", null)]
+    [InlineData("sql//", "sql", null)]
     public void Dedicated_gateway_syntax_preserves_endpoint_qualifiers(string input, string? endpoint, string? database)
     {
         Assert.Equal((endpoint, database), OracleLinkEnricher.ParseSqlServerDestination(input));
@@ -121,6 +131,115 @@ public sealed class OracleLinkEnricherTests : IDisposable
         Assert.Equal("GATEWAY", parsed.Identity?.Link?.ConnectIdentifier);
         Assert.Equal("entitlements", Assert.Single(parsed.Identity!.Link!.Logins).RemoteUser);
         Assert.Contains("unavailable", parsed.Ddl);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("ALIAS")]
+    public async Task An_unresolved_dictionary_entry_preserves_what_is_known(string? identifier)
+    {
+        LinkMetadata link = await new OracleLinkEnricher(Server).EnrichAsync("APP", "DL", null, identifier, default);
+        Assert.Equal(identifier, link.ConnectIdentifier);
+        Assert.Null(link.DataSource);
+        Assert.Empty(link.Logins);
+    }
+
+    [Theory]
+    [InlineData("(DESCRIPTION=(ADDRESS=(HOST=ora))(CONNECT_DATA=(SERVICE_NAME=PDB)))", "ora:1521/PDB")]
+    [InlineData("(DESCRIPTION=(ADDRESS=(HOST=ora)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=PDB)))", "ora:1522/PDB")]
+    [InlineData("(DESCRIPTION=(ADDRESS=(HOST=ora)))", null)]
+    [InlineData("(DESCRIPTION=(CONNECT_DATA=(SERVICE_NAME=PDB)))", null)]
+    public async Task Native_descriptors_require_a_host_and_service(string descriptor, string? endpoint)
+    {
+        LinkMetadata link = await new OracleLinkEnricher(Server).EnrichAsync("APP", "DL", "", descriptor, default);
+        Assert.Equal(endpoint, link.DataSource);
+        Assert.Equal(endpoint is null, link.Diagnostics.Count > 0);
+        if (endpoint is not null) { Assert.Equal(DatabaseEngine.Oracle, link.TargetEngine); }
+    }
+
+    [Theory]
+    [InlineData("OTHER=(HOST=wrong)")]
+    [InlineData("ALIAS=(HOST=one)\nALIAS=(HOST=two)")]
+    [InlineData("ALIAS=(DESCRIPTION=(HOST=unfinished)")]
+    public async Task Unmatched_duplicate_and_unbalanced_aliases_remain_unresolved(string text)
+    {
+        var server = Server with { OracleNetwork = new() { TnsNamesFile = Write("tnsnames.ora", text) } };
+        LinkMetadata link = await new OracleLinkEnricher(server).EnrichAsync("APP", "DL", "reader", "ALIAS", default);
+        Assert.Null(link.DataSource);
+        Assert.Contains(link.Diagnostics, d => d.Contains("not uniquely resolved", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Quoted_alias_values_and_comments_are_parsed_and_cached()
+    {
+        string tns = Write("tnsnames.ora", "# comment\nALIAS=(DESCRIPTION=(HOST='ora')(SERVICE_NAME=\"PDB#Dev\")) # tail");
+        var enricher = new OracleLinkEnricher(Server with { OracleNetwork = new() { TnsNamesFile = tns } });
+        LinkMetadata first = await enricher.EnrichAsync("APP", "DL", "reader", "ALIAS", default);
+        File.Delete(tns);
+        LinkMetadata cached = await enricher.EnrichAsync("APP", "OTHER", "reader", "ALIAS", default);
+        Assert.Equal("ora:1521/PDB#Dev", first.DataSource);
+        Assert.Equal(first.DataSource, cached.DataSource);
+    }
+
+    [Theory]
+    [InlineData(null, "orders", null)]
+    [InlineData("tg", null, "tg")]
+    [InlineData("tg", "orders", "wrong")]
+    [InlineData("tg", "other", "tg")]
+    public async Task Gateway_configuration_requires_a_matching_host_and_sid(string? host, string? sid, string? configuredHost)
+    {
+        var server = Server with { OracleNetwork = new() { Gateways = [new() { Sid = "orders", Host = configuredHost, InitFile = "unused" }] } };
+        LinkMetadata link = await new OracleLinkEnricher(server).EnrichAsync("APP", "DL", "reader", $"(DESCRIPTION=(HOST={host})(SID={sid})(HS=OK))", default);
+        Assert.Null(link.DataSource);
+        Assert.Contains(link.Diagnostics, d => d.Contains("matching gateway", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Gateway_without_network_configuration_keeps_its_pointer()
+    {
+        LinkMetadata link = await new OracleLinkEnricher(Server).EnrichAsync("APP", "DL", "reader", "(DESCRIPTION=(HOST=tg)(SID=orders)(HS=OK))", default);
+        Assert.Equal("tg", link.GatewayHost);
+        Assert.NotEmpty(link.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("HS_FDS_CONNECT_INFO=", null, false)]
+    [InlineData("HS_FDS_CONNECT_INFO=one\nHS_FDS_CONNECT_INFO=two", null, false)]
+    [InlineData("HS_FDS_CONNECT_INFO=dsn", null, true)]
+    [InlineData("HS_FDS_CONNECT_INFO=dsn", "[other]\nServer=sql", true)]
+    [InlineData("HS_FDS_CONNECT_INFO=dsn", "[dsn]\nServer=one\n[dsn]\nServer=two", true)]
+    [InlineData("HS_FDS_CONNECT_INFO=dsn", "[dsn]\nDatabase=Orders", true)]
+    [InlineData("HS_FDS_CONNECT_INFO=sql:invalid", null, false)]
+    public async Task Incomplete_gateway_files_report_diagnostics(string? initText, string? odbcText, bool useOdbc)
+    {
+        string init = initText is null ? _root : Write("init.ora", initText);
+        string? odbc = useOdbc ? odbcText is null ? Path.Combine(_root, "missing.ini") : Write("odbc.ini", odbcText) : null;
+        var server = Server with { OracleNetwork = new() { Gateways = [new() { Sid = "orders", Host = "TG", InitFile = init, OdbcIniFile = odbc }] } };
+        LinkMetadata link = await new OracleLinkEnricher(server).EnrichAsync("APP", "DL", "reader", "(DESCRIPTION=(HOST=tg)(SID=orders)(HS=OK))", default);
+        Assert.Null(link.DataSource);
+        Assert.NotEmpty(link.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData("Servername=sql\nDatabase=Orders", "sql")]
+    [InlineData("Server=sql,1444\nPort=1433\n; ignored\nDatabase=Orders", "sql,1444")]
+    public async Task Odbc_alternate_server_setting_and_existing_port_are_preserved(string settings, string expected)
+    {
+        var server = Server with { OracleNetwork = new() { Gateways = [new() { Sid = "orders", InitFile = Write("init.ora", "HS_FDS_CONNECT_INFO=dsn"), OdbcIniFile = Write("odbc.ini", "[dsn]\n" + settings) }] } };
+        LinkMetadata link = await new OracleLinkEnricher(server).EnrichAsync("APP", "DL", "reader", "(DESCRIPTION=(HOST=tg)(SID=orders)(HS=OK))", default);
+        Assert.Equal(expected, link.DataSource);
+        Assert.Empty(link.Diagnostics);
+    }
+
+    [Fact]
+    public async Task Non_sql_gateway_requires_an_explicit_mapping_without_odbc()
+    {
+        var server = Server with { OracleNetwork = new() { Gateways = [new() { Sid = "orders", TargetEngine = DatabaseEngine.Oracle, InitFile = Write("init.ora", "HS_FDS_CONNECT_INFO=dsn") }] } };
+        LinkMetadata link = await new OracleLinkEnricher(server).EnrichAsync("APP", "DL", "reader", "(DESCRIPTION=(HOST=tg)(SID=orders)(HS=OK))", default);
+        Assert.Null(link.DataSource);
+        Assert.NotEmpty(link.Diagnostics);
     }
 
     public void Dispose() => Directory.Delete(_root, true);

@@ -117,4 +117,126 @@ public sealed class CrossEngineLinkTests
         var map = LinkedServerMap.FromNodes([Caller, Link, wrong]);
         Assert.Null(map.MetadataFor(Link.Id)?.TargetServer);
     }
+
+    [Theory]
+    [InlineData(DatabaseEngine.MsSql, "sales", true)]
+    [InlineData(DatabaseEngine.MsSql, "sales", false)]
+    [InlineData(DatabaseEngine.MsSql, "dbo", false)]
+    [InlineData(DatabaseEngine.Oracle, "APP", false)]
+    public void A_known_remote_schema_only_falls_back_to_dbo_on_sql_server(DatabaseEngine engine, string schema, bool hasDbo)
+    {
+        CatalogNode link = Link with { Link = Link.Link! with { TargetEngine = engine, DataSource = "SQL", Database = "Orders", DefaultSchema = schema } };
+        CatalogNode marker = Node("SQL", "Orders", "other", "Marker", engine: engine);
+        CatalogNode table = Node("SQL", "Orders", "dbo", hasDbo ? "Wanted" : "Other", engine: engine);
+        CatalogNode[] nodes = [Caller, link, marker, table];
+        ReferenceResolution result = new NodeIndex(nodes, LinkedServerMap.FromNodes(nodes)).Resolve(Caller, new(null, "Wanted") { Server = "DL_ORDER" });
+        Assert.Equal(hasDbo ? table.Id : null, result.NodeId);
+        Assert.Equal(hasDbo ? ReferenceResolutionKind.Resolved : ReferenceResolutionKind.NotFound, result.Kind);
+        Assert.Equal(link.Id, result.ViaLink?.NodeId);
+    }
+
+    [Fact]
+    public void Unextracted_remote_database_uses_the_destination_engine_for_system_objects()
+    {
+        CatalogNode[] nodes = [Caller, Link, Node("SQL", "Orders", "dbo", "Marker")];
+        var index = new NodeIndex(nodes, LinkedServerMap.FromNodes(nodes));
+        Assert.Equal(ReferenceResolutionKind.System, index.Resolve(Caller, new("dbo", "xp_cmdshell") { Server = "DL_ORDER", Database = "master", IsRoutine = true }).Kind);
+        ReferenceResolution unknown = index.Resolve(Caller, new("dbo", "Absent") { Server = "DL_ORDER", Database = "Missing" });
+        Assert.Equal(ReferenceResolutionKind.External, unknown.Kind);
+        Assert.NotNull(unknown.ViaLink);
+    }
+
+    [Fact]
+    public void Legacy_Oracle_ddl_preserves_escaped_remote_login_and_infers_engine_from_identity()
+    {
+        CatalogNode legacy = Link with { Link = null, Ddl = "CREATE DATABASE LINK DL_ORDER CONNECT TO \"read\"\"er\" USING 'SQL';" };
+        CatalogNode target = Node("SQL", "Orders", "dbo", "Orders") with { Engine = null };
+        LinkMetadata metadata = LinkedServerMap.FromNodes([Caller, legacy, target]).MetadataFor(legacy.Id)!;
+        Assert.Equal("read\"er", Assert.Single(metadata.Logins).RemoteUser);
+        Assert.Equal(DatabaseEngine.MsSql, metadata.TargetEngine);
+        Assert.Equal("SQL", metadata.TargetServer);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Missing_login_defaults_do_not_invent_a_database(string? database)
+    {
+        CatalogNode login = Node("SQL", "_ServerLevel", null, "entitlements", "Logins") with
+        { Principal = database is null ? null : new() { DefaultDatabase = database } };
+        LinkMetadata metadata = LinkedServerMap.FromNodes([Caller, Link, login]).MetadataFor(Link.Id)!;
+        Assert.Null(metadata.Database);
+        Assert.Null(metadata.DefaultSchema);
+        Assert.Contains(login.Id, metadata.LoginNodeIds);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Missing_mapped_user_defaults_do_not_invent_a_schema(string? schema)
+    {
+        CatalogNode link = Link with { Link = Link.Link! with { Database = "Orders" } };
+        CatalogNode user = Node("SQL", "Orders", null, "reader", "Users") with { Principal = new() { Login = "entitlements", DefaultSchema = schema } };
+        CatalogNode table = Node("SQL", "Orders", "dbo", "Orders");
+        CatalogNode[] nodes = [Caller, link, user, table];
+        var map = LinkedServerMap.FromNodes(nodes);
+        Assert.Null(map.MetadataFor(link.Id)!.DefaultSchema);
+        Assert.Equal(table.Id, new NodeIndex(nodes, map).Resolve(Caller, new(null, "Orders") { Server = "DL_ORDER" }).NodeId);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Incomplete_or_context_dependent_login_mappings_cannot_choose_a_default_schema(int kind)
+    {
+        LinkLogin[] logins = kind switch { 0 => [new(null), new("")], 1 => [new("entitlements"), new("", UsesSelf: true)], _ => [new("entitlements"), new("other")] };
+        CatalogNode link = Link with { Link = Link.Link! with { Database = "Orders", Logins = logins } };
+        CatalogNode[] nodes = [Caller, link, Node("SQL", "Orders", "dbo", "Orders"), Node("SQL", "Orders", "sales", "Orders")];
+        var map = LinkedServerMap.FromNodes(nodes);
+        Assert.Null(map.MetadataFor(link.Id)!.DefaultSchema);
+        Assert.Equal(ReferenceResolutionKind.Ambiguous, new NodeIndex(nodes, map).Resolve(Caller, new(null, "Orders") { Server = "DL_ORDER" }).Kind);
+    }
+
+    [Fact]
+    public void Schema_lookup_ignores_users_in_other_servers_databases_or_logins()
+    {
+        CatalogNode link = Link with { Link = Link.Link! with { Database = "Orders" } };
+        CatalogNode table = Node("SQL", "Orders", "dbo", "Orders");
+        CatalogNode[] nodes = [Caller, link, table,
+            Node("SQL", "Orders", null, "unmapped", "Users"),
+            Node("SQL", "Orders", null, "different", "Users") with { Principal = new() { Login = "other", DefaultSchema = "wrong" } },
+            Node("SQL", "Other", null, "reader", "Users") with { Principal = new() { Login = "entitlements", DefaultSchema = "wrong" } },
+            Node("OtherServer", "Orders", null, "reader", "Users") with { Principal = new() { Login = "entitlements", DefaultSchema = "wrong" } }];
+        var map = LinkedServerMap.FromNodes(nodes);
+        Assert.Equal(table.Id, new NodeIndex(nodes, map).Resolve(Caller, new(null, "Orders") { Server = "DL_ORDER" }).NodeId);
+    }
+
+    [Fact]
+    public void Unknown_engine_does_not_infer_Oracle_or_sql_default_schema()
+    {
+        CatalogNode link = Link with { Link = Link.Link! with { TargetEngine = null, DataSource = "SQL" } };
+        CatalogNode target = Node("SQL", "Orders", "dbo", "Orders") with { Engine = null, ServerIdentity = null };
+        LinkMetadata metadata = LinkedServerMap.FromNodes([Caller, link, target]).MetadataFor(link.Id)!;
+        Assert.Null(metadata.TargetEngine);
+        Assert.Null(metadata.DefaultSchema);
+        // An explicitly stated engine cannot match a target with no engine evidence.
+        Assert.Null(LinkedServerMap.FromNodes([Caller, Link, target]).MetadataFor(link.Id)!.TargetServer);
+    }
+
+    [Fact]
+    public void A_schema_mapping_without_a_default_database_applies_to_an_explicit_database()
+    {
+        CatalogNode link = Link with { Link = Link.Link! with { DefaultSchema = "sales" } };
+        CatalogNode table = Node("SQL", "Orders", "sales", "Orders");
+        CatalogNode[] nodes = [Caller, link, table, Node("SQL", "Orders", "dbo", "Orders")];
+        Assert.Equal(table.Id, new NodeIndex(nodes, LinkedServerMap.FromNodes(nodes)).Resolve(Caller, new(null, "Orders") { Server = "DL_ORDER", Database = "Orders" }).NodeId);
+    }
+
+    [Fact]
+    public void Explicit_engine_matching_can_use_server_identity_when_the_node_engine_is_missing()
+    {
+        CatalogNode target = Node("SQL", "Orders", "dbo", "Orders") with { Engine = null };
+        Assert.Equal("SQL", LinkedServerMap.FromNodes([Caller, Link, target]).MetadataFor(Link.Id)!.TargetServer);
+    }
 }
