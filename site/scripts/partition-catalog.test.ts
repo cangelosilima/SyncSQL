@@ -159,6 +159,8 @@ it('retries failed partition requests and reports missing resources rather than 
   await expect(index.source!.neighborhood('missing', 2, 2)).resolves.toBeDefined()
 })
 
+// This round trip copies and regenerates the complete partition tree on disk,
+// so use the same filesystem timeout as setup on slower Windows CI runners.
 it('uses stable content hashes, supports pre-partitioned inputs and rejects broken manifests', async () => {
   const second = path.join(temporary, 'second')
   const copy = await partitionCatalog(path.join(output, 'catalog.json'), second)
@@ -177,7 +179,7 @@ it('uses stable content hashes, supports pre-partitioned inputs and rejects brok
   await expect(
     loadPartitionedCatalog({ ...manifest, summaries: [{ file: '../secret', count: 1 }] }, '/project/data/'),
   ).rejects.toThrow('path')
-})
+}, 30_000)
 
 it('handles byte boundaries, Unicode identities, empty snapshots and orphan-only partitions', async () => {
   const source = path.join(temporary, 'boundary.json')

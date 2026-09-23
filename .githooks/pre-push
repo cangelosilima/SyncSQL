@@ -51,6 +51,8 @@ try {
         }
     }
 
+    Invoke-CheckedCommand git @('lfs', 'fsck', '--pointers', 'HEAD') $repoRoot
+
     Invoke-CheckedCommand dotnet @(
         'build', 'cli/SyncSql.slnx', '--configuration', 'Release', '--no-restore', '-m:1'
     ) $repoRoot
