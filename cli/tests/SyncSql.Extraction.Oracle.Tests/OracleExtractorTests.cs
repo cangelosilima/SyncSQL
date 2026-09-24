@@ -12,6 +12,65 @@ public sealed class OracleExtractorTests
     private static readonly ServerConfig Server = new() { Name = "ORA", Host = "host", ServiceName = "APP", Type = DatabaseEngine.Oracle, CredentialsVariablePrefix = "TEST" };
     private static readonly DatabaseCredentials Credentials = new("user", "password");
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task DefaultExclusions_FilterBeforeDdl_KeepApplicationAndPublicObjects(bool enabled, bool legacy)
+    {
+        using FakeOracleDatabase db = new()
+        {
+            Execute = (sql, parameters) =>
+            {
+                if (sql == OracleQueries.ApplicationSchemas && legacy) { throw FakeOracleDatabase.Error(904); }
+                if (sql is OracleQueries.Schemas or OracleQueries.ApplicationSchemas)
+                {
+                    return FakeOracleDatabase.Rows(new { OWNER = "SYS" }, new { OWNER = "APP" }, new { OWNER = "PUBLIC" });
+                }
+                if (sql is OracleQueries.ObjectList or OracleQueries.ApplicationObjectList or OracleQueries.LegacyApplicationObjectList)
+                {
+                    return FakeOracleDatabase.Rows(new { ObjectName = "BIN$deleted" }, new { ObjectName = "TMP_REPORT" }, new { ObjectName = "SYS_APPLICATION_VIEW" });
+                }
+                if (sql is OracleQueries.AllDatabaseLinks or OracleQueries.AllApplicationDatabaseLinks)
+                {
+                    return FakeOracleDatabase.Rows(new { OWNER = "SYS", DB_LINK = "internal", USERNAME = "", HOST = "" },
+                        new { OWNER = "PUBLIC", DB_LINK = "application_link", USERNAME = "", HOST = "" });
+                }
+                if (sql == OracleQueries.GetDdl && enabled)
+                {
+                    Assert.NotEqual("SYS", parameters["owner"]);
+                    Assert.NotEqual("BIN$deleted", parameters["objName"]);
+                }
+                return Respond(sql, parameters);
+            },
+        };
+        ServerConfig server = Server with { UseDefaultExclusions = enabled, ObjectTypes = ["Views", "DatabaseLinks"] };
+        ExtractionOutcome result = await Extract(db, metrics: false, config: server);
+        Assert.Contains(result.Objects, o => o.Schema == "PUBLIC" && o.Name == "application_link");
+        Assert.Contains(result.Objects, o => o.Schema == "APP" && o.Name == "SYS_APPLICATION_VIEW");
+        Assert.Contains(result.Objects, o => o.Schema == "APP" && o.Name == "TMP_REPORT");
+        Assert.Equal(!enabled, result.Objects.Any(o => o.Schema == "SYS"));
+        Assert.Equal(!enabled, result.Objects.Any(o => o.Name == "BIN$deleted"));
+        Assert.Contains(!enabled ? OracleQueries.ObjectList : legacy ? OracleQueries.LegacyApplicationObjectList : OracleQueries.ApplicationObjectList, db.Queries);
+        Assert.Contains(enabled && !legacy ? OracleQueries.AllApplicationDatabaseLinks : OracleQueries.AllDatabaseLinks, db.Queries);
+        Assert.Equal(enabled ? 1 : 0, db.Queries.Count(q => q == OracleQueries.ApplicationSchemas));
+        Assert.Equal(!enabled || legacy ? 1 : 0, db.Queries.Count(q => q == OracleQueries.Schemas));
+    }
+
+    [Theory]
+    [InlineData(1031)]
+    [InlineData(942)]
+    [InlineData(3113)]
+    public async Task DefaultExclusions_DoNotSilentlyFallBackOnAccessOrConnectionErrors(int error)
+    {
+        using FakeOracleDatabase db = new()
+        {
+            Execute = (sql, p) => sql == OracleQueries.ApplicationSchemas ? throw FakeOracleDatabase.Error(error) : Respond(sql, p),
+        };
+        await Assert.ThrowsAsync<OracleException>(() => Extract(db));
+        Assert.DoesNotContain(OracleQueries.Schemas, db.Queries);
+    }
+
     [Fact]
     public void Connection_ValidatesServiceAndQuotesCredentials()
     {
@@ -61,8 +120,8 @@ public sealed class OracleExtractorTests
     private static object? Respond(string sql, IReadOnlyDictionary<string, object> parameters)
     {
         if (sql.StartsWith("BEGIN", StringComparison.Ordinal)) { return null; }
-        if (sql == OracleQueries.Schemas) { return FakeOracleDatabase.Rows(new { OWNER = "APP" }, new { OWNER = "PRIVATE" }); }
-        if (sql == OracleQueries.ObjectList) { return FakeOracleDatabase.Rows(new { ObjectName = "orders" }, new { ObjectName = "empty" }, new { ObjectName = "skip" }); }
+        if (sql is OracleQueries.Schemas or OracleQueries.ApplicationSchemas) { return FakeOracleDatabase.Rows(new { OWNER = "APP" }, new { OWNER = "PRIVATE" }); }
+        if (sql is OracleQueries.ObjectList or OracleQueries.ApplicationObjectList or OracleQueries.LegacyApplicationObjectList) { return FakeOracleDatabase.Rows(new { ObjectName = "orders" }, new { ObjectName = "empty" }, new { ObjectName = "skip" }); }
         if (sql == OracleQueries.GetDdl) { return parameters["objName"].Equals("empty") ? null : "CREATE " + parameters["objType"] + " " + parameters["objName"]; }
         if (sql == OracleQueries.AllObjectGrants) { return FakeOracleDatabase.Rows(new { GRANTEE = "reader", TABLE_NAME = "orders", PRIVILEGE = "SELECT" }); }
         if (sql == OracleQueries.AllColumnGrants) { return FakeOracleDatabase.Rows(new { GRANTEE = "reader", TABLE_NAME = "orders", COLUMN_NAME = "id", PRIVILEGE = "UPDATE" }); }
@@ -86,7 +145,7 @@ public sealed class OracleExtractorTests
             new { TABLE_NAME = "orders", INDEX_NAME = "ix2", NUM_ROWS = (long?)null, DISTINCT_KEYS = (long?)null, LEAF_BLOCKS = (long?)null, LAST_ANALYZED = (DateTime?)null },
             new { TABLE_NAME = "missing", INDEX_NAME = "ix", NUM_ROWS = (long?)null, DISTINCT_KEYS = (long?)null, LEAF_BLOCKS = (long?)null, LAST_ANALYZED = (DateTime?)null });
         }
-        if (sql == OracleQueries.AllDatabaseLinks) { return FakeOracleDatabase.Rows(new { OWNER = "APP", DB_LINK = "remote", USERNAME = "entitlements", HOST = "GATEWAY" }, new { OWNER = "APP", DB_LINK = "empty", USERNAME = "", HOST = "" }, new { OWNER = "APP", DB_LINK = "skip", USERNAME = "", HOST = "" }, new { OWNER = "PRIVATE", DB_LINK = "private", USERNAME = "", HOST = "" }); }
+        if (sql is OracleQueries.AllDatabaseLinks or OracleQueries.AllApplicationDatabaseLinks) { return FakeOracleDatabase.Rows(new { OWNER = "APP", DB_LINK = "remote", USERNAME = "entitlements", HOST = "GATEWAY" }, new { OWNER = "APP", DB_LINK = "empty", USERNAME = "", HOST = "" }, new { OWNER = "APP", DB_LINK = "skip", USERNAME = "", HOST = "" }, new { OWNER = "PRIVATE", DB_LINK = "private", USERNAME = "", HOST = "" }); }
         throw new InvalidOperationException("Unexpected query: " + sql);
     }
 
@@ -226,7 +285,7 @@ public sealed class OracleExtractorTests
                     {
                         if (sql.StartsWith("BEGIN", StringComparison.Ordinal)) { Assert.False(initialized); initialized = true; return null; }
                         Assert.True(initialized);
-                        if (sql == OracleQueries.Schemas)
+                        if (sql == OracleQueries.ApplicationSchemas)
                         {
                             return FakeOracleDatabase.Rows(owners.Append("PRIVATE").Select(owner => new { OWNER = owner }).ToArray());
                         }
@@ -284,7 +343,7 @@ public sealed class OracleExtractorTests
         });
         Assert.Equal(progress.Updates.Select(p => p.ObjectsExtracted).Order(), progress.Updates.Select(p => p.ObjectsExtracted));
         Assert.Equal(result.Objects.Count, progress.Updates[^1].ObjectsExtracted);
-        Assert.Equal(ownerCount == 1 ? 0 : 1, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllDatabaseLinks)));
+        Assert.Equal(ownerCount == 1 ? 0 : 1, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllApplicationDatabaseLinks)));
         Assert.Equal(ownerCount, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.AllObjectGrants)));
         Assert.Equal(ownerCount, sessions.Sum(session => session.Queries.Count(q => q == OracleQueries.ColumnList)));
         Assert.Equal(1 + ownerCount + expectedObjects, sessions.Count);
@@ -328,11 +387,11 @@ public sealed class OracleExtractorTests
             {
                 ExecuteAsync = async (sql, p, token) =>
                 {
-                    if (sql == OracleQueries.Schemas)
+                    if (sql == OracleQueries.ApplicationSchemas)
                     {
                         return FakeOracleDatabase.Rows(new { OWNER = "ONE" }, new { OWNER = "TWO" }, new { OWNER = "QUEUED" });
                     }
-                    if (sql == OracleQueries.ObjectList)
+                    if (sql == OracleQueries.ApplicationObjectList)
                     {
                         int position = Interlocked.Increment(ref started);
                         if (position == 2) { slotsFilled.TrySetResult(); }
@@ -408,7 +467,7 @@ public sealed class OracleExtractorTests
                     poolCapacity.Release();
                     leased = false;
                 },
-                Execute = (sql, p) => sql == OracleQueries.Schemas
+                Execute = (sql, p) => sql == OracleQueries.ApplicationSchemas
                     ? FakeOracleDatabase.Rows(new { OWNER = "APP" }, new { OWNER = "AUX" }) : Respond(sql, p),
             };
             sessions.Add(session);

@@ -8,13 +8,14 @@
     "commitMessage": "chore(sync): update database objects"
   },
   "defaults": {
+    "useDefaultExclusions": true,
     "databases": {
       "include": [".*"],
-      "exclude": ["^tempdb$", "^model$", "^msdb$"]
+      "exclude": []
     },
     "schemas": {
       "include": [".*"],
-      "exclude": ["^INFORMATION_SCHEMA$", "^sys$"]
+      "exclude": []
     },
     "objectNames": {
       "include": [".*"],
@@ -63,11 +64,7 @@
       "port": 1433,
       "encrypt": true,
       "trustServerCertificate": false,
-      "credentialsVariablePrefix": "SQLPROD01",
-      "databases": {
-        "include": [".*"],
-        "exclude": ["^tempdb$", "^model$", "^msdb$", "^ReportServerTempDB$"]
-      }
+      "credentialsVariablePrefix": "SQLPROD01"
     },
     {
       "name": "SQLPROD02_FINANCE_ONLY",
@@ -96,7 +93,7 @@
       "credentialsVariablePrefix": "ORAPROD01",
       "schemas": {
         "include": ["^APP_.*$"],
-        "exclude": ["^SYS$", "^SYSTEM$", "^OUTLN$"]
+        "exclude": []
       },
       "objectTypes": [
         "Tables",

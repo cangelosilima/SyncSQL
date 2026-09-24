@@ -6,6 +6,34 @@ namespace SyncSql.Core.Tests.Configuration;
 public class LinkedServerFollowUpPlannerTests
 {
     [Theory]
+    [InlineData(null, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void Plan_InheritsDefaultExclusions(bool? parentValue, bool defaultValue)
+    {
+        ServerConfig parent = Parent with { UseDefaultExclusions = parentValue };
+        ObjectFilterSet defaults = new() { UseDefaultExclusions = defaultValue };
+        ServerConfig remote = Assert.Single(LinkedServerFollowUpPlanner.Plan(parent, "svc_syncsql",
+            [Link("REMOTE")], Enabled, [parent], defaults).FollowUps).Server;
+        Assert.Equal(parentValue, remote.UseDefaultExclusions);
+        Assert.Equal(parentValue ?? defaultValue, EffectiveFilters.Resolve(defaults, remote).UseDefaultExclusions);
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void Plan_CoverageRespectsDefaultExclusions(bool existingPolicy, bool requestedPolicy, bool covered)
+    {
+        ServerConfig parent = Parent with { UseDefaultExclusions = requestedPolicy };
+        ServerConfig existing = Parent with { Name = "REMOTE", Host = "sqlprod02.example.com", UseDefaultExclusions = existingPolicy };
+        LinkedServerFollowUpPlan plan = LinkedServerFollowUpPlanner.Plan(parent, "svc_syncsql",
+            [Link("LINK")], Enabled, [parent, existing]);
+        Assert.Equal(covered ? 0 : 1, plan.FollowUps.Count);
+        Assert.Equal(covered ? 1 : 0, plan.Skipped.Count);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void Plan_InheritsIntegratedSecurityAndMatchesCurrentIdentity(bool usesLocalLogin)

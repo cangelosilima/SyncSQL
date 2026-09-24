@@ -78,6 +78,7 @@ coverage*.json
 coverage*.xml
 coverage*.info
 *.trx
+BenchmarkDotNet.Artifacts/
 *.binlog
 *.nuget.props
 *.nuget.targets

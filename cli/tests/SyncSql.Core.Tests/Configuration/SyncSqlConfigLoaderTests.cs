@@ -6,6 +6,20 @@ namespace SyncSql.Core.Tests.Configuration;
 public class SyncSqlConfigLoaderTests
 {
     [Fact]
+    public async Task LoadAsync_DefaultExclusions_InheritsAndOverridesJsonBoolean()
+    {
+        string path = await WriteTempConfigAsync("""
+            {"defaults":{"useDefaultExclusions":false},"servers":[
+              {"name":"SQL","type":"mssql","host":"sql","integratedSecurity":true},
+              {"name":"ORA","type":"oracle","host":"ora","serviceName":"APP","credentialsVariablePrefix":"ORA","useDefaultExclusions":true}
+            ]}
+            """);
+        SyncSqlConfig config = await SyncSqlConfigLoader.LoadAsync(path);
+        Assert.False(EffectiveFilters.Resolve(config.Defaults, config.Servers[0]).UseDefaultExclusions);
+        Assert.True(EffectiveFilters.Resolve(config.Defaults, config.Servers[1]).UseDefaultExclusions);
+    }
+
+    [Fact]
     public async Task Network_sources_are_relative_to_config_not_the_working_directory()
     {
         string path = await WriteTempConfigAsync("""

@@ -153,6 +153,7 @@ public static class LinkedServerFollowUpPlanner
                 Databases = catalog is not null ? OnlyDatabase(catalog) : parent.Databases,
                 Schemas = parent.Schemas,
                 ObjectNames = parent.ObjectNames,
+                UseDefaultExclusions = parent.UseDefaultExclusions,
                 // Remote link definitions are not part of the followed database's export.
                 // Resolve defaults first so a null override cannot reintroduce LinkedServers.
                 ObjectTypes = [.. EffectiveFilters.Resolve(defaults, parent).ObjectTypes
@@ -231,9 +232,14 @@ public static class LinkedServerFollowUpPlanner
     {
         EffectiveFilters have = EffectiveFilters.Resolve(defaults, existing);
         EffectiveFilters need = EffectiveFilters.Resolve(defaults, candidate);
-        return (catalog is not null ? have.Databases.IsAllowed(catalog) : CoversFilter(have.Databases, need.Databases))
-            && CoversFilter(have.Schemas, need.Schemas)
-            && CoversFilter(have.ObjectNames, need.ObjectNames)
+        // Compare explicit regex scopes separately from the managed policy. Adding built-in
+        // exclusions must not make an otherwise unrestricted filter appear narrower.
+        EffectiveFilters haveExplicit = EffectiveFilters.Resolve(defaults, existing with { UseDefaultExclusions = false });
+        EffectiveFilters needExplicit = EffectiveFilters.Resolve(defaults, candidate with { UseDefaultExclusions = false });
+        return (!have.UseDefaultExclusions || need.UseDefaultExclusions)
+            && (catalog is not null ? have.Databases.IsAllowed(catalog) : CoversFilter(haveExplicit.Databases, needExplicit.Databases))
+            && CoversFilter(haveExplicit.Schemas, needExplicit.Schemas)
+            && CoversFilter(haveExplicit.ObjectNames, needExplicit.ObjectNames)
             && need.ObjectTypes.All(type => have.ObjectTypes.Contains(type, StringComparer.OrdinalIgnoreCase));
     }
 

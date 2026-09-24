@@ -5,6 +5,14 @@ internal static class OracleQueries
 {
     public const string Schemas = "SELECT DISTINCT OWNER FROM ALL_OBJECTS ORDER BY OWNER";
 
+    // PUBLIC is not a user. NOT EXISTS keeps application-owned public synonyms/links visible.
+    public const string ApplicationSchemas = """
+        SELECT DISTINCT o.OWNER FROM ALL_OBJECTS o
+        WHERE o.ORACLE_MAINTAINED = 'N'
+          AND NOT EXISTS (SELECT 1 FROM ALL_USERS u WHERE u.USERNAME = o.OWNER AND u.ORACLE_MAINTAINED = 'Y')
+        ORDER BY o.OWNER
+        """;
+
     public const string ObjectList = """
         SELECT object_name AS ObjectName
         FROM ALL_OBJECTS
@@ -15,8 +23,34 @@ internal static class OracleQueries
         ORDER BY object_name
         """;
 
+    public const string ApplicationObjectList = """
+        SELECT object_name AS ObjectName FROM ALL_OBJECTS
+        WHERE owner = :owner AND object_type = :objType
+          AND generated = 'N' AND temporary = 'N'
+          AND oracle_maintained = 'N' AND secondary = 'N'
+        ORDER BY object_name
+        """;
+
+    public const string LegacyApplicationObjectList = """
+        SELECT object_name AS ObjectName FROM ALL_OBJECTS
+        WHERE owner = :owner AND object_type = :objType
+          AND generated = 'N' AND temporary = 'N' AND secondary = 'N'
+        ORDER BY object_name
+        """;
+
     public const string DatabaseLinks = "SELECT OWNER, DB_LINK, USERNAME, HOST FROM ALL_DB_LINKS ORDER BY OWNER, DB_LINK";
     public const string AllDatabaseLinks = "SELECT OWNER, DB_LINK, USERNAME, HOST FROM DBA_DB_LINKS ORDER BY OWNER, DB_LINK";
+
+    public const string ApplicationDatabaseLinks = """
+        SELECT OWNER, DB_LINK, USERNAME, HOST FROM ALL_DB_LINKS l
+        WHERE NOT EXISTS (SELECT 1 FROM ALL_USERS u WHERE u.USERNAME = l.OWNER AND u.ORACLE_MAINTAINED = 'Y')
+        ORDER BY OWNER, DB_LINK
+        """;
+    public const string AllApplicationDatabaseLinks = """
+        SELECT OWNER, DB_LINK, USERNAME, HOST FROM DBA_DB_LINKS l
+        WHERE NOT EXISTS (SELECT 1 FROM ALL_USERS u WHERE u.USERNAME = l.OWNER AND u.ORACLE_MAINTAINED = 'Y')
+        ORDER BY OWNER, DB_LINK
+        """;
 
     // ALL_TAB_PRIVS/ALL_COL_PRIVS name their owning-schema column TABLE_SCHEMA (OWNER only exists on
     // the DBA_*/`_MADE`/`_RECD` variants of these views).
