@@ -34,6 +34,10 @@ public sealed record CatalogNode
     [JsonIgnore]
     public IReadOnlyList<string> ServerNames { get; init; } = [];
 
+    /// <summary>Path within its input tree, retained for canonical export preference when combining roots.</summary>
+    [JsonIgnore]
+    public string? SourcePath { get; init; }
+
     /// <summary>Configured server name when this object was exported through an alias-based path.</summary>
     [JsonPropertyName("actualServerName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -28,27 +28,50 @@ public sealed class CatalogBuilder(
             throw new DirectoryNotFoundException($"Objects root not found: {request.ObjectsRoot}");
         }
 
-        logger.LogInformation("Scanning {ObjectsRoot}", request.ObjectsRoot);
-        string[] files = Directory.GetFiles(request.ObjectsRoot, "*.sql", SearchOption.AllDirectories);
-        logger.LogInformation("Found {Count} object file(s)", files.Length);
-
         List<CatalogNode> nodes = [];
-        foreach (string file in files)
+        Dictionary<string, string?> metricsRootByPath = new(FileSystemPaths.Comparer);
+        IReadOnlyList<CatalogInput> inputs = request.Inputs.Count > 0 ? request.Inputs
+            : [new CatalogInput { ObjectsRoot = request.ObjectsRoot, MetricsRoot = request.MetricsRoot }];
+        HashSet<string> seenFiles = new(FileSystemPaths.Comparer);
+        foreach (CatalogInput input in inputs)
         {
-            CatalogNode? node = await TryLoadNodeAsync(request.ObjectsRoot, file, cancellationToken);
-            if (node is not null)
+            if (!Directory.Exists(input.ObjectsRoot))
             {
-                nodes.Add(node);
+                throw new DirectoryNotFoundException($"Objects root not found: {input.ObjectsRoot}");
+            }
+            logger.LogInformation("Scanning {ObjectsRoot}", input.ObjectsRoot);
+            foreach (string file in Directory.EnumerateFiles(input.ObjectsRoot, "*.sql", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!seenFiles.Add(Path.GetFullPath(file)))
+                {
+                    continue;
+                }
+                CatalogNode? node = await TryLoadNodeAsync(input.ObjectsRoot, file, cancellationToken);
+                if (node is not null)
+                {
+                    node = node with { SourcePath = node.Path, Path = Path.GetRelativePath(request.ObjectsRoot, file).Replace(Path.DirectorySeparatorChar, '/') };
+                    nodes.Add(node);
+                    metricsRootByPath[node.Path] = request.MetricsRoot ?? input.MetricsRoot;
+                }
             }
         }
 
-        Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
+        foreach (var server in nodes.GroupBy(node => node.Server, StringComparer.OrdinalIgnoreCase))
+        {
+            if (server.Select(node => node.Engine).OfType<DatabaseEngine>().Distinct().Count() > 1)
+            {
+                throw new InvalidDataException($"Server name '{server.Key}' is used by multiple engines. Configure distinct server names before consolidating.");
+            }
+        }
+
+        Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, FileSystemPaths.Comparer);
         nodes = CatalogServerIdentity.Canonicalize(nodes);
-        Dictionary<string, string[]> sourceIdsByObject = nodes.GroupBy(n => n.Id, StringComparer.OrdinalIgnoreCase)
+        var metricSourcesByObject = nodes.GroupBy(n => n.Id, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key,
-                group => group.Select(n => sourceIdsByPath[n.Path]).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                group => group.Select(n => (Root: metricsRootByPath[n.Path], Id: sourceIdsByPath[n.Path])).Distinct().ToArray(),
                 StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, FileSystemPaths.Comparer);
         LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
         nodes = CatalogServerIdentity.MergeObjects(nodes);
         nodes = [.. nodes.Select(node => linkedServers.MetadataFor(node.Id) is { } metadata ? node with { Link = metadata } : node)];
@@ -85,14 +108,17 @@ public sealed class CatalogBuilder(
             typeCounts[node.Type] = typeCounts.GetValueOrDefault(node.Type) + 1;
         }
 
-        if (request.MetricsRoot is not null)
+        if (metricsRootByPath.Values.Any(root => root is not null))
         {
             for (int i = 0; i < nodes.Count; i++)
             {
                 List<MetricsSnapshot> metrics = [];
-                foreach (string sourceId in sourceIdsByObject[nodes[i].Id])
+                foreach (var source in metricSourcesByObject[nodes[i].Id])
                 {
-                    metrics.AddRange(await metricsHistoryStore.LoadHistoryAsync(request.MetricsRoot, sourceId, cancellationToken));
+                    if (source.Root is not null)
+                    {
+                        metrics.AddRange(await metricsHistoryStore.LoadHistoryAsync(source.Root, source.Id, cancellationToken));
+                    }
                 }
                 if (metrics.Count > 0)
                 {

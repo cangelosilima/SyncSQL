@@ -31,5 +31,6 @@ internal static class ServiceCollectionExtensions
         services.AddSingleton<IGitHistoryMiner, GitHistoryMiner>();
         services.AddSingleton<IMetricsHistoryStore, MetricsHistoryStore>();
         services.AddSingleton<ICatalogBuilder, CatalogBuilder>();
+        services.AddSingleton<ICatalogPublisher, CatalogPublisher>();
     }
 }

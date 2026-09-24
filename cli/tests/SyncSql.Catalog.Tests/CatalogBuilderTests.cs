@@ -10,6 +10,23 @@ namespace SyncSql.Catalog.Tests;
 public sealed class CatalogBuilderTests : IDisposable
 {
     [Fact]
+    public async Task BuildAsync_OverlappingInputsReadEachExportOnce()
+    {
+        WriteObjectFile("SQL", "App", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id int);");
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest
+        {
+            ObjectsRoot = _objectsRoot,
+            Inputs = [new CatalogInput { ObjectsRoot = _objectsRoot }, new CatalogInput { ObjectsRoot = _objectsRoot }],
+        }, CancellationToken.None);
+        Assert.Single(catalog.Nodes);
+        await Assert.ThrowsAsync<DirectoryNotFoundException>(() => CreateBuilder().BuildAsync(new CatalogBuildRequest
+        {
+            ObjectsRoot = _objectsRoot,
+            Inputs = [new CatalogInput { ObjectsRoot = Path.Combine(_objectsRoot, "missing") }],
+        }, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task BuildAsync_Passes_each_objects_Broker_context_to_its_analyzer()
     {
         Guid brokerGuid = Guid.Parse("aabbccdd-1111-2222-3333-444444444444");

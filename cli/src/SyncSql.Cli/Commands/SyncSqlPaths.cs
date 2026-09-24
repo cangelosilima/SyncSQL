@@ -5,8 +5,9 @@ namespace SyncSql.Cli.Commands;
 
 /// <summary>
 /// The default layout every command reads and writes, so running <c>syncsql</c> away from a CI job needs
-/// no path parameter at all: each engine uses its uppercase config name (MSSQL/ORACLE)
+/// no path parameter at all: extraction uses each engine's uppercase config name (MSSQL/ORACLE)
 /// (overridable wholesale with <c>--output-root</c>, or one path at a time with the specific option).
+/// Catalog generation combines these roots; metrics updates retain their per-engine histories.
 /// A pipeline still pins every path explicitly - see .gitlab/README.md - it just no longer has to.
 ///
 /// The extracted objects are the output root's own contents rather than a folder inside it: the first

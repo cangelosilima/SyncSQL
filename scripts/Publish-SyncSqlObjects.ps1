@@ -332,7 +332,7 @@ try {
     # The extracted tree is exactly the server directories; `syncsql sync`'s own defaults put the
     # metrics folders and a locally built catalog.json beside them under one output root, so those are
     # recognized and skipped rather than published as if they were servers.
-    $skipNames = @(@($MetricsHistoryDirName, $MetricsSnapshotDirName, $CatalogFileName) |
+    $skipNames = @(@($MetricsHistoryDirName, $MetricsSnapshotDirName, $CatalogFileName, '_catalog') |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $serverEntries = @()
     foreach ($entry in @(Get-ChildItem -LiteralPath $ExtractedObjectsDir -Force)) {
@@ -393,6 +393,7 @@ try {
         'catalog', 'build',
         '--objects-root', $targetDir,
         '--output', $catalogPath,
+        '--prune',
         '--repo-root', $CloneDirectory,
         '--path-prefix', $PathPrefix,
         '--history-limit', "$HistoryLimit",

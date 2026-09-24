@@ -15,4 +15,7 @@
     <Using Include="Xunit" />
     <ProjectReference Include="../../src/SyncSql.Cli/SyncSql.Cli.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/PartitionedCatalogReader.cs" Link="PartitionedCatalogReader.cs" />
+  </ItemGroup>
 </Project>

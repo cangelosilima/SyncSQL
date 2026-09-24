@@ -5,6 +5,16 @@ namespace SyncSql.Catalog.Tests;
 public class CatalogServerIdentityTests
 {
     [Fact]
+    public void MergeObjects_PreservesLegacyPathsAndPrefersDirectSourcePathsAcrossRoots()
+    {
+        CatalogNode direct = Node("SERVER") with { Path = "MSSQL/SERVER/App/Tables/dbo/Orders.sql", SourcePath = "SERVER/App/Tables/dbo/Orders.sql" };
+        CatalogNode nested = direct with { Path = "a/ROOT/LinkedServers/SERVER/App/Tables/dbo/Orders.sql", SourcePath = "ROOT/LinkedServers/SERVER/App/Tables/dbo/Orders.sql" };
+        Assert.Same(direct, Assert.Single(CatalogServerIdentity.MergeObjects([nested, direct])));
+        CatalogNode legacy = Node("LEGACY");
+        Assert.Same(legacy, Assert.Single(CatalogServerIdentity.MergeObjects([legacy])));
+    }
+
+    [Fact]
     public void Canonicalize_AddsConfiguredNameToTheServerNamesAndLeavesLegacyNodesAlone()
     {
         CatalogNode identified = Node("REMOTE_ALIAS") with

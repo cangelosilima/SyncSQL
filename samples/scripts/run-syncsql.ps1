@@ -136,5 +136,5 @@ Write-Host @"
     catalog           : $(Join-Path $OutputRoot 'catalog.json')
     metrics history   : $(Join-Path $OutputRoot 'metrics')
 
-    To browse it: copy the catalog into site/public/ and run 'npm run dev' in site/.
+    To browse it: copy catalog.json and its sibling _catalog/ into site/public/data/ and run 'npm run dev' in site/.
 "@

@@ -140,5 +140,5 @@ cat <<EOF
     catalog           : $OUTPUT_ROOT/catalog.json
     metrics history   : $OUTPUT_ROOT/metrics
 
-    To browse it: copy $OUTPUT_ROOT/catalog.json into site/public/ and run 'npm run dev' in site/.
+    To browse it: copy $OUTPUT_ROOT/catalog.json and $OUTPUT_ROOT/_catalog/ into site/public/data/ and run 'npm run dev' in site/.
 EOF

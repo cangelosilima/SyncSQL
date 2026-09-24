@@ -1529,15 +1529,21 @@ commands default to the same layout, so the chain needs no arguments:
 
 ```bash
 syncsql metrics update                                        # → ./MSSQL/metrics
-syncsql catalog build                                         # → each engine's catalog.json
+syncsql catalog build                                         # → combined catalog/catalog.json when both engines exist
 syncsql catalog build --output-root ./MSSQL --metrics-root ./MSSQL/metrics # include MSSQL metrics
 ```
 
 To preview the site against a run, write the catalog where the site reads it:
 
 ```bash
-syncsql catalog build --output-root ./MSSQL --output ./site/public/data/catalog.json
+syncsql catalog build --output ./site/public/data/catalog.json
 ```
+
+This writes the manifest and compressed `_catalog/` payloads the site loads on
+demand. Both engine roots are combined before resolving cross-server and
+cross-engine links; engine/server filters still provide scoped views. Copy both
+the manifest and its sibling payload directory when moving a catalog. See
+[partitioned catalogs](docs/partitioned-catalog.md) for explicit input roots and limits.
 
 (add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
 target repo to include history; `--metrics-root` includes accumulated

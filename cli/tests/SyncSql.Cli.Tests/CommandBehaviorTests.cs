@@ -657,7 +657,7 @@ public sealed class CommandBehaviorTests : IDisposable
         Assert.Equal(0, await Run("sync"));
         await _extractor.Received(3).ExtractAsync(Arg.Any<ServerConfig>(), Arg.Any<EffectiveFilters>(), Arg.Any<ExtractionOptions>(), Arg.Any<CancellationToken>());
         Assert.Equal(0, await Run("catalog", "build", "--output-root", "MSSQL"));
-        var catalog = JsonSerializer.Deserialize<Core.Domain.Catalog>(await File.ReadAllTextAsync("MSSQL/catalog.json"))!;
+        var catalog = await SyncSql.Tests.PartitionedCatalogReader.LoadAsync("MSSQL/catalog.json");
         var target = Assert.Single(catalog.Nodes, n => n.Type == "Tables");
         Assert.Equal("CENTRAL", target.Server);
         Assert.Equal(2, catalog.LinkedServerReferences.Count);
