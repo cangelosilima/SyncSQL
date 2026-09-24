@@ -3,9 +3,13 @@ using SyncSql.Core.Domain;
 
 namespace SyncSql.Core.Configuration;
 
-/// <summary>config.defaults - the fallback databases/schemas/objectNames/objectTypes filters a server inherits unless it overrides a given key.</summary>
+/// <summary>config.defaults - the fallback filters and exclusion policy a server inherits unless it overrides a given key.</summary>
 public sealed record ObjectFilterSet
 {
+    /// <summary>Apply CLI-managed engine exclusions in addition to explicit filters. Defaults to true.</summary>
+    [JsonPropertyName("useDefaultExclusions")]
+    public bool? UseDefaultExclusions { get; init; }
+
     [JsonPropertyName("databases")]
     public NameFilter? Databases { get; init; }
 
@@ -22,6 +26,10 @@ public sealed record ObjectFilterSet
 /// <summary>One entry in config.servers[]. A key present here fully replaces (not merges with) the corresponding config.defaults key - see <see cref="EffectiveFilters.Resolve"/>.</summary>
 public sealed record ServerConfig
 {
+    /// <summary>Overrides defaults.useDefaultExclusions for this server.</summary>
+    [JsonPropertyName("useDefaultExclusions")]
+    public bool? UseDefaultExclusions { get; init; }
+
     [JsonPropertyName("oracleNetwork")]
     public OracleNetworkConfig? OracleNetwork { get; init; }
     [JsonPropertyName("linkTargets")]

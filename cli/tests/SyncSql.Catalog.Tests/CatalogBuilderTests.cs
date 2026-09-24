@@ -344,6 +344,24 @@ public sealed class CatalogBuilderTests : IDisposable
         _timeProvider,
         NullLogger<CatalogBuilder>.Instance);
 
+    [Fact]
+    public async Task BuildAsync_CancellationDuringLineageStopsBeforeTheNextObject()
+    {
+        WriteObjectFile("SQL", "db", "Views", "dbo", "first", "SELECT 1;");
+        WriteObjectFile("SQL", "db", "Views", "dbo", "second", "SELECT 2;");
+        using CancellationTokenSource cancellation = new();
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(_ =>
+        {
+            cancellation.Cancel();
+            return LineageAnalysisResult.Empty;
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateBuilder().BuildAsync(
+            new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, cancellation.Token));
+
+        _mssqlAnalyzer.Received(1).Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>());
+    }
+
     private void WriteObjectFile(
         string server,
         string database,

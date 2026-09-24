@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/SyncSql.Benchmarks/SyncSql.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/SyncSql.Catalog/SyncSql.Catalog.csproj" />
     <Project Path="src/SyncSql.Cli/SyncSql.Cli.csproj" />

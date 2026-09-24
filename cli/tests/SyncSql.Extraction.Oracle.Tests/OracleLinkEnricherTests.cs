@@ -116,9 +116,9 @@ public sealed class OracleLinkEnricherTests : IDisposable
         {
             Execute = (sql, _) => sql switch
         {
-            OracleQueries.Schemas => FakeOracleDatabase.Rows(new { OWNER = "APP" }),
-            OracleQueries.AllDatabaseLinks => throw FakeOracleDatabase.Error(942),
-            OracleQueries.DatabaseLinks => FakeOracleDatabase.Rows(new { OWNER = "APP", DB_LINK = "DL_ORDER", USERNAME = "entitlements", HOST = "GATEWAY" }),
+            OracleQueries.ApplicationSchemas => FakeOracleDatabase.Rows(new { OWNER = "APP" }),
+            OracleQueries.AllApplicationDatabaseLinks => throw FakeOracleDatabase.Error(942),
+            OracleQueries.ApplicationDatabaseLinks => FakeOracleDatabase.Rows(new { OWNER = "APP", DB_LINK = "DL_ORDER", USERNAME = "entitlements", HOST = "GATEWAY" }),
             OracleQueries.GetDdl => throw FakeOracleDatabase.Error(31603),
             _ => null,
         }

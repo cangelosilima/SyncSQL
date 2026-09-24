@@ -48,27 +48,46 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
         ExtractionProgressAggregator progress = new(options.Progress);
         OracleExtractionConnections connections = new(() => _createConnection(server, options.Credentials));
         progress.Report(new($"Connecting to {serviceName}"));
-        var (owners, links) = await connections.UseAsync(async connection =>
+        var (owners, links, objectListQuery) = await connections.UseAsync(async connection =>
         {
             progress.Report(new($"{serviceName}: listing schemas"));
-            List<string> allOwners = await OracleCommandRunner.QueryAsync(connection, OracleQueries.Schemas,
-                r => r.GetStringOrEmpty("OWNER"), cancellationToken);
+            bool maintainedMetadata = filters.UseDefaultExclusions;
+            List<string> allOwners;
+            try
+            {
+                allOwners = await OracleCommandRunner.QueryAsync(connection,
+                    maintainedMetadata ? OracleQueries.ApplicationSchemas : OracleQueries.Schemas,
+                    r => r.GetStringOrEmpty("OWNER"), cancellationToken);
+            }
+            catch (OracleException ex) when (maintainedMetadata && ex.Number == 904 && !cancellationToken.IsCancellationRequested)
+            {
+                // ORACLE_MAINTAINED arrived in 12c. Never turn a permission/connection error
+                // into an unrestricted extraction, and probe only once per server.
+                maintainedMetadata = false;
+                _logger.LogWarning("[{Server}] ORACLE_MAINTAINED metadata is unavailable; using built-in schema names and recycle-bin exclusions", server.Name);
+                allOwners = await OracleCommandRunner.QueryAsync(connection, OracleQueries.Schemas,
+                    r => r.GetStringOrEmpty("OWNER"), cancellationToken);
+            }
             List<(string Owner, string Name, string? Username, string? Host)> databaseLinks = [];
             if (filters.ObjectTypes.Contains("DatabaseLinks"))
             {
                 progress.Report(new($"{serviceName}: database links"));
-                databaseLinks = await OracleCommandRunner.QueryDictionaryAsync(connection, OracleQueries.AllDatabaseLinks,
-                    OracleQueries.DatabaseLinks, r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK"),
+                databaseLinks = await OracleCommandRunner.QueryDictionaryAsync(connection,
+                    maintainedMetadata ? OracleQueries.AllApplicationDatabaseLinks : OracleQueries.AllDatabaseLinks,
+                    maintainedMetadata ? OracleQueries.ApplicationDatabaseLinks : OracleQueries.DatabaseLinks,
+                    r => (r.GetStringOrEmpty("OWNER"), r.GetStringOrEmpty("DB_LINK"),
                         r.GetNullableString("USERNAME"), r.GetNullableString("HOST")), cancellationToken);
             }
-            return (allOwners.Where(filters.Schemas.IsAllowed).ToArray(), databaseLinks);
+            string objectQuery = !filters.UseDefaultExclusions ? OracleQueries.ObjectList
+                : maintainedMetadata ? OracleQueries.ApplicationObjectList : OracleQueries.LegacyApplicationObjectList;
+            return (allOwners.Where(filters.Schemas.IsAllowed).ToArray(), databaseLinks, objectQuery);
         }, cancellationToken);
 
         List<Func<ExtractionWorkContext, Task<ExtractionOutcome>>> jobs = [];
         if (filters.ObjectTypes.Contains("Schemas") || OracleTypeMaps.ObjectTypeMap.Any(type => filters.ObjectTypes.Contains(type.ConfigType)))
         {
             jobs.AddRange(owners.Select(owner => (Func<ExtractionWorkContext, Task<ExtractionOutcome>>)(context =>
-                ExtractOwnerAsync(connections, server, serviceName, owner, filters, options, progress, context))));
+                ExtractOwnerAsync(connections, server, serviceName, owner, objectListQuery, filters, options, progress, context))));
         }
         OracleLinkEnricher linkEnricher = new(server);
         foreach ((string owner, string name, string? username, string? host) in links)
@@ -86,7 +105,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
     }
 
     private async Task<ExtractionOutcome> ExtractOwnerAsync(
-        OracleExtractionConnections connections, ServerConfig server, string serviceName, string owner,
+        OracleExtractionConnections connections, ServerConfig server, string serviceName, string owner, string objectListQuery,
         EffectiveFilters filters, ExtractionOptions options, ExtractionProgressAggregator progress, ExtractionWorkContext context)
     {
         CancellationToken token = context.CancellationToken;
@@ -110,7 +129,7 @@ public sealed class OracleObjectExtractor : IDatabaseObjectExtractor
                 {
                     metrics = await LoadMetricsSnapshotsAsync(connection, owner, server.Name, token);
                 }
-                List<string> names = await OracleCommandRunner.QueryAsync(connection, OracleQueries.ObjectList,
+                List<string> names = await OracleCommandRunner.QueryAsync(connection, objectListQuery,
                     r => r.GetStringOrEmpty("ObjectName"), token, ("owner", owner), ("objType", oracleType));
                 foreach (string name in names.Where(filters.ObjectNames.IsAllowed))
                 {

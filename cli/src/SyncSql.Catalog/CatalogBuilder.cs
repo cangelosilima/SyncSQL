@@ -78,10 +78,9 @@ public sealed class CatalogBuilder(
         NodeIndex nodeIndex = new(nodes, linkedServers);
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
-        logger.LogInformation("Inferring lineage edges");
-        LineageInferenceResult lineage = InferLineage(nodes, nodeIndex, new LineageAnalysisOptions { DynamicSql = request.DynamicSql });
+        logger.LogInformation("Inferring lineage edges and column references");
+        LineageInferenceResult lineage = InferLineage(nodes, nodesById, nodeIndex, new LineageAnalysisOptions { DynamicSql = request.DynamicSql }, cancellationToken);
         List<CatalogEdge> edges = lineage.Edges;
-        Dictionary<string, LineageAnalysisResult> analysisByNodeId = lineage.AnalysisByNodeId;
         List<CatalogOrphanedReference> orphanedReferences = lineage.OrphanedReferences;
         if (orphanedReferences.Count > 0)
         {
@@ -98,9 +97,6 @@ public sealed class CatalogBuilder(
                 lineage.LinkedServerReferences.Count,
                 lineage.LinkedServerReferences.Count(r => r.To is null));
         }
-
-        logger.LogInformation("Detecting column-level references for inferred edges");
-        TagColumnReferences(edges, nodesById, analysisByNodeId, nodeIndex);
 
         Dictionary<string, int> typeCounts = [];
         foreach (CatalogNode node in nodes)
@@ -258,8 +254,6 @@ public sealed class CatalogBuilder(
     {
         public required List<CatalogEdge> Edges { get; init; }
 
-        public required Dictionary<string, LineageAnalysisResult> AnalysisByNodeId { get; init; }
-
         public required List<CatalogOrphanedReference> OrphanedReferences { get; init; }
 
         public required List<CatalogLinkedServerReference> LinkedServerReferences { get; init; }
@@ -267,13 +261,16 @@ public sealed class CatalogBuilder(
         public required List<CatalogSystemReference> SystemReferences { get; init; }
     }
 
-    private LineageInferenceResult InferLineage(List<CatalogNode> nodes, NodeIndex nodeIndex, LineageAnalysisOptions analysisOptions)
+    private LineageInferenceResult InferLineage(List<CatalogNode> nodes, IReadOnlyDictionary<string, CatalogNode> nodesById,
+        NodeIndex nodeIndex, LineageAnalysisOptions analysisOptions, CancellationToken cancellationToken)
     {
         // Index rather than a set: an edge already recorded from a dynamic reference has to be
         // upgradeable when a static one turns up for the same pair.
         Dictionary<string, int> edgeIndexByKey = [];
         List<CatalogEdge> edges = [];
-        Dictionary<string, LineageAnalysisResult> analysisByNodeId = new(StringComparer.OrdinalIgnoreCase);
+        // Retain only resolved column tags, not every object's raw references and alias bindings.
+        // Tags are applied after inference because another object can add an edge from a link node.
+        Dictionary<(string From, string To), IReadOnlyList<string>> columnsByEdge = [];
         HashSet<string> orphanKeys = [];
         List<CatalogOrphanedReference> orphanedReferences = [];
         Dictionary<string, int> linkedReferenceIndexByKey = [];
@@ -296,6 +293,7 @@ public sealed class CatalogBuilder(
 
         foreach (CatalogNode node in nodes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (node.Engine is not { } engine)
             {
                 // No "-- Engine:" header (a file predating that field, or a foreign file this tool
@@ -311,8 +309,10 @@ public sealed class CatalogBuilder(
             }
 
             ILineageAnalyzer analyzer = lineageAnalyzerResolver.Resolve(engine);
+            logger.LogDebug("Analyzing lineage for {ObjectId}", node.Id);
             LineageAnalysisResult analysis = analyzer.Analyze(scanText, analysisOptions with { ServiceBrokerGuid = node.ServiceBrokerGuid });
-            analysisByNodeId[node.Id] = analysis;
+            cancellationToken.ThrowIfCancellationRequested();
+            CollectColumnReferences(node, analysis, nodesById, nodeIndex, columnsByEdge);
 
             foreach (ObjectRef reference in analysis.ObjectRefs)
             {
@@ -423,6 +423,14 @@ public sealed class CatalogBuilder(
             }
         }
 
+        for (int i = 0; i < edges.Count; i++)
+        {
+            if (columnsByEdge.TryGetValue((edges[i].From, edges[i].To), out IReadOnlyList<string>? columns))
+            {
+                edges[i] = edges[i] with { Columns = columns };
+            }
+        }
+
         orphanedReferences.Sort((a, b) =>
         {
             int byFrom = string.Compare(a.From, b.From, StringComparison.OrdinalIgnoreCase);
@@ -449,7 +457,6 @@ public sealed class CatalogBuilder(
         return new LineageInferenceResult
         {
             Edges = edges,
-            AnalysisByNodeId = analysisByNodeId,
             OrphanedReferences = orphanedReferences,
             LinkedServerReferences = linkedServerReferences,
             SystemReferences = systemReferences,
@@ -479,53 +486,51 @@ public sealed class CatalogBuilder(
         }
     }
 
-    private static void TagColumnReferences(
-        List<CatalogEdge> edges,
+    private static void CollectColumnReferences(
+        CatalogNode fromNode,
+        LineageAnalysisResult analysis,
         IReadOnlyDictionary<string, CatalogNode> nodesById,
-        IReadOnlyDictionary<string, LineageAnalysisResult> analysisByNodeId,
-        NodeIndex nodeIndex)
+        NodeIndex nodeIndex,
+        Dictionary<(string From, string To), IReadOnlyList<string>> columnsByEdge)
     {
-        for (int i = 0; i < edges.Count; i++)
+        if (analysis.ColumnRefs.Count == 0 || analysis.Aliases.Count == 0)
         {
-            CatalogEdge edge = edges[i];
-            if (!nodesById.TryGetValue(edge.To, out CatalogNode? toNode) || !nodesById.TryGetValue(edge.From, out CatalogNode? fromNode))
-            {
-                continue;
-            }
-            if (toNode.Columns.Count == 0 || !analysisByNodeId.TryGetValue(fromNode.Id, out LineageAnalysisResult? analysis))
-            {
-                continue;
-            }
+            return;
+        }
 
-            HashSet<string> targetColumnNames = new(toNode.Columns.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
-
-            HashSet<string> matchingAliases = new(StringComparer.OrdinalIgnoreCase);
-            foreach ((string alias, ObjectRef aliasTarget) in analysis.Aliases)
+        Dictionary<string, string> targetsByAlias = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, HashSet<string>> targetColumns = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string alias, ObjectRef target) in analysis.Aliases)
+        {
+            if (nodeIndex.Resolve(fromNode, target) is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } targetId }
+                && nodesById.TryGetValue(targetId, out CatalogNode? toNode) && toNode.Columns.Count > 0)
             {
-                if (nodeIndex.Resolve(fromNode, aliasTarget) is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } aliasTargetId } && aliasTargetId == toNode.Id)
+                targetsByAlias[alias] = targetId;
+                if (!targetColumns.ContainsKey(targetId))
                 {
-                    matchingAliases.Add(alias);
+                    targetColumns[targetId] = new(toNode.Columns.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
                 }
             }
+        }
 
-            if (matchingAliases.Count == 0)
+        Dictionary<string, HashSet<string>> usedColumns = new(StringComparer.OrdinalIgnoreCase);
+        foreach (ColumnRef columnRef in analysis.ColumnRefs)
+        {
+            if (targetsByAlias.TryGetValue(columnRef.AliasOrTable, out string? targetId)
+                && targetColumns[targetId].Contains(columnRef.Column))
             {
-                continue;
-            }
-
-            HashSet<string> usedColumns = new(StringComparer.OrdinalIgnoreCase);
-            foreach (ColumnRef columnRef in analysis.ColumnRefs)
-            {
-                if (matchingAliases.Contains(columnRef.AliasOrTable) && targetColumnNames.Contains(columnRef.Column))
+                if (!usedColumns.TryGetValue(targetId, out HashSet<string>? columns))
                 {
-                    usedColumns.Add(columnRef.Column);
+                    columns = new(StringComparer.OrdinalIgnoreCase);
+                    usedColumns[targetId] = columns;
                 }
+                columns.Add(columnRef.Column);
             }
+        }
 
-            if (usedColumns.Count > 0)
-            {
-                edges[i] = edge with { Columns = [.. usedColumns.Order(StringComparer.OrdinalIgnoreCase)] };
-            }
+        foreach ((string targetId, HashSet<string> columns) in usedColumns)
+        {
+            columnsByEdge[(fromNode.Id, targetId)] = [.. columns.Order(StringComparer.OrdinalIgnoreCase)];
         }
     }
 }

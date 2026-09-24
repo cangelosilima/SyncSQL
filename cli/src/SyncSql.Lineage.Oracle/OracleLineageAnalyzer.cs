@@ -1,5 +1,7 @@
 ﻿#nullable enable
 using Antlr4.Runtime;
+using Antlr4.Runtime.Atn;
+using Antlr4.Runtime.Dfa;
 using Microsoft.Extensions.Logging;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
@@ -53,13 +55,13 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
         try
         {
             AntlrInputStream inputStream = new(ddl);
-            PlSqlLexer lexer = new(inputStream);
+            PlSqlLexer lexer = new LocalCacheLexer(inputStream);
             CollectingErrorListener errorListener = new();
             lexer.RemoveErrorListeners();
             lexer.AddErrorListener(errorListener);
 
             CommonTokenStream tokenStream = new(lexer);
-            PlSqlParser parser = new(tokenStream);
+            PlSqlParser parser = new LocalCacheParser(tokenStream);
             parser.RemoveErrorListeners();
             parser.AddErrorListener(errorListener);
 
@@ -88,5 +90,34 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
             _logger.LogWarning("PL/SQL parsing failed (skipping lineage for this object): {Message}", ex.Message);
             return LineageAnalysisResult.Empty;
         }
+    }
+
+    // Generated recognizers use process-wide prediction caches by default. Diverse catalog
+    // DDL keeps growing those caches even after its parse trees have been collected.
+    // Keep both the DFA and its context cache local to this parse, including dynamic SQL.
+    private sealed class LocalCacheLexer : PlSqlLexer
+    {
+        public LocalCacheLexer(ICharStream input) : base(input)
+        {
+            Interpreter = new LexerATNSimulator(this, Atn, CreateDecisionCache(Atn), new PredictionContextCache());
+        }
+    }
+
+    private sealed class LocalCacheParser : PlSqlParser
+    {
+        public LocalCacheParser(ITokenStream input) : base(input)
+        {
+            Interpreter = new ParserATNSimulator(this, Atn, CreateDecisionCache(Atn), new PredictionContextCache());
+        }
+    }
+
+    private static DFA[] CreateDecisionCache(ATN atn)
+    {
+        DFA[] decisions = new DFA[atn.NumberOfDecisions];
+        for (int i = 0; i < decisions.Length; i++)
+        {
+            decisions[i] = new DFA(atn.GetDecisionState(i), i);
+        }
+        return decisions;
     }
 }

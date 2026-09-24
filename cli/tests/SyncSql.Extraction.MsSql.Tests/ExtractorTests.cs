@@ -9,6 +9,32 @@ namespace SyncSql.Extraction.MsSql.Tests;
 
 public sealed class ExtractorTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DefaultExclusions_ControlDatabaseAndSchemaScope_KeepServerMetadata(bool enabled)
+    {
+        using FakeDatabase db = Database();
+        db.Rows(MsSqlQueries.Databases, new { Name = "master" }, new { Name = "model" }, new { Name = "msdb" }, new { Name = "tempdb" }, new { Name = "App" });
+        db.Rows(MsSqlQueries.Schemas, new SchemaRow { SchemaName = "sys", OwnerName = "dbo" },
+            new SchemaRow { SchemaName = "INFORMATION_SCHEMA", OwnerName = "dbo" }, new SchemaRow { SchemaName = "dbo", OwnerName = "dbo" });
+        db.Rows(MsSqlQueries.Logins, new PrincipalRow { Name = "app_login", LoginName = "app_login" });
+        db.Rows(MsSqlQueries.LinkedServers, new LinkedServerRow { LinkedServerName = "remote" });
+        List<string> connections = [];
+        var extractor = new MsSqlObjectExtractor(NullLogger<MsSqlObjectExtractor>.Instance, TimeProvider.System,
+            (_, database, _) => { connections.Add(database); return db; });
+        ServerConfig server = Server with { UseDefaultExclusions = enabled, ObjectTypes = ["Schemas", "Logins", "LinkedServers"] };
+        ExtractionOutcome result = await extractor.ExtractAsync(server, EffectiveFilters.Resolve(null, server),
+            new ExtractionOptions { Credentials = Credentials, MaxParallelism = 1 }, default);
+        Assert.Empty(result.FailedDatabases);
+        Assert.Single(result.Objects, o => o.Type == "Logins");
+        Assert.Single(result.Objects, o => o.Type == "LinkedServers");
+        Assert.Equal(enabled ? 1 : 15, result.Objects.Count(o => o.Type == "Schemas"));
+        Assert.Contains(result.Objects, o => o.Database == "App" && o.Name == "dbo");
+        Assert.Equal(enabled ? 2 : 3, connections.Count(database => database == "master"));
+        Assert.Equal(!enabled, connections.Contains("tempdb"));
+    }
+
     [Fact]
     public async Task Extracts_login_and_user_context_without_passwords()
     {

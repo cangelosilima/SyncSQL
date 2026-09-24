@@ -311,6 +311,10 @@ for the full schema; in short:
   `Schemas`, `Types`, `TypeBodies`, `Tables`, `Views`, `Procedures`, `Functions`, `Packages`,
   `PackageBodies`, `Triggers`, `Synonyms`, `DatabaseLinks` for Oracle).
   A server that specifies a key fully replaces the default for that key.
+  `useDefaultExclusions` defaults to `true` and adds CLI-managed exclusions for
+  system databases/schemas and Oracle-maintained objects. Set it to `false`
+  globally or per server to disable that additional policy; explicit filters
+  still apply. See [default extraction exclusions](config/extraction.md).
   The four Service Broker types (`MessageTypes`, `Contracts`, `Queues`,
   `Services`) are opt-in: `config/servers.example.json` doesn't list them,
   so add them where a database actually uses Broker - see

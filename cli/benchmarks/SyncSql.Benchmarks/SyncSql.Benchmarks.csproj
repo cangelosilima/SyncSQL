@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <ProjectReference Include="../../src/SyncSql.Catalog/SyncSql.Catalog.csproj" />
+    <ProjectReference Include="../../src/SyncSql.Lineage.MsSql/SyncSql.Lineage.MsSql.csproj" />
+    <ProjectReference Include="../../src/SyncSql.Lineage.Oracle/SyncSql.Lineage.Oracle.csproj" />
+  </ItemGroup>
+</Project>
