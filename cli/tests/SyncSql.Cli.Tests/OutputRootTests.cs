@@ -138,6 +138,39 @@ public sealed class OutputRootTests : IDisposable
     }
 
     [Fact]
+    public async Task Catalog_PreservesCaseDistinctUnixRootsAndExportPaths()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        string upper = Path.Combine(_directory, "DB");
+        string lower = Path.Combine(_directory, "db");
+        foreach (var entry in new[] { (Root: upper, Server: "UPPER"), (Root: lower, Server: "LOWER") })
+        {
+            string file = Path.Combine(entry.Root, "Alias/App/dbo/Tables/Orders.sql");
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            await File.WriteAllTextAsync(file, Core.Serialization.ExtractedObjectFile.Write(new ExtractedObject
+            {
+                Server = entry.Server,
+                Database = "App",
+                Schema = "dbo",
+                Type = "Tables",
+                Name = "Orders",
+                Engine = DatabaseEngine.MsSql,
+                Ddl = "CREATE TABLE dbo.Orders (Id int);",
+            }));
+        }
+        Assert.Equal(_directory, CatalogCommand.CommonRoot([upper, lower]));
+        Assert.Equal(0, await Run("catalog", "build", "--objects-root", upper, lower, "--output", "catalog.json"));
+        var catalog = await SyncSql.Tests.PartitionedCatalogReader.LoadAsync("catalog.json");
+        Assert.Equal(["LOWER", "UPPER"], catalog.Servers);
+        Assert.Equal(2, catalog.Nodes.Count);
+        Assert.Contains(catalog.Nodes, node => node.Path == "DB/Alias/App/dbo/Tables/Orders.sql");
+        Assert.Contains(catalog.Nodes, node => node.Path == "db/Alias/App/dbo/Tables/Orders.sql");
+    }
+
+    [Fact]
     public void Catalog_CommonRootHandlesIdenticalRoots_VolumeRoots_AndDisjointPaths()
     {
         Assert.Equal(_directory, CatalogCommand.CommonRoot([_directory, _directory]));

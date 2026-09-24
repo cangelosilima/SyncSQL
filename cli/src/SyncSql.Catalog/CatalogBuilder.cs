@@ -29,10 +29,10 @@ public sealed class CatalogBuilder(
         }
 
         List<CatalogNode> nodes = [];
-        Dictionary<string, string?> metricsRootByPath = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string?> metricsRootByPath = new(FileSystemPaths.Comparer);
         IReadOnlyList<CatalogInput> inputs = request.Inputs.Count > 0 ? request.Inputs
             : [new CatalogInput { ObjectsRoot = request.ObjectsRoot, MetricsRoot = request.MetricsRoot }];
-        HashSet<string> seenFiles = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> seenFiles = new(FileSystemPaths.Comparer);
         foreach (CatalogInput input in inputs)
         {
             if (!Directory.Exists(input.ObjectsRoot))
@@ -65,13 +65,13 @@ public sealed class CatalogBuilder(
             }
         }
 
-        Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> sourceIdsByPath = nodes.ToDictionary(n => n.Path, n => n.Id, FileSystemPaths.Comparer);
         nodes = CatalogServerIdentity.Canonicalize(nodes);
         var metricSourcesByObject = nodes.GroupBy(n => n.Id, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key,
                 group => group.Select(n => (Root: metricsRootByPath[n.Path], Id: sourceIdsByPath[n.Path])).Distinct().ToArray(),
                 StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> objectPaths = nodes.ToDictionary(n => n.Path, n => n.Id, FileSystemPaths.Comparer);
         LinkedServerMap linkedServers = LinkedServerMap.FromNodes(nodes);
         nodes = CatalogServerIdentity.MergeObjects(nodes);
         nodes = [.. nodes.Select(node => linkedServers.MetadataFor(node.Id) is { } metadata ? node with { Link = metadata } : node)];

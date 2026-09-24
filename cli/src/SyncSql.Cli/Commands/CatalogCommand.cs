@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SyncSql.Cli.Composition;
 using SyncSql.Core.Abstractions;
+using SyncSql.Core.Serialization;
 
 namespace SyncSql.Cli.Commands;
 
@@ -86,7 +87,7 @@ internal static class CatalogCommand
             try
             {
                 string[] explicitRoots = parseResult.GetValue(objectsRootOption) ?? [];
-                string[] roots = explicitRoots.Length > 0 ? [.. explicitRoots.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase)]
+                string[] roots = explicitRoots.Length > 0 ? [.. explicitRoots.Select(Path.GetFullPath).Distinct(FileSystemPaths.Comparer)]
                     : SyncSqlPaths.ReadOutputRoots(parseResult.GetValue(outputRootOption));
                 string objectsRoot = CommonRoot(roots);
                 string outputRoot = parseResult.GetValue(outputRootOption) ?? (roots.Length == 1 ? roots[0] : "catalog");
@@ -147,8 +148,8 @@ internal static class CatalogCommand
         string common = roots[0];
         foreach (string root in roots.Skip(1))
         {
-            while (!string.Equals(root, common, StringComparison.OrdinalIgnoreCase)
-                && !root.StartsWith(Path.EndsInDirectorySeparator(common) ? common : common + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            while (!string.Equals(root, common, FileSystemPaths.Comparison)
+                && !root.StartsWith(Path.EndsInDirectorySeparator(common) ? common : common + Path.DirectorySeparatorChar, FileSystemPaths.Comparison))
             {
                 common = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(common))
                     ?? throw new InvalidDataException("Catalog inputs must share a filesystem root. Stage exports on the same drive before consolidating.");
