@@ -1081,6 +1081,13 @@ nothing is never reported as an orphan** - the text may be assembled from
 values this analysis cannot know, and guesses do not belong in the one list
 that is meant to be actionable.
 
+Oracle's `EXECUTE IMMEDIATE` and dynamic `OPEN cursor FOR` statements are
+parsed when their SQL text is a literal or a concatenation of literals,
+including parenthesized expressions and alternative quoting (`q'[...]'`).
+Object references retain database links, and qualified column references keep
+their alias bindings within each dynamic statement. Variables, function-built
+strings and concatenations containing unknown values are not evaluated.
+
 `syncsql catalog build --no-dynamic-sql` turns the whole thing off.
 
 ### System objects
@@ -1619,7 +1626,9 @@ stock Windows box; `pwsh` (PowerShell 7+) runs the same file everywhere else.
   at runtime. T-SQL's dynamic SQL is read where the statement text is
   literal enough to recover (see "Dynamic SQL and OPENQUERY"), but a table
   or linked-server name that only exists once a variable has a value cannot
-  be. PL/SQL's `EXECUTE IMMEDIATE` has no equivalent scanner yet.
+  be. PL/SQL's `EXECUTE IMMEDIATE` and dynamic `OPEN cursor FOR` support
+  literal SQL and constant string concatenations; variable-built SQL is
+  not evaluated.
 - Grant extraction (MSSQL `sys.database_permissions`, Oracle
   `ALL_TAB_PRIVS`/`ALL_COL_PRIVS`) only covers object/column-level grants
   on the extracted objects themselves — server/database-level permissions,

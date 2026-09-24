@@ -23,6 +23,8 @@ public sealed class VisitorBoundaryTests
         visitor.VisitRoutine_name(new PlSqlParser.Routine_nameContext(null, 0));
         visitor.VisitGeneral_element(new PlSqlParser.General_elementContext(null, 0));
         visitor.VisitTable_ref_aux(new PlSqlParser.Table_ref_auxContext(null, 0));
+        visitor.VisitGeneral_table_ref(new PlSqlParser.General_table_refContext(null, 0));
+        visitor.VisitSelected_tableview(new PlSqlParser.Selected_tableviewContext(null, 0));
         var table = new PlSqlParser.Table_ref_auxContext(null, 0);
         table.AddChild(new PlSqlParser.Table_ref_aux_internal_oneContext(new PlSqlParser.Table_ref_aux_internalContext(null, 0)));
         visitor.VisitTable_ref_aux(table);

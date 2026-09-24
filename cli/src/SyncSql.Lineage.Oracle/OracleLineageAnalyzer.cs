@@ -34,7 +34,8 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
     public DatabaseEngine Engine => DatabaseEngine.Oracle;
 
     /// <summary>
-    /// Literal EXECUTE IMMEDIATE statements are parsed with the Oracle grammar.
+    /// Literal EXECUTE IMMEDIATE and OPEN FOR statements, including constant string
+    /// concatenations, are parsed with the Oracle grammar and retain column bindings.
     /// Nested scans have a shared count budget and depth/size bounds.
     /// </summary>
     public LineageAnalysisResult Analyze(string ddl, LineageAnalysisOptions? options = null)

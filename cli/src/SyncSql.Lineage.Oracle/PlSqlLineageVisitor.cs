@@ -1,5 +1,6 @@
 ﻿#nullable enable
 using Antlr4.Runtime;
+using Antlr4.Runtime.Tree;
 using SyncSql.Core.Domain;
 
 namespace SyncSql.Lineage.Oracle;
@@ -16,6 +17,7 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
     public List<ObjectRef> ObjectRefs { get; } = [];
     public Dictionary<string, ObjectRef> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<ColumnRef> ColumnRefs { get; } = [];
+    private int _dynamicScope;
 
     /// <summary>
     /// The text of an identifier/id_expression subtree, with Oracle's "delimited identifier" quoting
@@ -78,11 +80,32 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
             ? FromTableviewName(internalOne.dml_table_expression_clause()?.tableview_name())
             : null;
 
+        BindTableAlias(objRef, context.table_alias());
+        return VisitChildren(context);
+    }
+
+    // UPDATE, DELETE and INSERT targets use general_table_ref rather than the
+    // FROM-clause rule. MERGE has selected_tableview for both target and source.
+    public override object? VisitGeneral_table_ref(PlSqlParser.General_table_refContext context)
+    {
+        BindTableAlias(FromTableviewName(context.dml_table_expression_clause()?.tableview_name()), context.table_alias());
+        return VisitChildren(context);
+    }
+
+    public override object? VisitSelected_tableview(PlSqlParser.Selected_tableviewContext context)
+    {
+        BindTableAlias(FromTableviewName(context.tableview_name()), context.table_alias());
+        return VisitChildren(context);
+    }
+
+    private void BindTableAlias(ObjectRef? objRef, PlSqlParser.Table_aliasContext? tableAlias)
+    {
+        // Derived tables have no direct object binding; their children are still visited.
         if (objRef is not null)
         {
             ObjectRefs.Add(objRef);
 
-            string? alias = context.table_alias()?.identifier() is { } aliasIdentifier
+            string? alias = tableAlias?.identifier() is { } aliasIdentifier
                 ? GetIdentifierText(aliasIdentifier)
                 : null;
             if (!string.IsNullOrEmpty(alias))
@@ -91,8 +114,6 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
             }
             Aliases.TryAdd(objRef.Name, objRef);
         }
-
-        return VisitChildren(context);
     }
 
     private static ObjectRef? FromRoutineName(PlSqlParser.Routine_nameContext context)
@@ -193,34 +214,85 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
 
     public override object? VisitExecute_immediate(PlSqlParser.Execute_immediateContext context)
     {
-        // Only a single literal is known exactly. Variables and concatenations remain
-        // unknown; strings passed to logging procedures are never scanned.
-        PlSqlParser.ExpressionContext expression = context.expression();
-        if (analyzeDynamic is not null && expression.Start.TokenIndex == expression.Stop.TokenIndex)
-        {
-            string text = expression.GetText();
-            string? sql = DecodeLiteral(text);
-            if (sql is not null)
-            {
-                ObjectRefs.AddRange(analyzeDynamic(sql).ObjectRefs.Select(r => r with { Origin = ReferenceOrigin.Dynamic }));
-            }
-        }
+        AnalyzeDynamicExpression(context.expression());
         return VisitChildren(context);
     }
 
-    private static string? DecodeLiteral(string text)
+    public override object? VisitOpen_for_statement(PlSqlParser.Open_for_statementContext context)
     {
-        if (text.Length >= 2 && text[0] == '\'' && text[^1] == '\'')
+        AnalyzeDynamicExpression(context.expression());
+        return VisitChildren(context);
+    }
+
+    private void AnalyzeDynamicExpression(PlSqlParser.ExpressionContext? expression)
+    {
+        if (analyzeDynamic is null || EvaluateLiteralExpression(expression) is not { } sql)
         {
-            return text[1..^1].Replace("''", "'", StringComparison.Ordinal);
+            return;
         }
 
-        if (text.Length >= 5 && (text[0] is 'q' or 'Q') && text[1] == '\'' && text[^1] == '\'')
-        {
-            return text[3..^2];
-        }
+        LineageAnalysisResult result = analyzeDynamic(sql);
+        ObjectRefs.AddRange(result.ObjectRefs.Select(r => r with { Origin = ReferenceOrigin.Dynamic }));
 
+        // Dynamic statements have independent alias scopes. Remap both sides of the
+        // column binding so an alias reused by static SQL or another execution cannot
+        // overwrite it. The NUL prefix cannot occur in a valid Oracle identifier.
+        string prefix = $"\0dynamic{_dynamicScope++}:";
+        foreach ((string alias, ObjectRef target) in result.Aliases)
+        {
+            Aliases[prefix + alias] = target with { Origin = ReferenceOrigin.Dynamic };
+        }
+        foreach (ColumnRef column in result.ColumnRefs)
+        {
+            if (result.Aliases.ContainsKey(column.AliasOrTable))
+            {
+                ColumnRefs.Add(column with { AliasOrTable = prefix + column.AliasOrTable });
+            }
+        }
+    }
+
+    private static string? EvaluateLiteralExpression(IParseTree? node, int depth = 0)
+    {
+        if (node is null || depth > 128 || node is IErrorNode)
+        {
+            return null;
+        }
+        if (node is ITerminalNode terminal)
+        {
+            return terminal.Symbol.Type is PlSqlLexer.CHAR_STRING or PlSqlLexer.NATIONAL_CHAR_STRING_LIT
+                && terminal.GetText().Length <= 65536
+                ? DecodeLiteral(terminal.GetText()) : null;
+        }
+        if (node.ChildCount == 1)
+        {
+            return EvaluateLiteralExpression(node.GetChild(0), depth + 1);
+        }
+        if (node.ChildCount == 3 && node.GetChild(0).GetText() == "(" && node.GetChild(2).GetText() == ")")
+        {
+            return EvaluateLiteralExpression(node.GetChild(1), depth + 1);
+        }
+        if (node is PlSqlParser.ConcatenationContext && node.ChildCount == 4
+            && node.GetChild(1).GetText() == "|" && node.GetChild(2).GetText() == "|")
+        {
+            string? left = EvaluateLiteralExpression(node.GetChild(0), depth + 1);
+            string? right = EvaluateLiteralExpression(node.GetChild(3), depth + 1);
+            return left is not null && right is not null && left.Length + right.Length <= 65536
+                ? left + right : null;
+        }
+        // Variables, function calls and partially known concatenations are unknown.
         return null;
+    }
+
+    private static string DecodeLiteral(string text)
+    {
+        // Called only for complete string tokens accepted by the Oracle lexer.
+        if (text[0] is 'n' or 'N')
+        {
+            text = text[1..];
+        }
+        return text[0] is 'q' or 'Q'
+            ? text[3..^2]
+            : text[1..^1].Replace("''", "'", StringComparison.Ordinal);
     }
 
     private static string? GetLastPartName(PlSqlParser.General_elementContext? context)
