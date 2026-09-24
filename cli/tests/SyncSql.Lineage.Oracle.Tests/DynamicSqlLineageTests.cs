@@ -10,6 +10,42 @@ public sealed class DynamicSqlLineageTests
     private readonly OracleLineageAnalyzer _analyzer = new(NullLogger<OracleLineageAnalyzer>.Instance);
 
     [Theory]
+    [InlineData("UPDATE app.orders@remote o SET status = :status WHERE o.order_id = :id")]
+    [InlineData("DELETE FROM app.orders@remote o WHERE o.order_id = :id")]
+    [InlineData("UPDATE ONLY (app.orders@remote) o SET status = :status WHERE o.order_id = :id")]
+    [InlineData("DELETE FROM app.orders@remote WHERE orders.order_id = :id")]
+    [InlineData("DELETE FROM app.orders@remote \"o\" WHERE \"o\".order_id = :id")]
+    [InlineData("MERGE INTO app.orders@remote o USING app.customers c ON (o.order_id = c.customer_id) WHEN MATCHED THEN UPDATE SET status = :status")]
+    [InlineData("MERGE INTO app.orders@remote USING app.customers ON (orders.order_id = customers.customer_id) WHEN MATCHED THEN UPDATE SET status = :status")]
+    public void DmlAliases_PreserveStaticAndDynamicTargetColumns(string sql)
+    {
+        foreach (bool dynamicSql in new[] { false, true })
+        {
+            var result = _analyzer.Analyze(dynamicSql ? $"BEGIN EXECUTE IMMEDIATE '{sql}'; END;" : sql + ";");
+            Assert.Contains(result.ColumnRefs, column => column.Column == "order_id"
+                && result.Aliases.TryGetValue(column.AliasOrTable, out var target)
+                && target is { Schema: "app", Name: "orders", Server: "remote" }
+                && target.Origin == (dynamicSql ? ReferenceOrigin.Dynamic : ReferenceOrigin.Static));
+        }
+    }
+
+    [Fact]
+    public void MergeSubquery_VisitsSourcesWithoutBindingDerivedAliasToATable()
+    {
+        var result = _analyzer.Analyze("""
+            BEGIN
+                EXECUTE IMMEDIATE 'MERGE INTO app.orders o
+                    USING (SELECT c.customer_id FROM app.customers c) s
+                    ON (o.order_id = s.customer_id)
+                    WHEN MATCHED THEN UPDATE SET status = :status';
+            END;
+            """);
+        Assert.Contains(result.ColumnRefs, column => column.Column == "customer_id"
+            && result.Aliases[column.AliasOrTable].Name == "customers");
+        Assert.DoesNotContain(result.Aliases.Keys, alias => alias.EndsWith(":s", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData("EXECUTE IMMEDIATE 'SELECT o.order_id FROM app.orders@remote o'")]
     [InlineData("EXECUTE IMMEDIATE ('SELECT o.order_id ' || ('FROM app.' || 'orders@remote o'))")]
     [InlineData("EXECUTE IMMEDIATE q'[SELECT o.order_id ]' || /* separator */ q'{FROM app.orders@remote o}'")]

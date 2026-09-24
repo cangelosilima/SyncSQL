@@ -80,11 +80,32 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
             ? FromTableviewName(internalOne.dml_table_expression_clause()?.tableview_name())
             : null;
 
+        BindTableAlias(objRef, context.table_alias());
+        return VisitChildren(context);
+    }
+
+    // UPDATE, DELETE and INSERT targets use general_table_ref rather than the
+    // FROM-clause rule. MERGE has selected_tableview for both target and source.
+    public override object? VisitGeneral_table_ref(PlSqlParser.General_table_refContext context)
+    {
+        BindTableAlias(FromTableviewName(context.dml_table_expression_clause()?.tableview_name()), context.table_alias());
+        return VisitChildren(context);
+    }
+
+    public override object? VisitSelected_tableview(PlSqlParser.Selected_tableviewContext context)
+    {
+        BindTableAlias(FromTableviewName(context.tableview_name()), context.table_alias());
+        return VisitChildren(context);
+    }
+
+    private void BindTableAlias(ObjectRef? objRef, PlSqlParser.Table_aliasContext? tableAlias)
+    {
+        // Derived tables have no direct object binding; their children are still visited.
         if (objRef is not null)
         {
             ObjectRefs.Add(objRef);
 
-            string? alias = context.table_alias()?.identifier() is { } aliasIdentifier
+            string? alias = tableAlias?.identifier() is { } aliasIdentifier
                 ? GetIdentifierText(aliasIdentifier)
                 : null;
             if (!string.IsNullOrEmpty(alias))
@@ -93,8 +114,6 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
             }
             Aliases.TryAdd(objRef.Name, objRef);
         }
-
-        return VisitChildren(context);
     }
 
     private static ObjectRef? FromRoutineName(PlSqlParser.Routine_nameContext context)

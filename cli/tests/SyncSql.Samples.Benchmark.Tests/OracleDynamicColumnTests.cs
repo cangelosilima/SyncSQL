@@ -5,8 +5,11 @@ namespace SyncSql.Samples.Benchmark.Tests;
 
 public sealed class OracleDynamicColumnTests
 {
-    [Fact]
-    public async Task Catalog_PreservesDynamicColumnsWithoutMixingReusedAliases()
+    [Theory]
+    [InlineData("EXECUTE IMMEDIATE 'SELECT X.ORDER_ID ' || 'FROM APP.ORDERS X' INTO N; EXECUTE IMMEDIATE 'SELECT X.CUSTOMER_ID FROM APP.CUSTOMERS X' INTO N;")]
+    [InlineData("EXECUTE IMMEDIATE 'UPDATE APP.ORDERS X SET CUSTOMER_ID = :id WHERE X.ORDER_ID = :id'; EXECUTE IMMEDIATE 'DELETE FROM APP.CUSTOMERS X WHERE X.CUSTOMER_ID = :id';")]
+    [InlineData("EXECUTE IMMEDIATE 'MERGE INTO APP.ORDERS X USING APP.CUSTOMERS C ON (X.ORDER_ID = C.CUSTOMER_ID) WHEN MATCHED THEN UPDATE SET CUSTOMER_ID = C.CUSTOMER_ID';")]
+    public async Task Catalog_PreservesDynamicColumnsWithoutMixingReusedAliases(string statements)
     {
         string root = Directory.CreateTempSubdirectory("syncsql-oracle-dynamic-").FullName;
         try
@@ -15,12 +18,11 @@ public sealed class OracleDynamicColumnTests
             {
                 Object("Tables", "ORDERS", "CREATE TABLE APP.ORDERS (ORDER_ID NUMBER, CUSTOMER_ID NUMBER);"),
                 Object("Tables", "CUSTOMERS", "CREATE TABLE APP.CUSTOMERS (ORDER_ID NUMBER, CUSTOMER_ID NUMBER);"),
-                Object("StoredProcedures", "REPORT", """
+                Object("StoredProcedures", "REPORT", $"""
                     CREATE PROCEDURE APP.REPORT AS
                         N NUMBER;
                     BEGIN
-                        EXECUTE IMMEDIATE 'SELECT X.ORDER_ID ' || 'FROM APP.ORDERS X' INTO N;
-                        EXECUTE IMMEDIATE 'SELECT X.CUSTOMER_ID FROM APP.CUSTOMERS X' INTO N;
+                        {statements}
                     END;
                     """),
             })
