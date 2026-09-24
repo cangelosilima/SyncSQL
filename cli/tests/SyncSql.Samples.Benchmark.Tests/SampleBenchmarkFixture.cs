@@ -1,6 +1,5 @@
-﻿using System.Text.Json;
-using SyncSql.Core.Domain;
-using SyncSql.Core.Json;
+﻿using SyncSql.Core.Domain;
+
 
 namespace SyncSql.Samples.Benchmark.Tests;
 
@@ -50,27 +49,13 @@ public sealed class SampleBenchmarkFixture : IAsyncLifetime
             }
         }
 
-        _catalog = LoadCatalog();
+        _catalog = await SyncSql.Tests.PartitionedCatalogReader.LoadAsync(SampleFleet.CatalogPath);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
 
     private static bool ShouldExtract() =>
         !SampleFleet.ReuseExistingOutput || !File.Exists(SampleFleet.CatalogPath);
-
-    private static Core.Domain.Catalog LoadCatalog()
-    {
-        if (!File.Exists(SampleFleet.CatalogPath))
-        {
-            throw new FileNotFoundException(
-                $"No catalog at {SampleFleet.CatalogPath}. The pipeline should have written one - check the run output above.",
-                SampleFleet.CatalogPath);
-        }
-
-        using FileStream stream = File.OpenRead(SampleFleet.CatalogPath);
-        return JsonSerializer.Deserialize<Core.Domain.Catalog>(stream, SyncSqlJsonOptions.Default)
-            ?? throw new InvalidOperationException($"{SampleFleet.CatalogPath} deserialized to null.");
-    }
 
     /// <summary>All nodes for one expectation group, keyed the way the group describes them.</summary>
     public IReadOnlyList<CatalogNode> NodesFor(ExpectedGroup group) =>

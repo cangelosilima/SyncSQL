@@ -1,26 +1,26 @@
 ﻿using System.CommandLine;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SyncSql.Cli.Composition;
 using SyncSql.Core.Abstractions;
-using SyncSql.Core.Json;
 
 namespace SyncSql.Cli.Commands;
 
-/// <summary>`syncsql catalog build` - standalone catalog.json builder, mirrors Build-Catalog.ps1.</summary>
+/// <summary>`syncsql catalog build` - consolidated catalog assembly and static publication.</summary>
 internal static class CatalogCommand
 {
     public static Command Build(IServiceProvider services)
     {
         Option<string?> outputRootOption = SyncSqlPaths.OutputRootOption();
-        Option<string?> objectsRootOption = new("--objects-root")
+        Option<string[]> objectsRootOption = new("--objects-root")
         {
-            Description = "Root of the extracted tree (server/database/[schema/]type/object.sql). Default: <output-root>, i.e. what `syncsql sync` just wrote.",
+            Description = "Extracted tree roots to consolidate. May be repeated or supplied as a list. Default: --output-root, or all existing MSSQL/ORACLE roots.",
+            Arity = ArgumentArity.OneOrMore,
+            AllowMultipleArgumentsPerToken = true,
         };
         Option<string?> outputOption = new("--output")
         {
-            Description = $"File path the catalog JSON is written to. Default: <output-root>/{SyncSqlPaths.CatalogFileName}.",
+            Description = "Manifest path. Default: <selected-root>/catalog.json for one root; ./catalog/catalog.json for multiple roots. Payloads are written beside it in _catalog/.",
         };
         Option<string?> repoRootOption = new("--repo-root")
         {
@@ -53,14 +53,16 @@ internal static class CatalogCommand
         };
         Option<string?> metricsRootOption = new("--metrics-root")
         {
-            Description = $"Root of the accumulating metrics history tree (`metrics update`'s --history-root, e.g. <output-root>/{SyncSqlPaths.MetricsHistoryDirectoryName}). Omit to skip - node.metrics is left empty.",
+            Description = "Override the metrics history root for all inputs. Default: each input's metrics/ directory when present.",
         };
         Option<bool> noDynamicSqlOption = new("--no-dynamic-sql")
         {
             Description = "Skip recovering references from SQL built as a string at runtime (OPENQUERY, EXEC of a string, a variable assembled then executed). Those references are tagged `dynamic` in catalog.json rather than mixed in with the rest, so the default is to collect them.",
         };
 
-        Command buildCommand = new("build", "Build catalog.json from an extracted-objects tree.")
+        Option<bool> pruneOption = new("--prune") { Description = "Remove unreferenced hashed payloads after publishing the manifest. Use only in a dedicated catalog directory." };
+
+        Command buildCommand = new("build", "Build one consolidated, partitioned catalog from extracted object trees.")
         {
             outputRootOption,
             objectsRootOption,
@@ -73,6 +75,7 @@ internal static class CatalogCommand
             maxCoChangeOption,
             metricsRootOption,
             noDynamicSqlOption,
+            pruneOption,
         };
 
         buildCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -82,45 +85,51 @@ internal static class CatalogCommand
 
             try
             {
-                string[] outputRoots = SyncSqlPaths.ReadOutputRoots(parseResult.GetValue(outputRootOption), parseResult.GetValue(objectsRootOption));
-                if (outputRoots.Length > 1 && !string.IsNullOrWhiteSpace(parseResult.GetValue(outputOption)))
+                string[] explicitRoots = parseResult.GetValue(objectsRootOption) ?? [];
+                string[] roots = explicitRoots.Length > 0 ? [.. explicitRoots.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase)]
+                    : SyncSqlPaths.ReadOutputRoots(parseResult.GetValue(outputRootOption));
+                string objectsRoot = CommonRoot(roots);
+                string outputRoot = parseResult.GetValue(outputRootOption) ?? (roots.Length == 1 ? roots[0] : "catalog");
+                string outputPath = SyncSqlPaths.Resolve(parseResult.GetValue(outputOption), outputRoot, SyncSqlPaths.CatalogFileName);
+
+                CatalogBuildRequest request = new()
                 {
-                    logger.LogError("Multiple engine roots found. Select --output-root or --objects-root when supplying a single --output file.");
-                    return 1;
-                }
-                foreach (string outputRoot in outputRoots)
+                    ObjectsRoot = objectsRoot,
+                    Inputs = [.. roots.Select(root => new CatalogInput
+                        {
+                            ObjectsRoot = root,
+                            MetricsRoot = Directory.Exists(Path.Combine(root, SyncSqlPaths.MetricsHistoryDirectoryName))
+                                ? Path.Combine(root, SyncSqlPaths.MetricsHistoryDirectoryName) : null,
+                        })],
+                    RepoRoot = ToFullPathOrNull(parseResult.GetValue(repoRootOption)),
+                    PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.DefaultPathPrefix,
+                    HistoryLimit = parseResult.GetValue(historyLimitOption),
+                    MaxVersionsPerObject = parseResult.GetValue(maxVersionsOption),
+                    MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
+                    MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
+                    MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
+                    DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
+                };
+
+                Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(request, cancellationToken);
+
+                if (Path.GetDirectoryName(outputPath) is { Length: > 0 } outputDirectory)
                 {
-                    string objectsRoot = SyncSqlPaths.Resolve(parseResult.GetValue(objectsRootOption), outputRoot, SyncSqlPaths.ObjectsRelativePath);
-                    string outputPath = SyncSqlPaths.Resolve(parseResult.GetValue(outputOption), outputRoot, SyncSqlPaths.CatalogFileName);
-
-                    CatalogBuildRequest request = new()
-                    {
-                        ObjectsRoot = objectsRoot,
-                        RepoRoot = ToFullPathOrNull(parseResult.GetValue(repoRootOption)),
-                        PathPrefix = parseResult.GetValue(pathPrefixOption) ?? SyncSqlPaths.DefaultPathPrefix,
-                        HistoryLimit = parseResult.GetValue(historyLimitOption),
-                        MaxVersionsPerObject = parseResult.GetValue(maxVersionsOption),
-                        MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
-                        MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
-                        MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
-                        DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
-                    };
-
-                    Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(request, cancellationToken);
-
-                    if (Path.GetDirectoryName(outputPath) is { Length: > 0 } outputDirectory)
-                    {
-                        Directory.CreateDirectory(outputDirectory);
-                    }
-                    await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(catalog, SyncSqlJsonOptions.Default), cancellationToken);
-
-                    logger.LogInformation(
-                        "Wrote catalog.json ({NodeCount} node(s), {EdgeCount} edge(s)) -> {Path}",
-                        catalog.Nodes.Count, catalog.Edges.Count, outputPath);
+                    Directory.CreateDirectory(outputDirectory);
                 }
+                await services.GetRequiredService<ICatalogPublisher>().PublishAsync(catalog, outputPath, parseResult.GetValue(pruneOption), cancellationToken);
+
+                logger.LogInformation(
+                    "Wrote consolidated catalog ({NodeCount} node(s), {EdgeCount} edge(s)) -> {Path}",
+                    catalog.Nodes.Count, catalog.Edges.Count, outputPath);
                 return 0;
             }
             catch (DirectoryNotFoundException ex)
+            {
+                logger.LogError("{Message}", ex.Message);
+                return 1;
+            }
+            catch (InvalidDataException ex)
             {
                 logger.LogError("{Message}", ex.Message);
                 return 1;
@@ -132,4 +141,19 @@ internal static class CatalogCommand
 
     private static string? ToFullPathOrNull(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
+
+    internal static string CommonRoot(string[] roots)
+    {
+        string common = roots[0];
+        foreach (string root in roots.Skip(1))
+        {
+            while (!string.Equals(root, common, StringComparison.OrdinalIgnoreCase)
+                && !root.StartsWith(Path.EndsInDirectorySeparator(common) ? common : common + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                common = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(common))
+                    ?? throw new InvalidDataException("Catalog inputs must share a filesystem root. Stage exports on the same drive before consolidating.");
+            }
+        }
+        return common;
+    }
 }

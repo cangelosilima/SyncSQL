@@ -23,7 +23,7 @@ internal static class CatalogServerIdentity
             endpointByName[node.Server] = endpoint;
         }
         Dictionary<string, string> canonicalByEndpoint = new(StringComparer.OrdinalIgnoreCase);
-        foreach (CatalogNode node in nodes.OrderBy(n => n.Path.StartsWith(n.Server + "/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+        foreach (CatalogNode node in nodes.OrderBy(n => (n.SourcePath ?? n.Path).StartsWith(n.Server + "/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(n => n.Server, StringComparer.OrdinalIgnoreCase).ThenBy(n => n.Path, StringComparer.Ordinal))
         {
             if (endpointByName.TryGetValue(node.Server, out string? endpoint))
@@ -66,7 +66,7 @@ internal static class CatalogServerIdentity
         List<CatalogNode> result = [];
         foreach (IGrouping<string, CatalogNode> group in nodes.GroupBy(n => n.Id, StringComparer.OrdinalIgnoreCase))
         {
-            CatalogNode first = group.OrderBy(n => n.Path.StartsWith(n.Server + "/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            CatalogNode first = group.OrderBy(n => (n.SourcePath ?? n.Path).StartsWith(n.Server + "/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                 .ThenBy(n => n.Path, StringComparer.Ordinal).First();
             if (group.Count() > 1 && group.Any(node => Content(node) != Content(first)))
             {

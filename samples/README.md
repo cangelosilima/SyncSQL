@@ -156,7 +156,7 @@ The server names come from the config, so renaming or adding one keeps working.
 --no-build               The CLI is already built.
 ```
 
-To look at the result, copy `samples/output/catalog.json` into `site/public/` and
+To look at the result, copy `samples/output/catalog.json` and `samples/output/_catalog/` into `site/public/data/` and
 run `npm run dev` in [`site/`](../site).
 
 ## The benchmark

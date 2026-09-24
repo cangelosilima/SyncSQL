@@ -92,12 +92,16 @@ public sealed class OutputRootTests : IDisposable
     }
 
     [Fact]
-    public async Task CatalogAndMetrics_DefaultsVisitBothEngineRoots()
+    public async Task CatalogConsolidatesBothEngineRoots_WhileMetricsKeepTheirScopes()
     {
         Assert.Equal(0, await Run("sync", "--config", "servers.json"));
         Assert.Equal(0, await Run("catalog", "build"));
-        Assert.True(File.Exists("MSSQL/catalog.json"));
-        Assert.True(File.Exists("ORACLE/catalog.json"));
+        using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync("catalog/catalog.json"));
+        Assert.Equal("syncsql-partitioned", manifest.RootElement.GetProperty("format").GetString());
+        Assert.Equal(2, manifest.RootElement.GetProperty("nodeCount").GetInt32());
+        Assert.Equal(2, manifest.RootElement.GetProperty("servers").GetArrayLength());
+        Assert.False(File.Exists("MSSQL/catalog.json"));
+        Assert.False(File.Exists("ORACLE/catalog.json"));
         Assert.Equal(0, await Run("metrics", "update"));
         foreach (string engine in new[] { "MSSQL", "ORACLE" })
         {
@@ -108,12 +112,57 @@ public sealed class OutputRootTests : IDisposable
     }
 
     [Fact]
-    public async Task Catalog_OneExplicitOutputCannotOverwriteAcrossTwoEngines()
+    public async Task Catalog_OneExplicitOutputCombinesBothEngines()
+    {
+        Assert.Equal(0, await Run("sync", "--config", "servers.json"));
+        Assert.Equal(0, await Run("catalog", "build", "--output", "catalog.json"));
+        using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync("catalog.json"));
+        Assert.Equal(2, manifest.RootElement.GetProperty("nodeCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task Catalog_ExplicitInputRoots_PreservePathsAndMetricsSources()
+    {
+        Assert.Equal(0, await Run("sync", "--config", "servers.json"));
+        Directory.CreateDirectory("MSSQL/metrics");
+        Directory.CreateDirectory("ORACLE/metrics");
+        Assert.Equal(0, await Run("catalog", "build", "--objects-root", "MSSQL", "--objects-root", "ORACLE", "--output", "catalog.json"));
+        var catalog = await SyncSql.Tests.PartitionedCatalogReader.LoadAsync("catalog.json");
+        Assert.Equal(2, catalog.Nodes.Count);
+        Assert.Contains(catalog.Nodes, node => node.Path.StartsWith("MSSQL/", StringComparison.Ordinal));
+        Assert.Contains(catalog.Nodes, node => node.Path.StartsWith("ORACLE/", StringComparison.Ordinal));
+        foreach (var node in catalog.Nodes)
+        {
+            await _metrics.Received(1).LoadHistoryAsync(Path.Combine(_directory, node.Engine!.Value.ToConfigString().ToUpperInvariant(), "metrics"), node.Id, Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Fact]
+    public void Catalog_CommonRootHandlesIdenticalRoots_VolumeRoots_AndDisjointPaths()
+    {
+        Assert.Equal(_directory, CatalogCommand.CommonRoot([_directory, _directory]));
+        string volume = Path.GetPathRoot(_directory)!;
+        Assert.Equal(volume, CatalogCommand.CommonRoot([volume, _directory]));
+        Assert.Throws<InvalidDataException>(() => CatalogCommand.CommonRoot(["unrelated", "other"]));
+    }
+
+    [Fact]
+    public async Task Catalog_MissingInputDoesNotReplacePublishedManifest()
     {
         Directory.CreateDirectory("MSSQL");
-        Directory.CreateDirectory("ORACLE");
-        Assert.Equal(1, await Run("catalog", "build", "--output", "catalog.json"));
-        Assert.False(File.Exists("catalog.json"));
+        await File.WriteAllTextAsync("catalog.json", "previous manifest");
+        Assert.Equal(1, await Run("catalog", "build", "--objects-root", "MSSQL", "missing", "--output", "catalog.json"));
+        Assert.Equal("previous manifest", await File.ReadAllTextAsync("catalog.json"));
+    }
+
+    [Fact]
+    public async Task Catalog_DuplicateServerNameAcrossEnginesFailsInsteadOfMerging()
+    {
+        Assert.Equal(0, await Run("sync", "--config", "servers.json"));
+        string path = "ORACLE/ORA01/AppDb/dbo/Tables/Orders.sql";
+        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("ORA01", "SQL01", StringComparison.Ordinal));
+        Assert.Equal(1, await Run("catalog", "build"));
+        Assert.False(File.Exists("catalog/catalog.json"));
     }
 
     [Fact]

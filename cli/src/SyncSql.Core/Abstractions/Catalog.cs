@@ -8,6 +8,9 @@ public sealed record CatalogBuildRequest
     /// <summary>Root of the extracted tree (server/database/[schema/]type/object.sql).</summary>
     public required string ObjectsRoot { get; init; }
 
+    /// <summary>Optional input scopes, combined before identity and lineage resolution. Paths are relative to ObjectsRoot.</summary>
+    public IReadOnlyList<CatalogInput> Inputs { get; init; } = [];
+
     /// <summary>Git checkout containing -PathPrefix, mined for history/heatmap/point-in-time data. Omit to skip all of that (empty history, zero change counts) rather than failing.</summary>
     public string? RepoRoot { get; init; }
 
@@ -28,6 +31,19 @@ public sealed record CatalogBuildRequest
     /// outright. See <see cref="LineageAnalysisOptions.DynamicSql"/>.
     /// </summary>
     public bool DynamicSql { get; init; } = true;
+}
+
+/// <summary>An extracted scope and its metrics history. Multiple scopes must share unique server identities.</summary>
+public sealed record CatalogInput
+{
+    public required string ObjectsRoot { get; init; }
+    public string? MetricsRoot { get; init; }
+}
+
+/// <summary>Publishes the site's versioned manifest and compressed, content-addressed payloads.</summary>
+public interface ICatalogPublisher
+{
+    public Task PublishAsync(Catalog catalog, string manifestPath, bool prune, CancellationToken cancellationToken);
 }
 
 /// <summary>

@@ -71,8 +71,8 @@ public sealed class HeterogeneousLiveTests(ITestOutputHelper output)
             await pipeline.RunScenarioAsync(HeterogeneousFleet.ConfigPath, objectsRoot, credentialsPath, timeout.Token);
             timings["extractAndCatalogSeconds"] = watch.Elapsed.TotalSeconds;
             watch.Restart();
-            Core.Domain.Catalog catalog = JsonSerializer.Deserialize<Core.Domain.Catalog>(
-                await File.ReadAllTextAsync(Path.Combine(objectsRoot, "catalog.json"), timeout.Token), SyncSqlJsonOptions.Default)!;
+            Core.Domain.Catalog catalog = await SyncSql.Tests.PartitionedCatalogReader.LoadAsync(
+                Path.Combine(objectsRoot, "catalog.json"), timeout.Token);
             HeterogeneousContract.Load().AssertCatalog(catalog);
             Assert.All(catalog.Nodes.Where(n => n.Type == "LinkedServers" && n.Name == "HELIOS_ORACLE"), link =>
             {

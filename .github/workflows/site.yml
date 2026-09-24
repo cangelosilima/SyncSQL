@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'cli/**'
       - 'config/sql-style.json'
       - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
       - '.editorconfig'
@@ -15,6 +16,7 @@ on:
   pull_request:
     paths:
       - 'site/**'
+      - 'cli/**'
       - 'config/sql-style.json'
       - 'samples/scenarios/heterogeneous-lineage/expected-catalog.json'
       - '.editorconfig'
@@ -66,13 +68,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test
-        run: npm run test:coverage
-
       - uses: actions/setup-dotnet@v4
-        if: ${{ !cancelled() && hashFiles('site/coverage/lcov.info') != '' }}
         with:
           global-json-file: global.json
+
+      - name: Build CLI for the site catalog contract test
+        run: dotnet build ../cli/src/SyncSql.Cli --configuration Release
+
+      - name: Test
+        run: npm run test:coverage
+        env:
+          SYNCSQL_CLI: ../cli/src/SyncSql.Cli/bin/Release/net10.0/SyncSql.Cli.dll
 
       - name: Generate detailed Site coverage report
         if: ${{ !cancelled() && hashFiles('site/coverage/lcov.info') != '' }}

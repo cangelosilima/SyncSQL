@@ -166,8 +166,8 @@ for the reference setup.
 
 ### `syncsql catalog build`
 
-Standalone `catalog.json` builder: walks an already-extracted tree and
-(re)builds the catalog. Mirrors the original `Build-Catalog.ps1`. Useful
+Builds one consolidated catalog from already-extracted trees and publishes
+`catalog.json` as a versioned manifest with compressed `_catalog/` payloads. Useful
 for local preview, or for a CI pipeline to call after it has cloned a
 target repository and populated `--repo-root`/`--path-prefix` itself.
 
@@ -177,16 +177,23 @@ syncsql catalog build --objects-root ./staging --output ./catalog.json
 
 | Option                          | Default   | Description |
 |----------------------------------|-----------|-------------|
-| `--output-root`                  | Existing `./MSSQL` and `./ORACLE` | Process each engine root separately; override to select one root. |
-| `--objects-root`                 | `<output-root>` | Root of the extracted tree (`server/database/[schema/]type/object.sql`) - i.e. what `syncsql sync` just wrote. |
-| `--output`                       | `<output-root>/catalog.json` | File path the catalog JSON is written to. |
+| `--output-root`                  | Existing `./MSSQL` and `./ORACLE` | Consolidate existing engine roots; override to select one root. With explicit inputs, sets the default destination directory. |
+| `--objects-root`                 | `<output-root>` | Extracted tree roots (`server/database/[schema/]type/object.sql`). Repeat the option or supply a list to combine separate exports. |
+| `--output`                       | Single root: `<root>/catalog.json`; multiple: `./catalog/catalog.json` | Manifest path. Compressed payloads are written to its sibling `_catalog/` directory. |
+| `--prune`                        | `false` | After publication, remove obsolete hashed payloads. Use a dedicated catalog directory. |
 | `--repo-root`                    | *(none)*  | Git checkout containing `--path-prefix`, mined **read-only** (`git log`/`git show`) for history/heatmap/point-in-time data - never written to. Omit to skip all of that (empty history, zero change counts) rather than failing. |
 | `--path-prefix`                  | *(empty)* | Folder inside `--repo-root` holding the extracted tree. Empty (the default) means the tree starts at the repository root, so the first path segment is the server name. |
 | `--history-limit`                | `250`     | Maximum number of commits (touching `--path-prefix`) to mine. |
 | `--max-versions-per-object`      | `15`      | Maximum historical versions kept (and content-fetched via `git show`) per object, most recent first. |
 | `--max-history-content-calls`    | `1500`    | Hard cap on total `git show` invocations across the whole mining pass, so a large/old repo can't turn this into an unbounded job. |
 | `--max-co-change-commit-size`    | `40`      | Commits touching more files than this are excluded from co-change pair counting (almost always a bulk/initial sync, not a meaningful signal). |
-| `--metrics-root`                 | *(none)*  | Root of the accumulating metrics history tree (`metrics update`'s `--history-root`, e.g. `<output-root>/metrics`). Omit to skip - `node.metrics` is left empty. |
+| `--metrics-root`                 | Each input's `metrics/`, when present | Override the accumulating metrics history root for all inputs. |
+
+All inputs enter the same identity and lineage pass, so extracted targets in another
+engine or server can resolve through linked servers/database links. The site keeps
+one global inventory and graph with engine/server filters. Publish both `catalog.json`
+and `_catalog/`. See [partitioned catalogs](../../docs/partitioned-catalog.md) for
+history path mapping, migration, memory limits, and cross-engine examples.
 
 Lineage edges are inferred with a real parser per engine - `Microsoft.SqlServer.TransactSql.ScriptDom`
 for MSSQL objects, a vendored ANTLR PL/SQL grammar for Oracle objects -
@@ -203,7 +210,7 @@ service.
 Every reference that resolves nowhere the lookup reaches - the object's own
 database, the other databases on its server, then the servers one linked
 server / database link away - is collected as an **orphaned reference** and
-written to `catalog.json`'s `orphanedReferences` array
+written to the catalog's edge payloads (`orphanedReferences` in legacy JSON)
 (`from`/`server`/`database`/`schema`/`name`) instead of silently dropped,
 with a summary count logged as a warning. Several cases are deliberately not
 flagged, because none of them means the target is missing: a merely
@@ -215,7 +222,7 @@ reference recovered from dynamically-built SQL. The
 [root README](../../README.md#orphaned-reference-detection) documents the
 full rule.
 
-Exit code `0` on success, `1` if `--objects-root` doesn't exist.
+Exit code `0` on success, `1` for missing inputs or conflicting server/object identities.
 
 ### `syncsql metrics update`
 
@@ -355,7 +362,8 @@ always wins over an include match; an empty/missing include list means
 
 `sync` defaults to the uppercase `servers.type` in the current directory:
 `./MSSQL` or `./ORACLE`. Mixed-engine runs use both roots. `catalog build`
-and `metrics update` visit each existing engine root by default; T-SQL
+combines them into `./catalog/catalog.json` plus `./catalog/_catalog/`;
+`metrics update` visits each engine root separately. T-SQL
 `lint` uses `./MSSQL`. Pass `--output-root` to select a single custom root.
 Each engine folder has this layout:
 
@@ -365,7 +373,8 @@ Each engine folder has this layout:
 │   └── <database>/<schema>/<type>/<object>.sql
 ├── metrics-snapshot/  # sync --metrics-snapshot-root → metrics update --snapshot-root
 ├── metrics/           # metrics update --history-root → catalog build --metrics-root
-└── catalog.json       # catalog build --output
+├── catalog.json       # single-root catalog build --output (manifest)
+└── _catalog/          # compressed payloads referenced by the manifest
 ```
 
 The extracted objects are the output root's own contents rather than a folder
@@ -373,7 +382,7 @@ inside it, so the first path segment is always the server they came from. The
 two sibling folders hold JSON only, so the `*.sql` scans that `catalog build`
 and `lint` do over the root never pick them up.
 
-When both engine roots exist, select one with `--output-root` before supplying a single catalog `--output` or metrics `--history-root`. An explicit `--objects-root` locates the default catalog beside that input; an explicit `--snapshot-root` locates default history beside the snapshot directory.
+When both engine roots exist, catalog `--output` writes one combined catalog. For metrics `--history-root`, select one engine with `--output-root`. A single explicit `--objects-root` locates the default catalog beside that input; an explicit `--snapshot-root` locates default history beside the snapshot directory.
 
 Any single path can still be pinned explicitly, and the CI pipeline pins
 all of them (see [`.gitlab/README.md`](../../.gitlab/README.md)). Relative
@@ -472,7 +481,7 @@ chmod 600 ~/.syncsql-credentials.json
 
 syncsql sync --credentials-file ~/.syncsql-credentials.json   # → ./MSSQL/ and/or ./ORACLE/
 syncsql metrics update                                        # → each engine's metrics/
-syncsql catalog build                                         # → each engine's catalog.json
+syncsql catalog build                                         # → combined catalog/catalog.json when both engines exist
 syncsql catalog build --output-root ./MSSQL --metrics-root ./MSSQL/metrics # include MSSQL metrics
 ```
 
@@ -486,7 +495,7 @@ To preview the site against that catalog, point `catalog build --output` at
 it and run `npm run dev` inside `site/`:
 
 ```bash
-syncsql catalog build --output-root ./MSSQL --output ./site/public/data/catalog.json
+syncsql catalog build --output ./site/public/data/catalog.json
 ```
 
 Add `--repo-root`/`--path-prefix` pointed at a real git checkout of your
