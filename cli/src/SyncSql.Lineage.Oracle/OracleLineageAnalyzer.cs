@@ -100,10 +100,10 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
                     options.SourceObjectId, errorListener.Errors.Count, errorListener.Errors[0]);
             }
 
-            PlSqlLineageVisitor visitor = new(options.DynamicSql ? sql =>
+            PlSqlLineageVisitor visitor = new(sql =>
                 depth < 4 && sql.Length <= 65536 && budget.Remaining-- > 0
                     ? AnalyzeCore(sql.EndsWith(';') ? sql : sql + ";", options, depth + 1, budget, cache)
-                    : LineageAnalysisResult.Empty : null);
+                    : LineageAnalysisResult.Empty);
             visitor.Visit(tree);
 
             return new LineageAnalysisResult

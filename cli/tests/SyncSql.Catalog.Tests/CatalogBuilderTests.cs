@@ -269,11 +269,11 @@ public sealed class CatalogBuilderTests : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, ExtractedObjectFile.Write(obj));
         }
-        Core.Domain.Catalog catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot, DynamicSql = false }, CancellationToken.None);
+        Core.Domain.Catalog catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
         foreach (CatalogNode node in catalog.Nodes)
         {
             Assert.Equal(node.Database == "App" ? brokerGuid : (Guid?)null, node.ServiceBrokerGuid);
-            _mssqlAnalyzer.Received(1).Analyze(node.Ddl, Arg.Is<LineageAnalysisOptions>(o => o.ServiceBrokerGuid == node.ServiceBrokerGuid && !o.DynamicSql));
+            _mssqlAnalyzer.Received(1).Analyze(node.Ddl, Arg.Is<LineageAnalysisOptions>(o => o.ServiceBrokerGuid == node.ServiceBrokerGuid));
         }
     }
 

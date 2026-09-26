@@ -246,7 +246,7 @@ public class MsSqlLineageAnalyzerTests
     }
 
     [Fact]
-    public void Analyze_WithDynamicSqlDisabled_LeavesBuiltStringsAlone()
+    public void Analyze_WithExplicitOptions_RecoversBuiltSqlReferences()
     {
         LineageAnalysisResult result = _analyzer.Analyze(
             """
@@ -255,9 +255,9 @@ public class MsSqlLineageAnalyzerTests
                 EXEC ('SELECT * FROM dbo.Orders');
             END
             """,
-            new LineageAnalysisOptions { DynamicSql = false });
+            new LineageAnalysisOptions());
 
-        Assert.Empty(result.ObjectRefs);
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "dbo", Name: "Orders", Origin: ReferenceOrigin.Dynamic });
     }
 
     /// <summary>

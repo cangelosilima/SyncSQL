@@ -16,9 +16,8 @@ namespace SyncSql.Lineage.MsSql;
 /// content is looked at, and only because they are the places T-SQL actually executes it: an ordinary
 /// literal in a SELECT list is still never treated as SQL.
 /// </summary>
-/// <param name="dynamicSql">Whether to scan dynamically-built SQL at all (see <see cref="Core.Abstractions.LineageAnalysisOptions"/>).</param>
 /// <param name="serviceBrokerGuid">The current database's extracted Broker identity, when available.</param>
-internal sealed class TSqlLineageVisitor(bool dynamicSql = true, Guid? serviceBrokerGuid = null) : TSqlFragmentVisitor
+internal sealed class TSqlLineageVisitor(Guid? serviceBrokerGuid = null) : TSqlFragmentVisitor
 {
     /// <summary>One budget per object, shared by every nested scan this walk starts.</summary>
     private readonly DynamicSqlScanner.Budget _budget = new();
@@ -377,10 +376,7 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true, Guid? serviceBr
 
     private void ScanDynamic(string? sql, string? linkedServer)
     {
-        if (dynamicSql)
-        {
-            DynamicSqlScanner.Scan(sql, linkedServer, 0, _budget, ObjectRefs);
-        }
+        DynamicSqlScanner.Scan(sql, linkedServer, 0, _budget, ObjectRefs);
     }
 
     /// <summary>

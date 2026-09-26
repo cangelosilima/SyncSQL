@@ -20,20 +20,10 @@ public interface ILineageAnalyzer
 }
 
 /// <summary>
-/// Knobs for one analysis pass. Kept as a record rather than constructor-injected options so the same
-/// analyzer instance can serve a build that wants dynamic-SQL scanning and one that doesn't, and so a test
-/// can flip a switch without going through DI.
+/// Context for one analysis pass, supplied per object rather than through dependency injection.
 /// </summary>
 public sealed record LineageAnalysisOptions
 {
-    /// <summary>
-    /// Whether to recover references from SQL built as a string at runtime (see
-    /// <see cref="ReferenceOrigin.Dynamic"/>). On by default: a large amount of real T-SQL reaches other
-    /// objects only through <c>OPENQUERY</c>/<c>EXEC</c>, and leaving that invisible is a bigger error than
-    /// the occasional over-eager match, which is tagged and never reported as an orphan anyway.
-    /// </summary>
-    public bool DynamicSql { get; init; } = true;
-
     /// <summary>The current SQL database's Broker identity, when supplied by extraction metadata.</summary>
     public Guid? ServiceBrokerGuid { get; init; }
 

@@ -16,8 +16,6 @@ public sealed class HeterogeneousOracleTests
         string ddl = $"CREATE PROCEDURE PROCUREMENT.P AS N NUMBER; BEGIN EXECUTE IMMEDIATE {literal} INTO N; END;";
         Assert.Contains(_analyzer.Analyze(ddl).ObjectRefs,
             r => r is { Schema: "INVENTORY", Name: "ITEMS", Server: "REMOTE", Origin: ReferenceOrigin.Dynamic });
-        Assert.DoesNotContain(_analyzer.Analyze(ddl, new LineageAnalysisOptions { DynamicSql = false }).ObjectRefs,
-            r => r.Server == "REMOTE");
     }
 
     [Theory]

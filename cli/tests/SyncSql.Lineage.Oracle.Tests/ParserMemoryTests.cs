@@ -85,7 +85,7 @@ public sealed class ParserMemoryTests
 
         for (int i = 0; i < OracleLineageAnalyzer.MaxCachedScripts; i++)
         {
-            var result = analyzer.Analyze("SELECT o.id FROM app.orders o;", new LineageAnalysisOptions { DynamicSql = false });
+            var result = analyzer.Analyze("SELECT o.id FROM app.orders o;");
             if (!failParsing)
             {
                 Assert.Contains(result.ObjectRefs, reference => reference.Name == "orders");
