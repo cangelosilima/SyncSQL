@@ -414,6 +414,10 @@ public sealed class CatalogBuilder(
                     if (resolution.NodeId is { } linkedTargetId)
                     {
                         AddEdge(link.NodeId, linkedTargetId, dynamic);
+                        if (ResolveSynonymTarget(linkedTargetId, nodesById, synonymTargets) is { } underlyingLinkedId && underlyingLinkedId != linkedTargetId)
+                        {
+                            AddEdge(node.Id, underlyingLinkedId, dynamic);
+                        }
                     }
 
                     // Remote inventories may be partial or collected with different credentials.
