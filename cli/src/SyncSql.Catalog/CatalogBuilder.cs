@@ -287,6 +287,24 @@ public sealed class CatalogBuilder(
         HashSet<string> systemKeys = [];
         List<CatalogSystemReference> systemReferences = [];
 
+        // Resolve synonym definitions before consumers, regardless of file order. Retain
+        // only these small analyses and release them as the normal inference pass runs.
+        Dictionary<string, LineageAnalysisResult> synonymAnalyses = [];
+        Dictionary<string, string> synonymTargets = [];
+        foreach (CatalogNode synonym in nodes.Where(n => n.Type == "Synonyms" && n.Engine is not null))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new("Resolving synonyms", Current: synonym.Id));
+            LineageAnalysisResult analysis = lineageAnalyzerResolver.Resolve(synonym.Engine!.Value)
+                .Analyze(synonym.Ddl, analysisOptions with { ServiceBrokerGuid = synonym.ServiceBrokerGuid });
+            synonymAnalyses[synonym.Id] = analysis;
+            if (analysis.ObjectRefs.Count == 1 && nodeIndex.Resolve(synonym, analysis.ObjectRefs[0])
+                is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } target })
+            {
+                synonymTargets[synonym.Id] = target;
+            }
+        }
+
         foreach (CatalogNode spec in nodes.Where(n => n.Engine == DatabaseEngine.Oracle && n.Type == "Packages"))
         {
             CatalogNode? body = nodes.FirstOrDefault(n => n.Type == "PackageBodies"
@@ -321,9 +339,10 @@ public sealed class CatalogBuilder(
 
             ILineageAnalyzer analyzer = lineageAnalyzerResolver.Resolve(engine);
             logger.LogDebug("Analyzing lineage for {ObjectId}", node.Id);
-            LineageAnalysisResult analysis = analyzer.Analyze(scanText, analysisOptions with { ServiceBrokerGuid = node.ServiceBrokerGuid });
+            LineageAnalysisResult analysis = synonymAnalyses.Remove(node.Id, out LineageAnalysisResult? synonymAnalysis)
+                ? synonymAnalysis : analyzer.Analyze(scanText, analysisOptions with { ServiceBrokerGuid = node.ServiceBrokerGuid });
             cancellationToken.ThrowIfCancellationRequested();
-            CollectColumnReferences(node, analysis, nodesById, nodeIndex, columnsByEdge);
+            CollectColumnReferences(node, analysis, nodesById, nodeIndex, synonymTargets, columnsByEdge);
 
             foreach (ObjectRef reference in analysis.ObjectRefs)
             {
@@ -431,6 +450,10 @@ public sealed class CatalogBuilder(
                 }
 
                 AddEdge(node.Id, targetId, dynamic);
+                if (ResolveSynonymTarget(targetId, nodesById, synonymTargets) is { } underlyingId && underlyingId != targetId)
+                {
+                    AddEdge(node.Id, underlyingId, dynamic);
+                }
             }
         }
 
@@ -499,11 +522,25 @@ public sealed class CatalogBuilder(
         }
     }
 
+    private static string? ResolveSynonymTarget(string id, IReadOnlyDictionary<string, CatalogNode> nodesById,
+        IReadOnlyDictionary<string, string> synonymTargets)
+    {
+        HashSet<string>? visited = null;
+        while (nodesById[id].Type == "Synonyms")
+        {
+            visited ??= [];
+            if (!visited.Add(id) || !synonymTargets.TryGetValue(id, out string? target)) { return null; }
+            id = target;
+        }
+        return id;
+    }
+
     private static void CollectColumnReferences(
         CatalogNode fromNode,
         LineageAnalysisResult analysis,
         IReadOnlyDictionary<string, CatalogNode> nodesById,
         NodeIndex nodeIndex,
+        IReadOnlyDictionary<string, string> synonymTargets,
         Dictionary<(string From, string To), IReadOnlyList<string>> columnsByEdge)
     {
         if (analysis.ColumnRefs.Count == 0 || analysis.Aliases.Count == 0)
@@ -515,7 +552,8 @@ public sealed class CatalogBuilder(
         Dictionary<string, HashSet<string>> targetColumns = new(StringComparer.OrdinalIgnoreCase);
         foreach ((string alias, ObjectRef target) in analysis.Aliases)
         {
-            if (nodeIndex.Resolve(fromNode, target) is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } targetId }
+            if (nodeIndex.Resolve(fromNode, target) is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } referenceId }
+                && ResolveSynonymTarget(referenceId, nodesById, synonymTargets) is { } targetId
                 && nodesById.TryGetValue(targetId, out CatalogNode? toNode) && toNode.Columns.Count > 0)
             {
                 targetsByAlias[alias] = targetId;

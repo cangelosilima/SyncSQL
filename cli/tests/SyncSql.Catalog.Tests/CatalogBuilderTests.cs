@@ -9,6 +9,107 @@ namespace SyncSql.Catalog.Tests;
 
 public sealed class CatalogBuilderTests : IDisposable
 {
+    [Theory]
+    [InlineData(DatabaseEngine.MsSql, false)]
+    [InlineData(DatabaseEngine.Oracle, true)]
+    public async Task BuildAsync_SynonymChainsAttributeConsumersAndColumnsToUnderlyingObject(DatabaseEngine engine, bool dynamic)
+    {
+        _lineageAnalyzerResolver.Resolve(engine).Returns(_mssqlAnalyzer);
+        WriteObjectFile("SQL", "App", "Views", "dbo", "Caller", "consumer", engine);
+        WriteObjectFile("SQL", "App", "Synonyms", "dbo", "Alias", "first synonym", engine);
+        WriteObjectFile("SQL", "App", "Synonyms", "dbo", "Alias2", "second synonym", engine);
+        WriteObjectFile("SQL", "Data", "Tables", "sales", "Orders", "target", engine,
+            [new ExtractedColumn("Id", "int", null)]);
+        _mssqlAnalyzer.Analyze("first synonym", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Alias2")],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        _mssqlAnalyzer.Analyze("second synonym", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("sales", "Orders") { Database = "Data" }],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        ObjectRef alias = new("dbo", "Alias") { Origin = dynamic ? ReferenceOrigin.Dynamic : ReferenceOrigin.Static };
+        _mssqlAnalyzer.Analyze("consumer", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [alias],
+            Aliases = new Dictionary<string, ObjectRef> { ["s"] = alias },
+            ColumnRefs = [new ColumnRef("s", "Id"), new ColumnRef("s", "Missing")],
+        });
+
+        List<CatalogProgress> updates = [];
+        var progress = Substitute.For<IProgress<CatalogProgress>>();
+        progress.When(observer => observer.Report(Arg.Any<CatalogProgress>()))
+            .Do(call => updates.Add(call.Arg<CatalogProgress>()));
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot, Progress = progress }, CancellationToken.None);
+        Assert.Equal(2, updates.Count(update => update.Activity == "Resolving synonyms"));
+        string caller = catalog.Nodes.Single(n => n.Name == "Caller").Id;
+        string synonym = catalog.Nodes.Single(n => n.Name == "Alias").Id;
+        string target = catalog.Nodes.Single(n => n.Name == "Orders").Id;
+        Assert.Contains(catalog.Edges, e => e.From == caller && e.To == synonym);
+        Assert.Contains(catalog.Edges, e => e.From == synonym && e.To == target);
+        CatalogEdge usage = Assert.Single(catalog.Edges, e => e.From == caller && e.To == target);
+        Assert.Equal(dynamic, usage.Dynamic);
+        Assert.Equal(["Id"], usage.Columns);
+        Assert.Empty(catalog.OrphanedReferences);
+        _mssqlAnalyzer.Received(1).Analyze("first synonym", Arg.Any<LineageAnalysisOptions?>());
+        _mssqlAnalyzer.Received(1).Analyze("second synonym", Arg.Any<LineageAnalysisOptions?>());
+    }
+
+    [Fact]
+    public async Task BuildAsync_SynonymTargetAcrossLinkedServerAttributesConsumerToRemoteObject()
+    {
+        WriteObjectFile("SQL", "_ServerLevel", "LinkedServers", null, "LINK", LinkedServerDdl("LINK", "REMOTE", "Sales"));
+        WriteObjectFile("SQL", "App", "Views", "dbo", "Caller", "consumer");
+        WriteObjectFile("SQL", "App", "Synonyms", "dbo", "Alias", "synonym");
+        WriteObjectFile("REMOTE", "Sales", "Tables", "dbo", "Orders", "target");
+        _mssqlAnalyzer.Analyze("synonym", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Orders") { Server = "LINK", Database = "Sales" }],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        _mssqlAnalyzer.Analyze("consumer", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Alias")],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        Assert.Contains(catalog.Edges, e => e.From.EndsWith("/Caller", StringComparison.Ordinal) && e.To == "REMOTE/Sales/Tables/dbo/Orders");
+        Assert.Contains(catalog.LinkedServerReferences, r => r.From.EndsWith("/Alias", StringComparison.Ordinal) && r.To == "REMOTE/Sales/Tables/dbo/Orders");
+        Assert.Empty(catalog.OrphanedReferences);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task BuildAsync_CyclicOrMissingSynonymTargetDoesNotInventAnUnderlyingObject(bool cycle)
+    {
+        WriteObjectFile("SQL", "App", "Views", "dbo", "Caller", "consumer");
+        WriteObjectFile("SQL", "App", "Synonyms", "dbo", "Alias", "synonym");
+        _mssqlAnalyzer.Analyze("synonym", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", cycle ? "Alias" : "Missing")],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        _mssqlAnalyzer.Analyze("consumer", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Alias")],
+            Aliases = new Dictionary<string, ObjectRef> { ["s"] = new("dbo", "Alias") },
+            ColumnRefs = [new ColumnRef("s", "Id")],
+        });
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        CatalogEdge edge = Assert.Single(catalog.Edges);
+        Assert.EndsWith("/Caller", edge.From);
+        Assert.EndsWith("/Alias", edge.To);
+        Assert.Equal(cycle ? 0 : 1, catalog.OrphanedReferences.Count);
+    }
+
     [Fact]
     public async Task BuildAsync_ReportsCurrentObjectBeforeAnalysisAndIncludesSkippedObjectsInTotals()
     {

@@ -36,7 +36,22 @@ public sealed class MsSqlLineageAnalyzer(ILogger<MsSqlLineageAnalyzer> logger) :
 
             if (errors.Count > 0)
             {
-                logger.LogWarning("ScriptDom parse produced {Count} error(s) (continuing with the partial AST): {Message}", errors.Count, errors[0].Message);
+                // Older databases can retain syntax such as RAISERROR @errno @errmsg.
+                // Accept an older grammar only when it parses the entire script cleanly;
+                // otherwise preserve the newest grammar's partial AST and diagnostics.
+                using StringReader legacyReader = new(ddl);
+                TSqlFragment legacyFragment = new TSql80Parser(true).Parse(legacyReader, out IList<ParseError> legacyErrors);
+                if (legacyErrors.Count == 0)
+                {
+                    fragment = legacyFragment;
+                    errors = legacyErrors;
+                }
+            }
+
+            if (errors.Count > 0)
+            {
+                logger.LogWarning("ScriptDom parse produced {Count} error(s) (continuing with the partial AST) at line {Line}, column {Column}: {Message}",
+                    errors.Count, errors[0].Line, errors[0].Column, errors[0].Message);
             }
 
             LineageAnalysisOptions context = options ?? LineageAnalysisOptions.Default;
