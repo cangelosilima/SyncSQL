@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -42,10 +42,12 @@ vi.mock('../components/LineageGraph', () => ({
     nodeIds,
     groupIntermediate,
     onNodeActivate,
+    onEdgeInspect,
   }: {
     nodeIds: string[]
     groupIntermediate?: boolean
     onNodeActivate: (id: string) => void
+    onEdgeInspect: (edge: { from: string; to: string; columns: string[]; dynamic?: boolean }) => void
   }) => (
     <>
       <div data-testid="graph" data-grouped={String(groupIntermediate)}>
@@ -56,6 +58,12 @@ vi.mock('../components/LineageGraph', () => ({
           Focus {id}
         </button>
       ))}
+      <button onClick={() => onEdgeInspect({ from: 'read', to: 'Order', columns: ['Id'], dynamic: true })}>
+        Inspect evidence
+      </button>
+      <button onClick={() => onEdgeInspect({ from: 'missing', to: 'missing2', columns: ['Other'] })}>
+        Inspect missing evidence
+      </button>
     </>
   ),
 }))
@@ -99,6 +107,48 @@ async function addTypeFilter(user: ReturnType<typeof userEvent.setup>, container
 describe('LineagePage', () => {
   beforeEach(() => {
     catalog = baseCatalog
+  })
+  it('navigates breadcrumb history and shows complete edge evidence', () => {
+    renderAt('/lineage?focus=Order')
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect evidence' }))
+    expect(screen.getByRole('region', { name: 'Edge evidence' })).toHaveTextContent('Id')
+    expect(screen.getByText('Recovered from dynamically built SQL.')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect missing evidence' }))
+    expect(screen.getByRole('region', { name: 'Edge evidence' })).toHaveTextContent('missing → missing2')
+    fireEvent.click(screen.getByRole('button', { name: 'Focus read' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Focus read' }))
+    fireEvent.click(screen.getByRole('button', { name: 'dbo.Order' }))
+    expect(screen.getByRole('button', { name: /Back/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Focus read' }))
+    fireEvent.click(screen.getByRole('button', { name: /Back/ }))
+    expect(screen.getByRole('button', { name: /Back/ })).toBeDisabled()
+  })
+  it('copies shareable URLs, resets the confirmation and tolerates clipboard failure', async () => {
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'))
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    renderAt('/lineage')
+    vi.useFakeTimers()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy link' })))
+    expect(screen.getByRole('button', { name: 'Copied!' })).toBeVisible()
+    act(() => vi.advanceTimersByTime(1500))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy link' })))
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeVisible()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+  it('breaks large selections down by server, database and type and narrows on a chosen row', async () => {
+    catalog = makeCatalog({
+      nodes: Array.from({ length: 310 }, (_, i) =>
+        makeNode({ id: String(i), server: `Server${i % 10}`, database: `Db${i % 9}` }),
+      ),
+    })
+    renderAt('/lineage')
+    expect(screen.getByText('310 objects')).toBeVisible()
+    expect(screen.getByText('+2 more servers')).toBeVisible()
+    expect(screen.getByText('+1 more database')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Server0 31' }))
+    await waitFor(() => expect(screen.getByTestId('graph')).toBeVisible())
+    expect(graphIds()).toHaveLength(31)
   })
   it.each(['LinkedServers', 'DatabaseLinks'])('opens a %s search result with its callers and targets', async (type) => {
     catalog = snapshot as unknown as Catalog

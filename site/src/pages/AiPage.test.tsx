@@ -70,6 +70,48 @@ async function generate() {
 }
 
 describe('local AI presentation and Explorer transition', () => {
+  it.each(['model-missing', 'lfs-unresolved', 'checksum-mismatch', 'packaging-failed', null])(
+    'explains unavailable deployments (%s)',
+    (reason) => {
+      Object.assign(ai, { available: false, reason })
+      open()
+      expect(screen.getByRole('heading', { name: 'AI filter generation is unavailable' })).toBeVisible()
+      expect(screen.getByRole('link', { name: 'Open Explorer' })).toHaveAttribute('href', '/explorer')
+    },
+  )
+  it.each([new Error('Failure'), 'Failure', new DOMException('cancelled', 'AbortError')])(
+    'handles generation failures (%s)',
+    async (error) => {
+      ai.generateFilterPlan.mockRejectedValue(error)
+      const view = open()
+      fireEvent.submit(screen.getByRole('textbox').closest('form')!)
+      expect(ai.generateFilterPlan).not.toHaveBeenCalled()
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Query' } })
+      await act(async () => fireEvent.submit(screen.getByRole('textbox').closest('form')!))
+      if (error instanceof DOMException) expect(screen.queryByText('cancelled')).not.toBeInTheDocument()
+      else expect(screen.getByText('Failure')).toBeVisible()
+      ai.runtimeStatus = 'running'
+      view.rerender(<View />)
+      fireEvent.submit(screen.getByRole('textbox').closest('form')!)
+      expect(ai.generateFilterPlan).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    },
+  )
+  it('keeps empty plans and unresolved column plans from opening invalid results', async () => {
+    ai.generateFilterPlan.mockResolvedValue({ ...plan, tokens: [], contentQuery: '', warnings: [] })
+    open()
+    await generate()
+    expect(screen.getByRole('button', { name: 'Open in Explorer' })).toBeDisabled()
+    ai.generateFilterPlan.mockResolvedValue({
+      ...plan,
+      tokens: [],
+      contentQuery: '',
+      columnReference: { objectId: 'absent', column: 'Id' },
+    })
+    await generate()
+    expect(screen.getByRole('button', { name: 'Open in Explorer' })).toBeDisabled()
+  })
   it('opens the resolved column workspace instead of applying a DDL filter', async () => {
     ai.generateFilterPlan.mockResolvedValue({
       ...plan,

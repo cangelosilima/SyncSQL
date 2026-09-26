@@ -6,6 +6,8 @@ import {
   getNeighborhoodIds,
   groupIntermediateLayers,
   retainConnectingPaths,
+  bundleNeighborhood,
+  isBundled,
 } from './neighborhood'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
 import snapshot from '../../public/data/catalog.json'
@@ -18,6 +20,33 @@ const index = buildIndex(
     edges: [makeEdge('upstream', 'root'), makeEdge('root', 'downstream', ['Id']), makeEdge('downstream', 'far')],
   }),
 )
+
+it('ignores dangling intermediate objects and remote targets', () => {
+  const dangling = buildIndex(
+    makeCatalog({
+      nodes: [makeNode({ id: 'root' }), makeNode({ id: 'link', type: 'LinkedServers' }), makeNode({ id: 'end' })],
+      edges: [
+        makeEdge('root', 'missing'),
+        makeEdge('missing', 'end'),
+        makeEdge('root', 'link'),
+        makeEdge('link', 'remote'),
+      ],
+      linkedServerReferences: [{ linkedServer: 'link', from: 'root', to: 'remote', schema: null, name: 'remote' }],
+    }),
+  )
+  expect(getDirectionalNeighborhood(dangling, 'root', 1, 0)).toEqual(['root', 'link'])
+  expect(getDirectionalNeighborhood(dangling, 'root', 2, 0)).toEqual(['root', 'link'])
+  const grouped = groupIntermediateLayers(dangling, 'root', ['root', 'missing', 'end'])
+  expect(isBundled(grouped)).toBe(false)
+  const isolated = bundleNeighborhood(index, 'island', [...index.byId.keys()], { maxNodes: 1, maxPerGroup: 1 })
+  expect(isolated.nodeIds).toHaveLength(index.byId.size)
+  expect(
+    isBundled({
+      ...isolated,
+      bundles: [{ id: 'bundle', direction: 'incoming', type: 'Tables', memberIds: ['a', 'b', 'c'] }],
+    }),
+  ).toBe(true)
+})
 
 describe('getNeighborhoodIds', () => {
   it('always includes the root, even with zero hops', () => {

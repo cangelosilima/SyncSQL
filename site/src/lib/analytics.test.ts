@@ -14,6 +14,17 @@ import {
 afterEach(() => vi.useRealTimers())
 
 describe('catalog analytics', () => {
+  it('uses precomputed partition rankings and skips unknown objects', () => {
+    const node = makeNode({ id: 'a' })
+    const index = buildIndex(makeCatalog({ nodes: [node] }))
+    index.source = {} as NonNullable<typeof index.source>
+    expect(getTopReferencedTables(index)).toEqual([])
+    index.catalog.topReferencedTables = [
+      { id: 'missing', directUsers: 5, indirectUsers: 6 },
+      { id: 'a', directUsers: 2, indirectUsers: 3 },
+    ]
+    expect(getTopReferencedTables(index)).toEqual([{ id: 'a', node, directUsers: 2, indirectUsers: 3 }])
+  })
   it.each([null, undefined, '', 'invalid'])('treats absent or invalid dates as zero: %s', (date) => {
     expect(epochOf(date)).toBe(0)
   })

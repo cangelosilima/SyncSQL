@@ -6,6 +6,7 @@ import { colorForType } from '../lib/typeColors'
 import { getEdgeColumns, isDynamicEdge } from '../lib/neighborhood'
 import { countByType, groupRelated, resolveNodes, searchNodes, GROUP_BY_OPTIONS, type GroupBy } from '../lib/grouping'
 import type { CatalogNode } from '../types'
+import type { CatalogIndex } from '../lib/catalog'
 
 /**
  * Up to this many related objects, a flat list is the clearest thing there is -
@@ -79,7 +80,7 @@ export default function RelatedObjects({ title, rootId, ids, direction }: Relate
         {heading}
         <ul className="related-list">
           {nodes.map((node) => (
-            <RelatedRow key={node.id} node={node} rootId={rootId} direction={direction} />
+            <RelatedRow key={node.id} index={index} node={node} rootId={rootId} direction={direction} />
           ))}
         </ul>
       </div>
@@ -159,6 +160,7 @@ export default function RelatedObjects({ title, rootId, ids, direction }: Relate
             rowsSoFar += group.nodes.length
             return (
               <RelatedGroupSection
+                index={index}
                 key={`${groupBy}:${group.key}`}
                 label={group.key}
                 nodes={group.nodes}
@@ -175,12 +177,14 @@ export default function RelatedObjects({ title, rootId, ids, direction }: Relate
 }
 
 function RelatedGroupSection({
+  index,
   label,
   nodes,
   rootId,
   direction,
   defaultOpen,
 }: {
+  index: CatalogIndex
   label: string
   nodes: CatalogNode[]
   rootId: string
@@ -212,7 +216,7 @@ function RelatedGroupSection({
         <>
           <ul className="related-list">
             {shown.map((node) => (
-              <RelatedRow key={node.id} node={node} rootId={rootId} direction={direction} />
+              <RelatedRow key={node.id} index={index} node={node} rootId={rootId} direction={direction} />
             ))}
           </ul>
           {hidden > 0 && (
@@ -232,16 +236,16 @@ function RelatedGroupSection({
 }
 
 function RelatedRow({
+  index,
   node,
   rootId,
   direction,
 }: {
+  index: CatalogIndex
   node: CatalogNode
   rootId: string
   direction: 'outgoing' | 'incoming'
 }) {
-  const { index } = useCatalog()
-  if (!index) return null
   const [from, to] = direction === 'outgoing' ? [rootId, node.id] : [node.id, rootId]
   const columns = getEdgeColumns(index, from, to)
   return (

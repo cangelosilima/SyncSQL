@@ -126,7 +126,10 @@ export class PartitionedCatalog {
     // Keep repeated navigation quick without retaining every DDL/history payload.
     while (this.details.size > 8) this.details.delete(this.details.keys().next().value!)
     const node = (await request).find((candidate) => candidate.id === id)
-    if (!node) throw new Error(`Object is missing from its detail partition: ${id}`)
+    if (!node) {
+      this.details.delete(part)
+      throw new Error(`Object is missing from its detail partition: ${id}`)
+    }
     return node
   }
 

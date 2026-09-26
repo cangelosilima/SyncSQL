@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import configuration from '../../../config/sql-style.json'
 import { sqlFormatConfig, validateFormatConfig } from './sqlStyleConfig'
 import { formatSql } from './formatSql'
@@ -30,5 +30,18 @@ describe('shared SQL style configuration', () => {
     expect(() => validateFormatConfig({ ...sqlFormatConfig, tabWidth: 0 })).toThrow('tabWidth')
     expect(() => validateFormatConfig({ ...sqlFormatConfig, columnSpacing: 1.5 })).toThrow('columnSpacing')
     expect(() => validateFormatConfig({ ...sqlFormatConfig, linesBetweenQueries: -1 })).toThrow('linesBetweenQueries')
+    expect(() => validateFormatConfig({ ...sqlFormatConfig, tabWidth: 9 })).toThrow('tabWidth')
+    expect(() => validateFormatConfig({ ...sqlFormatConfig, keywordCase: 'invalid' as never })).toThrow('keywordCase')
+    expect(() => validateFormatConfig({ ...sqlFormatConfig, alignColumns: 1 as never })).toThrow('alignColumns')
+  })
+  it('rejects unsupported configuration versions at import', async () => {
+    vi.resetModules()
+    vi.doMock('../../../config/sql-style.json', () => ({ default: { version: 2 } }))
+    try {
+      await expect(import('./sqlStyleConfig')).rejects.toThrow('Unsupported')
+    } finally {
+      vi.doUnmock('../../../config/sql-style.json')
+      vi.resetModules()
+    }
   })
 })

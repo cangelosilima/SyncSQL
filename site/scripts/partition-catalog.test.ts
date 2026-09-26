@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gunzipSync } from 'node:zlib'
@@ -34,6 +35,92 @@ beforeAll(async () => {
 afterEach(() => vi.unstubAllGlobals())
 afterAll(async () => {
   await rm(temporary, { recursive: true, force: true })
+})
+
+it.each([{ maxNodes: 0 }, { maxNodes: 1.5 }, { maxBytes: 0 }, { maxBytes: 1.5 }])(
+  'rejects invalid limits %j',
+  async (limits) => {
+    await expect(partitionCatalog('unused', output, limits)).rejects.toThrow('Invalid partition limits')
+  },
+)
+
+it.each([
+  { format: 'unknown', version: 1 },
+  { format: 'syncsql-partitioned', version: 2 },
+  { format: 'syncsql-partitioned', version: 1, summaries: [{ file: '../secret' }], partitions: [] },
+  makeCatalog({ nodes: [makeNode({ id: '' })] }),
+  makeCatalog({ nodes: [makeNode({ id: 'duplicate' }), makeNode({ id: 'duplicate' })] }),
+])('rejects invalid publication input %j', async (data) => {
+  const source = path.join(temporary, 'invalid.json')
+  await writeFile(source, JSON.stringify(data))
+  await expect(partitionCatalog(source, path.join(temporary, 'invalid'))).rejects.toThrow(
+    /Unsupported|Invalid partition path|Missing or duplicate/,
+  )
+})
+
+it('republishes a manifest in place and supplies defaults for older snapshots', async () => {
+  expect(await partitionCatalog(path.join(output, 'catalog.json'), output)).toEqual(manifest)
+  const source = path.join(temporary, 'legacy.json')
+  const node = {
+    id: 'legacy',
+    server: 'server',
+    database: 'db',
+    type: 'Tables',
+    metrics: [{ rowCount: 1 }, { rowCount: 2 }],
+  }
+  await writeFile(
+    source,
+    JSON.stringify({
+      nodes: [node],
+      edges: [],
+      linkedServerReferences: [{ from: 'legacy', to: null, linkedServer: 'legacy' }],
+    }),
+  )
+  const destination = path.join(temporary, 'legacy')
+  const result = await partitionCatalog(source, destination)
+  const summaries = JSON.parse(gunzipSync(await readFile(path.join(destination, result.summaries[0].file))).toString())
+  expect(summaries[0].nodes[0]).toMatchObject({
+    columnNames: [],
+    columnCount: 0,
+    grantCount: 0,
+    granteeNames: [],
+    metrics: [{ indexes: [] }, { indexes: [] }],
+  })
+})
+
+it('runs the CLI with explicit paths, defaults, and without an entry script', async () => {
+  const argv = process.argv
+  const cwd = process.cwd()
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    process.argv = [
+      'node',
+      fileURLToPath(new URL('./partition-catalog.mjs', import.meta.url)),
+      '--input',
+      path.join(temporary, 'source.json'),
+      '--output',
+      path.join(temporary, 'cli'),
+      '--prune',
+    ]
+    vi.resetModules()
+    await import('./partition-catalog.mjs')
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Published'))
+    await mkdir(path.join(temporary, 'public/data'), { recursive: true })
+    await writeFile(path.join(temporary, 'public/data/catalog.json'), JSON.stringify(makeCatalog()))
+    process.chdir(temporary)
+    process.argv = process.argv.slice(0, 2)
+    vi.resetModules()
+    await import('./partition-catalog.mjs')
+    expect(JSON.parse(await readFile('dist/data/catalog.json', 'utf8')).nodeCount).toBe(0)
+    process.argv = ['node']
+    vi.resetModules()
+    await import('./partition-catalog.mjs')
+    expect(log).toHaveBeenCalledTimes(2)
+  } finally {
+    process.argv = argv
+    process.chdir(cwd)
+    log.mockRestore()
+  }
 })
 
 it('accepts compressed partitions already decoded by the HTTP host', async () => {
@@ -220,7 +307,7 @@ it('handles byte boundaries, Unicode identities, empty snapshots and orphan-only
       reservedKB: null,
       dataKB: null,
       indexKB: null,
-      indexes: [],
+      indexes: [{ name: 'IX', fragmentationPct: 42 }],
       statistics: [],
     })),
   })

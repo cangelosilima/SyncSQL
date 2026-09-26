@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildIndex } from './catalog'
 import type { PartitionedCatalog } from './partitionedCatalog'
 import { useCatalogFilter, useCatalogSelection } from './useCatalogData'
@@ -18,6 +18,78 @@ function deferred<T>() {
 }
 
 describe('partition loading states', () => {
+  it.each([undefined, 'a'])('loads permissions only for the selected neighborhood (focus=%s)', async (focus) => {
+    const index = buildIndex(makeCatalog({ nodes: [makeNode({ id: 'a' }), makeNode({ id: 'b' })] }))
+    const permissions = vi.fn().mockResolvedValue(
+      new Map([
+        ['a', [{ grantee: 'reader' }]],
+        ['missing', []],
+      ]),
+    )
+    const neighborhood = vi.fn().mockResolvedValue(index)
+    index.source = { edges: async () => index, neighborhood, permissions } as unknown as PartitionedCatalog
+    const { result } = renderHook(() => useCatalogSelection(index, { focus, grantIds: ['a', 'b'] }))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(permissions.mock.calls[0][0]).toEqual(focus ? ['a'] : ['a', 'b'])
+    expect(result.current.index?.byId.get('a')?.grants).toEqual([{ grantee: 'reader' }])
+  })
+
+  it.each([new Error('offline'), 'offline'])('reports graph and search failures (%s)', async (failure) => {
+    const index = buildIndex(makeCatalog())
+    index.source = {
+      alerts: async () => {
+        throw failure
+      },
+      search: async () => {
+        throw failure
+      },
+    } as unknown as PartitionedCatalog
+    const selection = renderHook(() => useCatalogSelection(index, { alerts: true }))
+    const filter = renderHook(() =>
+      useCatalogFilter(index, [{ id: 'q', attribute: null, operator: 'contains', values: ['x'] }]),
+    )
+    await waitFor(() => expect(selection.result.current.error).toBe('offline'))
+    await waitFor(() => expect(filter.result.current.error).toBe('offline'))
+  })
+
+  it('returns local filters without a source and publishes successful remote search matches', async () => {
+    const empty = renderHook(() => useCatalogFilter(null, []))
+    expect(empty.result.current.nodes).toEqual([])
+    const index = buildIndex(makeCatalog({ nodes: [makeNode({ id: 'a' })] }))
+    index.source = { search: async () => index.catalog.nodes } as unknown as PartitionedCatalog
+    const remote = renderHook(() =>
+      useCatalogFilter(index, [{ id: 'q', attribute: 'ddl', operator: 'contains', values: ['a'] }]),
+    )
+    await waitFor(() => expect(remote.result.current.nodes).toEqual(index.catalog.nodes))
+  })
+
+  it('ignores pending permission results and rejected operations after unmount', async () => {
+    const index = buildIndex(makeCatalog())
+    const permission = deferred<Map<string, never[]>>()
+    const search = deferred<CatalogNode[]>()
+    index.source = {
+      edges: async () => index,
+      permissions: () => permission.promise,
+      search: () => search.promise,
+    } as unknown as PartitionedCatalog
+    const selection = renderHook(() => useCatalogSelection(index, { grantIds: ['a'] }))
+    const filter = renderHook(() =>
+      useCatalogFilter(index, [{ id: 'q', attribute: null, operator: 'contains', values: ['a'] }]),
+    )
+    await act(async () => {})
+    selection.unmount()
+    filter.unmount()
+    await act(async () => {
+      permission.resolve(new Map())
+      search.reject(new Error('cancelled'))
+    })
+    const graph = deferred<ReturnType<typeof buildIndex>>()
+    index.source = { edges: () => graph.promise } as unknown as PartitionedCatalog
+    const cancelled = renderHook(() => useCatalogSelection(index, {}))
+    cancelled.unmount()
+    await act(async () => graph.reject(new Error('cancelled')))
+    expect(cancelled.result.current.error).toBeUndefined()
+  })
   it('does not display a previous object after navigating while details are loading', async () => {
     const first = makeNode({ id: 'first' })
     const second = makeNode({ id: 'second' })

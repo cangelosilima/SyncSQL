@@ -113,7 +113,21 @@ describe('downloadXlsx', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
-    await downloadXlsx([sheet('Objects', [{ name: 'dbo.Orders', size: 12 }], columns)], 'objects.xlsx')
+    await downloadXlsx(
+      [
+        sheet(
+          'Objects',
+          [
+            { name: 'dbo.Orders', size: 12 },
+            { name: 'Unknown', size: null },
+          ],
+          columns,
+        ),
+        sheet('Empty', [], columns),
+        { name: 'No columns', headers: [], rows: [[]] },
+      ],
+      'objects.xlsx',
+    )
 
     expect(click).toHaveBeenCalled()
     const blob = createObjectURL.mock.calls[0][0]

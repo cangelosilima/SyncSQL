@@ -10,6 +10,17 @@ import { findObjectsForGrantee } from '../lib/grants'
 
 const catalog = snapshot as unknown as Catalog
 
+it('keeps links usable when a path references an object absent from the snapshot', () => {
+  const missing = { ...catalog, nodes: [] }
+  render(
+    <MemoryRouter>
+      <BenchmarkExample catalog={missing} />
+    </MemoryRouter>,
+  )
+  const id = catalog.example!.paths[0].nodes[0]
+  expect(screen.getAllByRole('link', { name: id })[0]).toHaveAttribute('href', `/object/${id}`)
+})
+
 it('offers all scenario paths, preserves repeated cycle endpoints and links every object', () => {
   const { container } = render(
     <MemoryRouter>

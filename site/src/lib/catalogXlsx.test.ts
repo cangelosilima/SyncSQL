@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildIndex } from './catalog'
 import { objectWorkbookSheets } from './catalogXlsx'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
+import { dependencyColumns, dependencyRows, objectColumns } from './catalogCsv'
 
 const orders = makeNode({
   id: 'orders',
@@ -31,6 +32,68 @@ function sheetNames(nodeId: string): string[] {
 }
 
 describe('objectWorkbookSheets', () => {
+  it('exports linked references, metric snapshots, and versions including unavailable definitions', () => {
+    const node = makeNode({
+      id: 'link',
+      ddl: '',
+      history: [
+        { sha: 'a', date: '2026-01-01', message: 'created', ddl: 'SELECT 1' },
+        { sha: 'b', date: '2026-01-02', message: 'missing', ddl: null },
+      ],
+      metrics: [
+        { capturedAt: '2026-01-01', rowCount: 1, reservedKB: 2, dataKB: 3, indexKB: 4, indexes: [], statistics: [] },
+      ],
+    })
+    const refs = [
+      {
+        from: 'link',
+        linkedServer: 'link',
+        to: 'target',
+        server: 'Remote',
+        database: 'Db',
+        schema: 'dbo',
+        name: 'T',
+        dynamic: true,
+      },
+      { from: 'link', linkedServer: 'missing', schema: null, name: 'Unknown' },
+    ]
+    const catalog = buildIndex(
+      makeCatalog({
+        nodes: [node],
+        linkedServerReferences: refs,
+        orphanedReferences: [{ from: 'link', server: 'Remote', database: 'Db', schema: null, name: 'Gone' }],
+      }),
+    )
+    const sheets = objectWorkbookSheets(catalog, node)
+    expect(sheets.find((s) => s.name === 'Across linked servers')?.rows).toEqual([
+      [node.qualifiedName, 'Remote.Db.dbo.T', 'yes', 'target', 'yes'],
+      ['missing', 'Unknown', 'not extracted', undefined, 'no'],
+    ])
+    expect(sheets.find((s) => s.name === 'Through this link')?.rows).toHaveLength(1)
+    expect(sheets.find((s) => s.name === 'Metrics')?.rows).toEqual([['2026-01-01', 1, 2, 3, 4, 0, 0]])
+    expect(sheets.find((s) => s.name === 'Change history')?.rows).toEqual([
+      ['2026-01-01', 'a', 'created', 'yes'],
+      ['2026-01-02', 'b', 'missing', 'no'],
+    ])
+    expect(sheets.some((s) => s.name === 'Definition')).toBe(false)
+  })
+
+  it('exports dependency identity and column tags and prefers precomputed summary counts', () => {
+    const row = dependencyRows(index, 'report')[0]
+    expect(dependencyColumns.map((column) => column.value(row))).toEqual([
+      'Depends on',
+      'orders',
+      'SRV1',
+      'AppDb',
+      'dbo',
+      'Tables',
+      'dbo.Orders',
+      'Id',
+    ])
+    const summary = { ...orders, columnCount: 50, grantCount: 20, dependsOnCount: 3, usedByCount: 4 }
+    const values = Object.fromEntries(objectColumns(index).map((column) => [column.header, column.value(summary)]))
+    expect(values).toMatchObject({ ColumnCount: 50, GrantCount: 20, DependsOnCount: 3, UsedByCount: 4 })
+  })
   it('gives each section of the object page its own worksheet', () => {
     expect(sheetNames('orders')).toEqual([
       'Details',

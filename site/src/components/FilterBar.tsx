@@ -98,13 +98,13 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
   }
 
   function pickValue(value: string) {
-    if (!attribute || !operator) return
+    // Value suggestions are only offered after both selections are made.
     if (isMultiValue) {
       setPendingValues((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]))
       setInputText('')
       return
     }
-    commit({ attribute, operator, values: [value] })
+    commit({ attribute: attribute!, operator: operator!, values: [value] })
   }
 
   function commitFreeTypedValue() {
@@ -184,7 +184,7 @@ export default function FilterBar({ nodes, tokens, onChange, placeholder }: Filt
         ? `${attrDef?.label}...`
         : isMultiValue && pendingValues.length > 0
           ? `${pendingValues.join(', ')} - Enter to apply`
-          : `${attrDef?.label} ${operator ? OPERATOR_LABELS[operator] : ''}...`
+          : `${attrDef?.label} ${OPERATOR_LABELS[operator!]}...`
 
   return (
     <div className="filter-bar">

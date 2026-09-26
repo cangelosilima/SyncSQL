@@ -139,7 +139,7 @@ export function alignSqlColumns(
     const nameWidth = Math.max(0, ...columns.map((column) => column.name.length))
     const typeWidth = Math.max(0, ...columns.map((column) => column.type.length))
     const lineStart = code.lastIndexOf('\n', tokens[i].start) + 1
-    const indent = code.slice(lineStart, tokens[i].start).match(/^\s*/)?.[0] ?? ''
+    const indent = code.slice(lineStart, tokens[i].start).match(/^\s*/)![0]
     for (const column of columns) {
       const gap = ' '.repeat(config.columnSpacing)
       edits.push({

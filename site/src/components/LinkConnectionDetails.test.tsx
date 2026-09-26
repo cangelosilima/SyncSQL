@@ -3,6 +3,50 @@ import { MemoryRouter } from 'react-router-dom'
 import { expect, it } from 'vitest'
 import { makeNode } from '../test/fixtures'
 import LinkConnectionDetails from './LinkConnectionDetails'
+it('renders absent and populated principal context', () => {
+  const node = makeNode({ id: 'user' })
+  const { container, rerender } = render(<LinkConnectionDetails node={node} />)
+  expect(container).toBeEmptyDOMElement()
+  node.principal = { login: null, defaultDatabase: null, defaultSchema: null }
+  rerender(<LinkConnectionDetails node={node} />)
+  expect(screen.getByRole('heading', { name: 'Principal context' })).toBeVisible()
+  expect(screen.getByText('Not visible')).toBeVisible()
+  node.principal = { login: 'Login', defaultDatabase: 'Db', defaultSchema: 'dbo' }
+  rerender(<LinkConnectionDetails node={node} />)
+  expect(screen.getByText('Login')).toBeVisible()
+  expect(screen.getByText('Db')).toBeVisible()
+  expect(screen.getByText('dbo')).toBeVisible()
+})
+it.each([true, false])('renders partial gateways and login mappings (host=%s)', (host) => {
+  const node = makeNode({ id: 'link' })
+  node.link = {
+    connectIdentifier: null,
+    dataSource: null,
+    targetEngine: null,
+    database: null,
+    defaultSchema: null,
+    gatewayHost: host ? 'gateway' : null,
+    gatewaySid: host ? null : 'sid',
+    targetServer: null,
+    loginNodeIds: [],
+    logins: [
+      { localUser: 'local', remoteUser: null, usesSelf: true },
+      { localUser: null, remoteUser: null, usesSelf: false },
+    ],
+    passwordStatus: 'not-extracted',
+    evidence: [],
+    diagnostics: ['Destination unknown'],
+  }
+  render(
+    <MemoryRouter>
+      <LinkConnectionDetails node={node} />
+    </MemoryRouter>,
+  )
+  expect(screen.getByText('Endpoint not resolved')).toBeVisible()
+  expect(screen.getByText('local → Caller identity')).toBeVisible()
+  expect(screen.getByText('Remote user not visible')).toBeVisible()
+  expect(screen.getByText('Destination unknown')).toBeVisible()
+})
 
 it('keeps the observed destination and identity visible without a traversable target', () => {
   const node = {

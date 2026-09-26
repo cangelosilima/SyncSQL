@@ -19,6 +19,13 @@ afterEach(() => {
 describe('export action parity through shared Button', () => {
   const columns = [{ header: 'Object', value: (row: { name: string }) => row.name }]
 
+  it('reports unexpected export failures', async () => {
+    vi.mocked(downloadXlsx).mockRejectedValueOnce('unavailable')
+    render(<XlsxExportButton sheets={() => []} filename="empty.xlsx" />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Export XLSX' })))
+    expect(screen.getByRole('alert')).toHaveTextContent('Export failed.')
+  })
+
   it('disables an empty CSV and retains its explanation', () => {
     render(<CsvExportButton rows={[]} columns={columns} filename="objects.csv" />)
     const button = screen.getByRole('button', { name: 'Export CSV' })

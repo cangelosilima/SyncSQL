@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AiProvider, parseCapabilityManifest, useAi } from './AiContext'
+import { EmbeddingFilterPlanner } from './filterPlanner'
 
 const worker = vi.hoisted(() => ({
   load: vi.fn(),
@@ -17,6 +18,24 @@ vi.mock('./WorkerEmbeddingAdapter', () => ({
 }))
 
 describe('parseCapabilityManifest', () => {
+  it.each([
+    'model-missing',
+    'checksum-mismatch',
+    'packaging-failed',
+    'manifest-unavailable',
+    'runtime-error',
+    'invalid',
+  ])('validates deployment reason %s', (reason) => {
+    expect(parseCapabilityManifest({ filterGenerator: { available: false, reason } }).filterGenerator.reason).toBe(
+      reason === 'invalid' ? 'manifest-unavailable' : reason,
+    )
+  })
+  it.each(['bad', { filterGenerator: 'bad' }, { filterGenerator: { available: true, model: 'model', version: 2 } }])(
+    'rejects malformed capability %s',
+    (value) => {
+      expect(parseCapabilityManifest(value).filterGenerator.available).toBe(false)
+    },
+  )
   it('accepts a valid filter-generator capability', () => {
     expect(
       parseCapabilityManifest({
@@ -60,6 +79,77 @@ describe('AiProvider runtime failure handling', () => {
       }),
     )
   })
+
+  it('exposes safe defaults outside a provider', async () => {
+    const { result } = renderHook(useAi)
+    await expect(result.current.generateFilterPlan('', [])).rejects.toThrow('not ready')
+    expect(result.current.retry()).toBeUndefined()
+  })
+
+  it.each([new Error('offline'), 'offline', null])('reports manifest failures (%s)', async (failure) => {
+    vi.mocked(fetch).mockReset()
+    if (failure === null) vi.mocked(fetch).mockResolvedValue({ ok: false, status: 404 } as Response)
+    else vi.mocked(fetch).mockRejectedValue(failure)
+    const { result } = renderHook(useAi, { wrapper: AiProvider })
+    await waitFor(() => expect(result.current.checking).toBe(false))
+    expect(result.current.reason).toBe('manifest-unavailable')
+    expect(result.current.error).toBe(failure === null ? 'Capability manifest returned 404.' : 'offline')
+    await expect(result.current.generateFilterPlan('', [])).rejects.toThrow('unavailable')
+    act(() => result.current.retry())
+  })
+
+  it('ignores a rejected manifest request after unmount', async () => {
+    let reject!: (reason: Error) => void
+    vi.mocked(fetch).mockImplementation(
+      () =>
+        new Promise((_resolve, no) => {
+          reject = no
+        }),
+    )
+    const { unmount, result } = renderHook(useAi, { wrapper: AiProvider })
+    unmount()
+    await act(async () => reject(new Error('aborted')))
+    expect(result.current.error).toBeNull()
+  })
+
+  it('generates plans, reuses the adapter, publishes progress, and disposes on unmount', async () => {
+    const plan = { version: 1, filters: [] }
+    const generate = vi.spyOn(EmbeddingFilterPlanner.prototype, 'generate').mockResolvedValue(plan as never)
+    worker.load.mockImplementation(async ({ onProgress }) => onProgress({ percent: 100, file: null, status: 'ready' }))
+    const { result, unmount } = renderHook(useAi, { wrapper: AiProvider })
+    await waitFor(() => expect(result.current.available).toBe(true))
+    await act(async () => {
+      expect(await result.current.generateFilterPlan('tables', [])).toBe(plan)
+    })
+    await act(async () => {
+      await result.current.generateFilterPlan('tables', [])
+    })
+    expect(result.current.runtimeStatus).toBe('idle')
+    expect(result.current.progress?.percent).toBe(100)
+    expect(generate).toHaveBeenCalledTimes(2)
+    unmount()
+    expect(worker.dispose).toHaveBeenCalledOnce()
+    generate.mockRestore()
+  })
+
+  it.each([new DOMException('Cancelled', 'AbortError'), 'failure'])(
+    'handles aborted and non-Error generation failures (%s)',
+    async (failure) => {
+      worker.load.mockRejectedValue(failure)
+      const { result } = renderHook(useAi, { wrapper: AiProvider })
+      await waitFor(() => expect(result.current.available).toBe(true))
+      await act(async () => {
+        await expect(result.current.generateFilterPlan('', [])).rejects.toBe(failure)
+      })
+      expect(result.current.runtimeStatus).toBe(typeof failure === 'string' ? 'error' : 'idle')
+      if (typeof failure === 'string')
+        await expect(result.current.generateFilterPlan('', [])).rejects.toThrow('unavailable')
+      else {
+        expect(result.current.available).toBe(true)
+        expect(result.current.progress).toBeNull()
+      }
+    },
+  )
 
   it('disables AI for the browser session after model loading fails and allows retry', async () => {
     worker.load.mockRejectedValue(new Error('ONNX initialization failed'))
