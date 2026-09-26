@@ -31,6 +31,51 @@ describe('getReachable', () => {
     expect(getReachable('missing', 'outgoing', sameServerIndex).size).toBe(0)
   })
 
+  it.each(['incoming', 'outgoing'] as const)('does not traverse %s edges from a missing seed', (direction) => {
+    const index = buildIndex(
+      makeCatalog({
+        nodes: [makeNode({ id: 'known' })],
+        edges: [makeEdge('missing', 'known'), makeEdge('known', 'missing')],
+      }),
+    )
+    expect([...getReachable('missing', direction, index)]).toEqual([])
+  })
+
+  it.each(['incoming', 'outgoing'] as const)(
+    'records a dangling %s neighbor without traversing through it',
+    (direction) => {
+      const edges = [makeEdge('a', 'missing'), makeEdge('missing', 'b')]
+      const index = buildIndex(
+        makeCatalog({
+          nodes: [makeNode({ id: 'a' }), makeNode({ id: 'b' })],
+          edges,
+        }),
+      )
+      const seed = direction === 'outgoing' ? 'a' : 'b'
+      expect([...getReachable(seed, direction, index)]).toEqual([['missing', 1]])
+    },
+  )
+
+  it('does not enter a disconnected component with arbitrary node IDs', () => {
+    // This is a valid catalog ID, even though Stryker also uses it when mutating
+    // an empty array. Traversal must never introduce nodes outside the frontier.
+    const disconnectedId = 'Stryker was here'
+    const index = buildIndex(
+      makeCatalog({
+        nodes: ['a', 'b', disconnectedId, 'unreachable'].map((id) => makeNode({ id })),
+        edges: [makeEdge('a', 'b'), makeEdge(disconnectedId, 'unreachable')],
+      }),
+    )
+    expect([...getReachable('a', 'outgoing', index)]).toEqual([['b', 1]])
+  })
+
+  it('terminates when the frontier is exhausted with no hop limit', () => {
+    expect([...getReachable('a', 'outgoing', sameServerIndex, Infinity)]).toEqual([
+      ['b', 1],
+      ['c', 2],
+    ])
+  })
+
   it('stops at maxHops', () => {
     const reachable = getReachable('a', 'outgoing', sameServerIndex, 1)
     expect([...reachable.keys()]).toEqual(['b'])

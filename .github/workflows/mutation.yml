@@ -1,0 +1,76 @@
+name: Mutation testing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 7 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli:
+    name: CLI mutation (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        project:
+          [
+            Core,
+            Catalog,
+            Cli,
+            Extraction.MsSql,
+            Extraction.Oracle,
+            Lineage.MsSql,
+            Lineage.Oracle,
+          ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Run mutation tests
+        shell: pwsh
+        env:
+          MUTATION_PROJECT: ${{ matrix.project }}
+        run: ./scripts/Run-MutationTests.ps1 -Project $env:MUTATION_PROJECT
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-cli-${{ matrix.project }}
+          path: TestResults/mutation/
+          if-no-files-found: error
+          retention-days: 14
+
+  site:
+    name: Site mutation
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run test:mutation
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-site
+          path: site/reports/mutation/
+          if-no-files-found: error
+          retention-days: 14

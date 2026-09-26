@@ -45,23 +45,7 @@ public sealed class CredentialsFileProvider : ICredentialProvider
             throw new CredentialParseException($"Credentials file not found: {path}");
         }
 
-        Dictionary<string, CredentialsFileEntry?>? entries;
-        try
-        {
-            await using FileStream stream = File.OpenRead(path);
-            entries = await JsonSerializer.DeserializeAsync<Dictionary<string, CredentialsFileEntry?>>(stream, SerializerOptions, cancellationToken);
-        }
-        catch (JsonException ex)
-        {
-            throw new CredentialParseException(
-                $"Credentials file '{path}' could not be parsed: {ex.Message} Expected {{ \"PREFIX\": {{ \"user\": \"...\", \"password\": \"...\" }} }}.");
-        }
-
-        if (entries is null)
-        {
-            throw new CredentialParseException($"Credentials file '{path}' is empty or 'null'.");
-        }
-
+        Dictionary<string, CredentialsFileEntry?> entries = await ReadEntriesAsync(path, cancellationToken);
         Dictionary<string, PartialCredentials> byPrefix = new(StringComparer.OrdinalIgnoreCase);
         foreach ((string prefix, CredentialsFileEntry? entry) in entries)
         {
@@ -69,6 +53,21 @@ public sealed class CredentialsFileProvider : ICredentialProvider
         }
 
         return new CredentialsFileProvider(byPrefix, path);
+    }
+
+    private static async Task<Dictionary<string, CredentialsFileEntry?>> ReadEntriesAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using FileStream stream = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<Dictionary<string, CredentialsFileEntry?>>(stream, SerializerOptions, cancellationToken)
+                ?? throw new CredentialParseException($"Credentials file '{path}' is empty or 'null'.");
+        }
+        catch (JsonException ex)
+        {
+            throw new CredentialParseException(
+                $"Credentials file '{path}' could not be parsed: {ex.Message} Expected {{ \"PREFIX\": {{ \"user\": \"...\", \"password\": \"...\" }} }}.");
+        }
     }
 
     public PartialCredentials Read(string credentialsVariablePrefix) =>

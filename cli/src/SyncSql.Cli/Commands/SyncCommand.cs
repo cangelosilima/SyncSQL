@@ -211,10 +211,10 @@ internal static class SyncCommand
                     }
 
                     attemptedServers++;
-                    DatabaseCredentials credentials;
                     try
                     {
-                        credentials = ResolveCredentials(server, credentialProvider, OperatingSystem.IsWindows());
+                        DatabaseCredentials credentials = ResolveCredentials(server, credentialProvider, OperatingSystem.IsWindows());
+                        work.Add((server, depth, filters, credentials));
                     }
                     catch (InvalidOperationException ex)
                     {
@@ -224,8 +224,6 @@ internal static class SyncCommand
                         (depth == 0 ? failedServers : failedDiscoveredServers).Add(server.Name);
                         continue;
                     }
-
-                    work.Add((server, depth, filters, credentials));
                 }
 
                 // Each worker owns its connections and output. Fold the small summaries in input

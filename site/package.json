@@ -15,6 +15,7 @@
     "example:refresh": "node scripts/catalog-example.mjs",
     "example:check": "node scripts/catalog-example.mjs --check",
     "test": "vitest run --configLoader runner",
+    "test:mutation": "stryker run",
     "test:coverage": "vitest run --configLoader runner --coverage",
     "verify:ai-model": "node scripts/package-ai-model.mjs --strict --verify-only"
   },
@@ -39,6 +40,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

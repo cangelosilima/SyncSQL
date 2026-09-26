@@ -19,6 +19,9 @@ site/node_modules/
 site/dist/
 site/*.tsbuildinfo
 coverage/
+StrykerOutput/
+.stryker-tmp/
+site/reports/mutation/
 
 # .NET CLI build output
 cli/**/bin/
