@@ -31,10 +31,10 @@ public class ParserBenchmarks
         {
             LineageAnalysisResult analysis = _analyzer.Analyze(_scripts[i]);
             bool dynamic = i % 4 == 3;
-            // Dynamic scanners recover object references; static statements also bind columns.
+            // SQL Server's dynamic scanner recovers object references only. Oracle also binds columns.
             if (!analysis.ObjectRefs.Any(reference => reference.Name == "V000")
                 || (dynamic && !analysis.ObjectRefs.Any(reference => reference.Origin == ReferenceOrigin.Dynamic))
-                || (!dynamic && !analysis.ColumnRefs.Any(reference => reference.Column == "Id")))
+                || ((!dynamic || Engine == DatabaseEngine.Oracle) && !analysis.ColumnRefs.Any(reference => reference.Column == "Id")))
             {
                 throw new InvalidOperationException("Benchmark parser lost expected table or column references.");
             }
