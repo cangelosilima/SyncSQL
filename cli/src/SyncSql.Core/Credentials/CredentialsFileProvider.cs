@@ -57,9 +57,9 @@ public sealed class CredentialsFileProvider : ICredentialProvider
 
     private static async Task<Dictionary<string, CredentialsFileEntry?>> ReadEntriesAsync(string path, CancellationToken cancellationToken)
     {
+        await using FileStream stream = File.OpenRead(path);
         try
         {
-            await using FileStream stream = File.OpenRead(path);
             return await JsonSerializer.DeserializeAsync<Dictionary<string, CredentialsFileEntry?>>(stream, SerializerOptions, cancellationToken)
                 ?? throw new CredentialParseException($"Credentials file '{path}' is empty or 'null'.");
         }
