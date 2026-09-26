@@ -18,3 +18,9 @@ external reference information on its definition.
 Rebuild the catalog with the updated CLI to populate these relationships.
 Include the `Synonyms` object type when extracting, and include remote targets
 and linked-server/database-link metadata when cross-server resolution is needed.
+
+Oracle database-link definitions are handled as connection metadata and are not
+sent through the object-lineage parser. Consumers still resolve through the link
+to observed remote targets, including links from older exports with incomplete
+credential clauses. This does not repair the exported DDL. Parser warnings for
+other objects include their catalog object IDs so the source SQL can be located.

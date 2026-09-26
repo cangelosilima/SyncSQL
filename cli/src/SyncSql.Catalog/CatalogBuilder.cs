@@ -296,7 +296,7 @@ public sealed class CatalogBuilder(
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(new("Resolving synonyms", Current: synonym.Id));
             LineageAnalysisResult analysis = lineageAnalyzerResolver.Resolve(synonym.Engine!.Value)
-                .Analyze(synonym.Ddl, analysisOptions with { ServiceBrokerGuid = synonym.ServiceBrokerGuid });
+                .Analyze(synonym.Ddl, analysisOptions with { ServiceBrokerGuid = synonym.ServiceBrokerGuid, SourceObjectId = synonym.Id });
             synonymAnalyses[synonym.Id] = analysis;
             if (analysis.ObjectRefs.Count == 1 && nodeIndex.Resolve(synonym, analysis.ObjectRefs[0])
                 is { Kind: ReferenceResolutionKind.Resolved, NodeId: { } target })
@@ -323,7 +323,10 @@ public sealed class CatalogBuilder(
             cancellationToken.ThrowIfCancellationRequested();
             CatalogNode node = nodes[nodeNumber];
             progress?.Report(new("Inferring lineage", nodeNumber, nodes.Count, node.Id, Nodes: nodes.Count, Edges: edges.Count));
-            if (node.Engine is not { } engine)
+            // Database-link connection metadata is already handled by LinkedServerMap.
+            // Its DDL declares a connection, not object dependencies, and older exports
+            // may contain incomplete credential clauses that cannot be parsed as SQL.
+            if (node.Type == "DatabaseLinks" || node.Engine is not { } engine)
             {
                 // No "-- Engine:" header (a file predating that field, or a foreign file this tool
                 // didn't produce) - lineage inference is simply skipped for it rather than guessed at.
@@ -340,7 +343,7 @@ public sealed class CatalogBuilder(
             ILineageAnalyzer analyzer = lineageAnalyzerResolver.Resolve(engine);
             logger.LogDebug("Analyzing lineage for {ObjectId}", node.Id);
             LineageAnalysisResult analysis = synonymAnalyses.Remove(node.Id, out LineageAnalysisResult? synonymAnalysis)
-                ? synonymAnalysis : analyzer.Analyze(scanText, analysisOptions with { ServiceBrokerGuid = node.ServiceBrokerGuid });
+                ? synonymAnalysis : analyzer.Analyze(scanText, analysisOptions with { ServiceBrokerGuid = node.ServiceBrokerGuid, SourceObjectId = node.Id });
             cancellationToken.ThrowIfCancellationRequested();
             CollectColumnReferences(node, analysis, nodesById, nodeIndex, synonymTargets, columnsByEdge);
 

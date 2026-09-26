@@ -28,10 +28,12 @@ public sealed class LegacySyntaxTests
         const string sql = "SELECT JSON_VALUE(payload, '$.id') FROM dbo.Modern;\nSELECT (";
         RecordingLogger logger = new();
 
-        var result = new MsSqlLineageAnalyzer(logger).Analyze(sql);
+        var result = new MsSqlLineageAnalyzer(logger).Analyze(sql,
+            new SyncSql.Core.Abstractions.LineageAnalysisOptions { SourceObjectId = "SQL/App/Views/dbo/Modern" });
 
         Assert.Contains(result.ObjectRefs, r => r.Schema == "dbo" && r.Name == "Modern");
         Assert.Contains("line 2, column", Assert.Single(logger.Warnings));
+        Assert.Contains("SQL/App/Views/dbo/Modern", Assert.Single(logger.Warnings));
     }
 
     [Fact]

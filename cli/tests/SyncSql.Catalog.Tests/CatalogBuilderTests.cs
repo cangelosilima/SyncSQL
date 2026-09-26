@@ -9,6 +9,32 @@ namespace SyncSql.Catalog.Tests;
 
 public sealed class CatalogBuilderTests : IDisposable
 {
+    [Fact]
+    public async Task BuildAsync_DatabaseLinkDdlIsNotParsedButConnectionAndConsumerLineageRemain()
+    {
+        const string linkDdl = "CREATE DATABASE LINK BRIDGE\n CONNECT TO \"legacy_user\n USING 'REMOTE';";
+        _lineageAnalyzerResolver.Resolve(DatabaseEngine.Oracle).Returns(_mssqlAnalyzer);
+        WriteObjectFile("ORA", "App", "DatabaseLinks", "APP", "BRIDGE", linkDdl, DatabaseEngine.Oracle);
+        WriteObjectFile("ORA", "App", "Views", "APP", "Caller", "consumer", DatabaseEngine.Oracle);
+        WriteObjectFile("REMOTE", "App", "Tables", "APP", "Orders", "target", DatabaseEngine.Oracle);
+        _mssqlAnalyzer.Analyze("consumer", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("APP", "Orders") { Server = "BRIDGE" }],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+
+        _mssqlAnalyzer.DidNotReceive().Analyze(linkDdl, Arg.Any<LineageAnalysisOptions?>());
+        _mssqlAnalyzer.Received(1).Analyze("consumer", Arg.Is<LineageAnalysisOptions>(o => o.SourceObjectId == "ORA/App/Views/APP/Caller"));
+        CatalogNode link = Assert.Single(catalog.Nodes, n => n.Type == "DatabaseLinks");
+        Assert.Equal("REMOTE", link.Link!.ConnectIdentifier);
+        Assert.Contains(catalog.Edges, e => e.From == "ORA/App/Views/APP/Caller" && e.To == link.Id);
+        Assert.Contains(catalog.Edges, e => e.From == link.Id && e.To == "REMOTE/App/Tables/APP/Orders");
+        Assert.Contains(catalog.LinkedServerReferences, r => r.LinkedServer == link.Id && r.To == "REMOTE/App/Tables/APP/Orders");
+    }
+
     [Theory]
     [InlineData(DatabaseEngine.MsSql, false)]
     [InlineData(DatabaseEngine.Oracle, true)]
@@ -56,6 +82,7 @@ public sealed class CatalogBuilderTests : IDisposable
         Assert.Equal(["Id"], usage.Columns);
         Assert.Empty(catalog.OrphanedReferences);
         _mssqlAnalyzer.Received(1).Analyze("first synonym", Arg.Any<LineageAnalysisOptions?>());
+        _mssqlAnalyzer.Received(1).Analyze("first synonym", Arg.Is<LineageAnalysisOptions>(o => o.SourceObjectId == synonym));
         _mssqlAnalyzer.Received(1).Analyze("second synonym", Arg.Any<LineageAnalysisOptions?>());
     }
 

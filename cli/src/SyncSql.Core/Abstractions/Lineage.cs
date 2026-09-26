@@ -37,6 +37,9 @@ public sealed record LineageAnalysisOptions
     /// <summary>The current SQL database's Broker identity, when supplied by extraction metadata.</summary>
     public Guid? ServiceBrokerGuid { get; init; }
 
+    /// <summary>Catalog object identity included in parser diagnostics, when available.</summary>
+    public string? SourceObjectId { get; init; }
+
     public static LineageAnalysisOptions Default { get; } = new();
 }
 

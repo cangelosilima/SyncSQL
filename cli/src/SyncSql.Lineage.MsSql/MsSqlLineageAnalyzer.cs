@@ -28,6 +28,8 @@ public sealed class MsSqlLineageAnalyzer(ILogger<MsSqlLineageAnalyzer> logger) :
             return LineageAnalysisResult.Empty;
         }
 
+        LineageAnalysisOptions context = options ?? LineageAnalysisOptions.Default;
+
         try
         {
             TSqlParser parser = TSqlParserFactory.GetParser();
@@ -50,11 +52,10 @@ public sealed class MsSqlLineageAnalyzer(ILogger<MsSqlLineageAnalyzer> logger) :
 
             if (errors.Count > 0)
             {
-                logger.LogWarning("ScriptDom parse produced {Count} error(s) (continuing with the partial AST) at line {Line}, column {Column}: {Message}",
-                    errors.Count, errors[0].Line, errors[0].Column, errors[0].Message);
+                logger.LogWarning("[{ObjectId}] ScriptDom parse produced {Count} error(s) (continuing with the partial AST) at line {Line}, column {Column}: {Message}",
+                    context.SourceObjectId, errors.Count, errors[0].Line, errors[0].Column, errors[0].Message);
             }
 
-            LineageAnalysisOptions context = options ?? LineageAnalysisOptions.Default;
             TSqlLineageVisitor visitor = new(context.DynamicSql, context.ServiceBrokerGuid);
             fragment.Accept(visitor);
 
@@ -67,7 +68,7 @@ public sealed class MsSqlLineageAnalyzer(ILogger<MsSqlLineageAnalyzer> logger) :
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            logger.LogWarning("ScriptDom parsing failed (skipping lineage for this object): {Message}", ex.Message);
+            logger.LogWarning("[{ObjectId}] ScriptDom parsing failed (skipping lineage for this object): {Message}", context.SourceObjectId, ex.Message);
             return LineageAnalysisResult.Empty;
         }
     }

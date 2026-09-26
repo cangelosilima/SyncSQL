@@ -27,8 +27,10 @@ public sealed class SynonymSyntaxTests
     public void Synonym_MissingTargetStillReportsSyntaxError()
     {
         RecordingLogger logger = new();
-        new OracleLineageAnalyzer(logger).Analyze("CREATE OR REPLACE EDITIONABLE SYNONYM app.broken FOR;");
+        new OracleLineageAnalyzer(logger).Analyze("CREATE OR REPLACE EDITIONABLE SYNONYM app.broken FOR;",
+            new SyncSql.Core.Abstractions.LineageAnalysisOptions { SourceObjectId = "ORA/App/Synonyms/app/broken" });
         Assert.NotEmpty(logger.Warnings);
+        Assert.Contains(logger.Warnings, warning => warning.Contains("ORA/App/Synonyms/app/broken", StringComparison.Ordinal));
     }
 
     private sealed class RecordingLogger : ILogger<OracleLineageAnalyzer>
