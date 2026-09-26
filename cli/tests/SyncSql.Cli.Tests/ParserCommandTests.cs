@@ -125,4 +125,32 @@ public sealed class ParserCommandTests
     }
 
     private static ConsoleKeyInfo Key(ConsoleKey key) => new('\0', key, false, false, false);
+
+    [Fact]
+    public void LegacySqlUsesCleanFallbackTree()
+    {
+        SqlInspection result = SqlInspection.Parse("legacy.sql", "RAISERROR 50001 'legacy error';", "mssql");
+        Assert.False(result.HasErrors);
+        Assert.Contains(result.Sections[0].Pieces, p => p.Name.Contains("RaiseError", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OracleLexerErrorsAreVisibleWithLocations()
+    {
+        SqlInspection result = SqlInspection.Parse("lexer.sql", "SELECT \u0001 FROM dual;", "oracle");
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Sections[5].Pieces, p => p.Name == "Lexer error" && p.Line == 1 && p.Column == 8);
+    }
+
+    [Fact]
+    public void SemanticDetailsWorkWithoutSourceLocations()
+    {
+        SqlInspection result = SqlInspection.Parse("queue.sql", "RECEIVE * FROM dbo.WorkQueue;", "mssql");
+        SqlPiece reference = Assert.Single(result.Sections[2].Pieces);
+        string detail = result.Describe(reference);
+        Assert.Contains("dbo.WorkQueue", detail);
+        Assert.Contains("Type: Queues", detail);
+        Assert.DoesNotContain("Line", detail);
+        Assert.Contains("clamped", result.Describe(new SqlPiece("clamped", -5, int.MaxValue)));
+    }
 }

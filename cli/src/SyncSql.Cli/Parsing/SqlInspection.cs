@@ -46,10 +46,11 @@ internal sealed record SqlInspection(string Path, string Sql, string Engine, IRe
             {
                 if (entry.Tree is ParserRuleContext context)
                 {
-                    int offset = context.Start?.StartIndex ?? 0;
+                    // ANTLR sets Start on every entered rule, including recovered/empty rules.
+                    int offset = context.Start.StartIndex;
                     int end = context.Stop?.StopIndex + 1 ?? offset;
                     nodes.Add(new SqlPiece(new string(' ', Math.Min(entry.Depth, 24) * 2) + parser.RuleNames[context.RuleIndex],
-                        offset, Math.Max(0, end - offset), context.Start?.Line ?? 0, (context.Start?.Column ?? 0) + 1));
+                        offset, Math.Max(0, end - offset), context.Start.Line, context.Start.Column + 1));
                 }
                 for (int i = entry.Tree.ChildCount - 1; i >= 0; i--)
                 {
@@ -59,7 +60,7 @@ internal sealed record SqlInspection(string Path, string Sql, string Engine, IRe
             stream.Fill();
             foreach (IToken token in stream.GetTokens())
             {
-                tokens.Add(new SqlPiece(parser.Vocabulary.GetSymbolicName(token.Type) ?? "EOF", token.StartIndex,
+                tokens.Add(new SqlPiece(parser.Vocabulary.GetSymbolicName(token.Type), token.StartIndex,
                     Math.Max(0, token.StopIndex - token.StartIndex + 1), token.Line, token.Column + 1,
                     $"Channel: {token.Channel}"));
             }
@@ -108,7 +109,7 @@ internal sealed record SqlInspection(string Path, string Sql, string Engine, IRe
                     pending.Push((child, entry.Depth + 1));
                 }
             }
-            foreach (TSqlParserToken token in root.ScriptTokenStream ?? [])
+            foreach (TSqlParserToken token in root.ScriptTokenStream)
             {
                 tokens.Add(new SqlPiece(token.TokenType.ToString(), token.Offset, token.Text?.Length ?? 0, token.Line, token.Column));
             }
@@ -135,7 +136,7 @@ internal sealed record SqlInspection(string Path, string Sql, string Engine, IRe
     {
         public override void SyntaxError(TextWriter output, IRecognizer recognizer, IToken offendingSymbol, int line,
             int charPositionInLine, string msg, RecognitionException e) =>
-            diagnostics.Add(new SqlPiece("Parser error", offendingSymbol?.StartIndex ?? 0, 0, line, charPositionInLine + 1, msg));
+            diagnostics.Add(new SqlPiece("Parser error", offendingSymbol.StartIndex, 0, line, charPositionInLine + 1, msg));
 
         public void SyntaxError(TextWriter output, IRecognizer recognizer, int offendingSymbol, int line,
             int charPositionInLine, string msg, RecognitionException e) =>

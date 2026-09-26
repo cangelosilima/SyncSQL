@@ -5,8 +5,9 @@ namespace SyncSql.Cli.Commands;
 
 internal static class ParserCommand
 {
-    public static Command Build()
+    public static Command Build(ParserTerminal? terminal = null)
     {
+        terminal ??= new ParserTerminal();
         Option<string> file = new("--file") { Required = true, Description = "SQL file to inspect (read only)." };
         Option<string> engine = new("--engine") { Description = "SQL dialect: mssql (default) or oracle." };
         engine.AcceptOnlyFromAmong("mssql", "oracle");
@@ -20,24 +21,26 @@ internal static class ParserCommand
                 string sql = await File.ReadAllTextAsync(path, cancellationToken);
                 string dialect = result.GetValue(engine) ?? "mssql";
                 SqlInspection inspection = SqlInspection.Parse(path, sql, dialect);
-                if (result.GetValue(plain) || Console.IsInputRedirected || Console.IsOutputRedirected ||
-                    string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.Ordinal))
+                if (UsePlainOutput(result.GetValue(plain), terminal.InputRedirected, terminal.OutputRedirected, terminal.TerminalType))
                 {
-                    ParserDashboard.Print(inspection, Console.Out);
+                    ParserDashboard.Print(inspection, terminal.Output);
                 }
                 else
                 {
-                    ParserDashboard.Run(inspection, cancellationToken);
+                    ParserDashboard.Run(inspection, terminal, cancellationToken);
                 }
 
                 return inspection.HasErrors ? 1 : 0;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
-                Console.Error.WriteLine($"Cannot inspect SQL file: {ParserDashboard.Safe(exception.Message)}");
+                terminal.Error.WriteLine($"Cannot inspect SQL file: {ParserDashboard.Safe(exception.Message)}");
                 return 1;
             }
         });
         return command;
     }
+
+    internal static bool UsePlainOutput(bool requested, bool inputRedirected, bool outputRedirected, string? terminalType) =>
+        requested || inputRedirected || outputRedirected || string.Equals(terminalType, "dumb", StringComparison.Ordinal);
 }

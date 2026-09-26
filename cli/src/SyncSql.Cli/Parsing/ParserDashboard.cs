@@ -23,43 +23,43 @@ internal static class ParserDashboard
         }
     }
 
-    public static void Run(SqlInspection inspection, CancellationToken cancellationToken)
+    public static void Run(SqlInspection inspection, ParserTerminal terminal, CancellationToken cancellationToken)
     {
         DashboardState state = new(inspection);
-        bool originalControlC = Console.TreatControlCAsInput;
+        bool originalControlC = terminal.ControlCAsInput;
         try
         {
-            Console.TreatControlCAsInput = true;
-            Console.Write("\u001b[?1049h\u001b[?25l");
+            terminal.ControlCAsInput = true;
+            terminal.Output.Write("\u001b[?1049h\u001b[?25l");
             int lastWidth = 0;
             int lastHeight = 0;
             bool redraw = true;
             while (!cancellationToken.IsCancellationRequested)
             {
-                int width = Math.Max(1, Console.WindowWidth);
-                int height = Math.Max(1, Console.WindowHeight);
+                int width = Math.Max(1, terminal.Width);
+                int height = Math.Max(1, terminal.Height);
                 if (redraw || width != lastWidth || height != lastHeight)
                 {
-                    Console.Write(Render(state, width, height));
+                    terminal.Output.Write(Render(state, width, height));
                     lastWidth = width;
                     lastHeight = height;
                     redraw = false;
                 }
-                if (Console.KeyAvailable)
+                if (terminal.KeyAvailable)
                 {
-                    if (!state.Handle(Console.ReadKey(intercept: true), Math.Max(1, height - 7))) { break; }
+                    if (!state.Handle(terminal.ReadKey(), Math.Max(1, height - 7))) { break; }
                     redraw = true;
                 }
                 else
                 {
-                    cancellationToken.WaitHandle.WaitOne(80);
+                    terminal.Wait(cancellationToken);
                 }
             }
         }
         finally
         {
-            Console.Write("\u001b[0m\u001b[?25h\u001b[?1049l");
-            Console.TreatControlCAsInput = originalControlC;
+            try { terminal.Output.Write("\u001b[0m\u001b[?25h\u001b[?1049l"); }
+            finally { terminal.ControlCAsInput = originalControlC; }
         }
     }
 
