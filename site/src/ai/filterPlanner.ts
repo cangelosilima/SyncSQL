@@ -310,8 +310,8 @@ async function classifyIntent(clause: string, adapter: EmbeddingAdapter, signal?
     score: dot(queryVector, vectors[index + 1] ?? []),
   })).sort((a, b) => b.score - a.score)
   const first = ranked[0]
-  if (!first) return null
-  return { ...first, margin: first.score - (ranked[1]?.score ?? 0) }
+  // Every request ranks the same seven prototypes, even if vectors are missing.
+  return { ...first, margin: first.score - ranked[1].score }
 }
 
 function dot(a: number[], b: number[]): number {

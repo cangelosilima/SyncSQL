@@ -60,7 +60,8 @@ class Spool {
 
 async function* lines(file) {
   const reader = createInterface({ input: createReadStream(file), crlfDelay: Infinity })
-  for await (const line of reader) if (line) yield JSON.parse(line)
+  // Spool.append writes exactly one JSON value per line.
+  for await (const line of reader) yield JSON.parse(line)
 }
 
 /** Export a static snapshot without ever parsing the full nodes/edges arrays. */
@@ -148,7 +149,6 @@ export async function partitionCatalog(
       let nodes = []
       let bytes = 0
       const flush = async () => {
-        if (!nodes.length) return
         const part = partitions.length
         for (const node of nodes) partOf[route.get(node.id)] = part
         const summaries = nodes.map(
@@ -234,11 +234,9 @@ export async function partitionCatalog(
       if (!summaryGroups.has(scope)) summaryGroups.set(scope, [])
       summaryGroups.get(scope).push({ partition: part, nodes: summaries })
       const payload = { edges: [], orphanedReferences: [], systemReferences: [], linkedServerReferences: [] }
-      try {
-        for await (const { field, value } of lines(path.join(temporary, `edges-${part}`))) payload[field].push(value)
-      } catch (error) {
-        if (error.code !== 'ENOENT') throw error
-      }
+      // Every partition has an edge spool, including partitions with no edges.
+      // A missing spool is a publication failure, not an empty relationship set.
+      for await (const { field, value } of lines(path.join(temporary, `edges-${part}`))) payload[field].push(value)
       partitions[part].edges = await writePart(payload)
       partitions[part].orphanedReferenceCount = payload.orphanedReferences.length
     }
@@ -247,7 +245,6 @@ export async function partitionCatalog(
       let page = []
       let bytes = 0
       const flush = async () => {
-        if (!page.length) return
         summaries.push({
           file: await writePart(page),
           count: page.reduce((count, group) => count + group.nodes.length, 0),

@@ -66,7 +66,7 @@ export default function TypeActivityHeatmap({
   return (
     <ul className="type-heatmap-list">
       {types.map((type) => {
-        const row = matrix.get(type) ?? []
+        const row = matrix.get(type)!
         const total = row.reduce((a, b) => a + b, 0)
         const color = colorForType(type)
         const rowMax = Math.max(1, ...row)

@@ -166,7 +166,6 @@ export default function ObjectPage() {
                     }
                     onClick={() => {
                       if (compareMode) {
-                        if (!available) return
                         setDiffPicks((prev) => {
                           if (prev.includes(version.sha)) return prev.filter((s) => s !== version.sha)
                           if (prev.length >= 2) return [prev[1], version.sha]
@@ -296,10 +295,7 @@ export default function ObjectPage() {
             </button>
           </div>
         )}
-        <CodeBlock
-          code={viewingVersion ? (viewingVersion.ddl ?? '-- Not available at this revision.') : node.ddl}
-          formatted={formatted}
-        />
+        <CodeBlock code={viewingVersion ? viewingVersion.ddl! : node.ddl} formatted={formatted} />
 
         {!viewingVersion &&
           node.sections.map((section) => (

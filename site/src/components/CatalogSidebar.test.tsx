@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import CatalogSidebar from './CatalogSidebar'
 import { makeNode } from '../test/fixtures'
 import { decodeTokensFromUrl } from '../lib/filters'
@@ -13,6 +13,62 @@ function Location() {
     </output>
   )
 }
+it('resizes with pointer capture, stops on all cancellation events, and tolerates disabled storage', () => {
+  const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    throw new Error('disabled')
+  })
+  const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('disabled')
+  })
+  vi.stubGlobal('PointerEvent', MouseEvent)
+  const { unmount } = render(
+    <MemoryRouter>
+      <CatalogSidebar nodes={[]} />
+    </MemoryRouter>,
+  )
+  const resizer = screen.getByRole('separator')
+  Object.defineProperty(resizer, 'setPointerCapture', { value: vi.fn() })
+  expect(resizer).toHaveAttribute('aria-valuenow', '280')
+  fireEvent.pointerMove(resizer, { clientX: 50 })
+  for (const end of ['pointerUp', 'pointerCancel', 'lostPointerCapture'] as const) {
+    fireEvent.pointerDown(resizer, { clientX: 0 })
+    fireEvent.pointerMove(resizer, { clientX: 20 })
+    fireEvent[end](resizer)
+    const width = resizer.getAttribute('aria-valuenow')
+    fireEvent.pointerMove(resizer, { clientX: 100 })
+    expect(resizer).toHaveAttribute('aria-valuenow', width)
+  }
+  expect(resizer).toHaveAttribute('aria-valuenow', '340')
+  fireEvent.keyDown(resizer, { key: 'ArrowLeft' })
+  expect(resizer).toHaveAttribute('aria-valuenow', '320')
+  fireEvent.keyDown(resizer, { key: 'Home' })
+  expect(resizer).toHaveAttribute('aria-valuenow', '220')
+  fireEvent.keyDown(resizer, { key: 'Escape' })
+  unmount()
+  get.mockRestore()
+  set.mockRestore()
+  vi.unstubAllGlobals()
+})
+it('uses precomputed link engines and tolerates missing remote endpoints and metadata', () => {
+  const link = makeNode({ id: 'link', type: 'LinkedServers', database: '_ServerLevel', schema: null })
+  link.linkTargetEngines = ['oracle', 'mssql', ' custom ']
+  render(
+    <MemoryRouter>
+      <CatalogSidebar
+        nodes={[link, makeNode({ id: 'target' })]}
+        linkedServerReferences={[
+          { from: 'target', linkedServer: 'link', to: 'target', name: 'T', schema: null },
+          { from: 'target', linkedServer: 'link', name: 'missing', schema: null },
+          { from: 'target', linkedServer: 'link', to: 'target', name: 'Again', schema: null },
+          { from: 'target', linkedServer: 'link', to: 'unknown', name: 'unknown', schema: null },
+        ]}
+      />
+    </MemoryRouter>,
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'SRV1 2' }))
+  fireEvent.click(screen.getByRole('button', { name: 'LinkedServers 1' }))
+  expect(screen.getByRole('link', { name: /Oracle, SQL Server, custom/ })).toBeVisible()
+})
 it('labels link destinations using target metadata, including aliases, without using the host engine', () => {
   const links = ['REMOTE', 'ALIAS', 'UNKNOWN'].map((name) =>
     makeNode({

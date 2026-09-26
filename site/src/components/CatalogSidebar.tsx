@@ -30,7 +30,8 @@ function Branches({
       for (const node of nodes) {
         const groupLevel =
           (level === 1 && node.database === '_ServerLevel') || (level === 2 && !node.schema?.trim()) ? 3 : level
-        const name = node[keys[groupLevel]] ?? '(unknown)'
+        // Schema-less objects skip directly to type; all other group keys are required.
+        const name = node[keys[groupLevel]]!
         const key = groupLevel + ':' + name
         if (!result.has(key)) result.set(key, { name, nodes: [], level: groupLevel })
         result.get(key)!.nodes.push(node)

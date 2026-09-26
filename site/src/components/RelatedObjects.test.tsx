@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -54,7 +54,7 @@ const catalog = {
   coChangePairs: [],
 } as unknown as Catalog
 
-const index = buildIndex(catalog)
+let index: ReturnType<typeof buildIndex> | null = buildIndex(catalog)
 
 vi.mock('../lib/CatalogContext', () => ({
   useCatalog: () => ({ loading: false, error: null, index }),
@@ -69,6 +69,29 @@ function renderList(ids: string[]) {
 }
 
 describe('RelatedObjects', () => {
+  it('expands column evidence and resets empty filters', () => {
+    index.edgeColumns.set(`${hub.id}|${tables[0].id}`, ['a', 'b', 'c', 'd', 'e', 'f', 'g'])
+    index.dynamicEdges.add(`${hub.id}|${tables[0].id}`)
+    const view = renderList(dependencies.map((n) => n.id))
+    fireEvent.click(screen.getByRole('button', { name: '+1 more' }))
+    expect(screen.getByText('g')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'show less' }))
+    expect(screen.queryByText('g')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filter to Tables (40)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the Tables filter' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 40' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show fewer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tables 40' }))
+    expect(screen.queryByText('dynamic')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'absent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(screen.getByRole('searchbox')).toHaveValue('')
+    view.unmount()
+    renderList([])
+    expect(screen.getByText('None found.')).toBeVisible()
+    index.edgeColumns.delete(`${hub.id}|${tables[0].id}`)
+    index.dynamicEdges.delete(`${hub.id}|${tables[0].id}`)
+  })
   it('stays a plain list when there are few enough dependencies to just read', () => {
     renderList(tables.slice(0, 4).map((n) => n.id))
 
@@ -129,4 +152,16 @@ describe('RelatedObjects', () => {
     expect(screen.getByText(/grouped into 2 groups/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Show all 40' })).toBeInTheDocument()
   })
+})
+
+it('waits for a catalog before resolving relationships', () => {
+  const saved = index
+  index = null
+  try {
+    expect(
+      render(<RelatedObjects title="Used by" rootId="root" ids={['missing']} direction="incoming" />).container,
+    ).toBeEmptyDOMElement()
+  } finally {
+    index = saved
+  }
 })
