@@ -28,6 +28,7 @@ RootCommand rootCommand = new("syncsql - extraction, lineage, and catalog buildi
     CatalogCommand.Build(host.Services),
     MetricsCommand.Build(host.Services),
     LintCommand.Build(host.Services),
+    ParserCommand.Build(),
 };
 
 return await rootCommand.Parse(args).InvokeAsync();
