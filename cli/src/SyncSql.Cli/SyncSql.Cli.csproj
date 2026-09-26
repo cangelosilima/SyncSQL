@@ -32,8 +32,16 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>syncsql</ToolCommandName>
     <PackageId>SyncSql.Cli</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
     <Description>Extraction, lineage, and catalog building for a fleet of MSSQL/Oracle servers - the syncsql CLI.</Description>
     <PackageOutputPath>$(MSBuildThisFileDirectory)../../nupkg</PackageOutputPath>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../docs/cli.md" Pack="true" PackagePath="README.md" />
+    <None Include="../../../grammar/src/SyncSql.Grammar.PlSql/Grammar/NOTICE.md" Pack="true" PackagePath="licenses/plsql/NOTICE.md" />
+    <None Include="../../../grammar/src/SyncSql.Grammar.PlSql/Grammar/LICENSE.txt" Pack="true" PackagePath="licenses/plsql/LICENSE.txt" />
+  </ItemGroup>
 
 </Project>

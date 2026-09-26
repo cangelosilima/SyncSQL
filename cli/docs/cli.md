@@ -45,14 +45,14 @@ Windows authentication can instead use the identity running the CLI.
 `syncsql` is published as a [dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools).
 
 ```bash
-dotnet tool install --global SyncSql.Cli --add-source <nexus-nuget-feed-url>
+dotnet tool install --global SyncSql.Cli
 ```
 
 Once installed, the `syncsql` command is on your `PATH` (dotnet prints
 the exact line to add if it isn't already). Upgrade with:
 
 ```bash
-dotnet tool update --global SyncSql.Cli --add-source <nexus-nuget-feed-url>
+dotnet tool update --global SyncSql.Cli
 ```
 
 Requires the [.NET 10 runtime](https://dotnet.microsoft.com/download) (or
@@ -61,6 +61,10 @@ needed - `Oracle.ManagedDataAccess.Core` is a fully managed ADO.NET
 driver.
 
 ### Building and installing from source
+
+Maintainers publish to nuget.org with independent `cli-v*` release tags. See
+[NuGet publishing](../../docs/nuget-publishing.md) for authentication setup and
+the separate grammar release workflow.
 
 ```bash
 cd cli

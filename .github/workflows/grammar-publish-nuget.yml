@@ -1,0 +1,96 @@
+name: Publish SyncSql.Grammar.PlSql to NuGet
+
+on:
+  push:
+    tags: ['grammar-v*']
+  pull_request:
+    paths:
+      - 'cli/**'
+      - 'grammar/**'
+      - 'global.json'
+      - '.github/workflows/grammar-publish-nuget.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the selected release tag to NuGet (otherwise only validate)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-grammar-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Resolve and validate version
+        shell: pwsh
+        env:
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+        run: |
+          $version = [DateTime]::UtcNow.ToString('yyyy.M.d', [Globalization.CultureInfo]::InvariantCulture) + "-ci.$env:GITHUB_RUN_NUMBER.$env:GITHUB_RUN_ATTEMPT"
+          if ($env:GITHUB_REF -like 'refs/tags/grammar-v*') {
+            $version = $env:GITHUB_REF_NAME.Substring('grammar-v'.Length)
+            if ($version -cnotmatch '^(?<year>[1-9][0-9]{3})\.(?<month>[1-9]|1[0-2])\.(?<day>[1-9]|[12][0-9]|3[01])(\.(?<revision>[1-9][0-9]{0,4}))?(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$') {
+              throw "Invalid release version: $version. Use grammar-vYYYY.M.D[.REV] with an optional prerelease suffix."
+            }
+            if ([int]$Matches.day -gt [DateTime]::DaysInMonth([int]$Matches.year, [int]$Matches.month)) {
+              throw "Invalid calendar date in release version: $version."
+            }
+            if ($Matches.revision -and [int]$Matches.revision -gt 65534) {
+              throw 'The same-day revision must be between 1 and 65534 for .NET assembly version compatibility.'
+            }
+          } elseif ($env:PUBLISH -eq 'true') {
+            throw 'Publishing requires selecting an existing grammar-v* tag.'
+          }
+          "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Test
+        run: dotnet test cli/tests/SyncSql.Lineage.Oracle.Tests/SyncSql.Lineage.Oracle.Tests.csproj --configuration Release -p:ContinuousIntegrationBuild=true
+      - name: Pack
+        run: >-
+          dotnet pack cli/src/SyncSql.Grammar.PlSql/SyncSql.Grammar.PlSql.csproj
+          --configuration Release --output artifacts
+          -p:Version="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SyncSql.Grammar.PlSql-nuget
+          path: artifacts/SyncSql.Grammar.PlSql.*.nupkg
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: SyncSql.Grammar.PlSql-nuget
+          path: artifacts
+      - name: Authenticate to NuGet
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      - name: Publish package
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: >-
+          dotnet nuget push "artifacts/SyncSql.Grammar.PlSql.*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "$NUGET_API_KEY" --skip-duplicate

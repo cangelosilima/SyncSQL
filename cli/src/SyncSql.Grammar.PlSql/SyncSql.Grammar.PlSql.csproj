@@ -10,7 +10,13 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <IsPackable>false</IsPackable>
+    <IsPackable>true</IsPackable>
+    <PackageId>SyncSql.Grammar.PlSql</PackageId>
+    <Description>Oracle SQL and PL/SQL lexer, parser, and visitor generated with ANTLR 4.13.1. Targets .NET Standard 2.0.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>oracle;sql;plsql;antlr;parser;grammar</PackageTags>
     <NoWarn>$(NoWarn);CS3021</NoWarn>
   </PropertyGroup>
 
@@ -35,6 +41,9 @@
   <ItemGroup>
     <!-- Runtime only. The parser generator is not a build dependency. -->
     <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+    <None Include="../../../grammar/README.md" Pack="true" PackagePath="README.md" />
+    <None Include="../../../grammar/src/SyncSql.Grammar.PlSql/Grammar/NOTICE.md" Pack="true" PackagePath="NOTICE.md" />
+    <None Include="../../../grammar/src/SyncSql.Grammar.PlSql/Grammar/LICENSE.txt" Pack="true" PackagePath="LICENSE.txt" />
   </ItemGroup>
 
 </Project>

@@ -2,6 +2,18 @@
 
 The complete Oracle SQL and PL/SQL parser used by `SyncSql.Lineage.Oracle`.
 
+## NuGet package
+
+Install the standalone .NET Standard 2.0 parser with:
+
+```bash
+dotnet add package SyncSql.Grammar.PlSql
+```
+
+The package includes the ANTLR runtime dependency and the upstream license and
+notice. It is released independently of the CLI using `grammar-v*` tags; see
+[NuGet publishing](../docs/nuget-publishing.md) for setup and release instructions.
+
 ## Java-free build design
 
 The human-readable grammar remains the Apache-2.0 `sql/plsql` grammar from
