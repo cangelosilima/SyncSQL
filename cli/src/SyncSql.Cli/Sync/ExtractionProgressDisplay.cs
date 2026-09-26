@@ -9,7 +9,7 @@ namespace SyncSql.Cli.Sync;
 internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(int Width, int Height)>? size = null, bool? colorEnabled = null)
 {
     internal object Gate { get; } = new();
-    private ExtractionProgressDisplay? _display;
+    private ITerminalProgressDisplay? _display;
     private int _rows;
     internal bool Animated => animated;
     internal bool ColorEnabled { get; } = colorEnabled ?? false;
@@ -27,12 +27,27 @@ internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(in
     {
         lock (Gate)
         {
-            _display = new(this);
+            ExtractionProgressDisplay display = new(this);
+            _display = display;
             if (animated)
             {
                 output.Write("\e[?25l");
             }
-            return _display;
+            return display;
+        }
+    }
+
+    public CatalogProgressDisplay StartCatalog(Action<string>? log = null)
+    {
+        lock (Gate)
+        {
+            CatalogProgressDisplay display = new(this, log ?? (message => WriteLog(message + Environment.NewLine)));
+            _display = display;
+            if (animated)
+            {
+                output.Write("\e[?25l");
+            }
+            return display;
         }
     }
 
@@ -66,7 +81,7 @@ internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(in
         }
     }
 
-    internal void Finish(ExtractionProgressDisplay display)
+    internal void Finish(ITerminalProgressDisplay display)
     {
         lock (Gate)
         {
@@ -108,7 +123,12 @@ internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(in
     }
 }
 
-internal sealed class ExtractionProgressDisplay : IAsyncDisposable
+internal interface ITerminalProgressDisplay
+{
+    public string[] Lines(int width, int height);
+}
+
+internal sealed class ExtractionProgressDisplay : IAsyncDisposable, ITerminalProgressDisplay
 {
     private sealed class ServerState(string name)
     {
@@ -180,7 +200,7 @@ internal sealed class ExtractionProgressDisplay : IAsyncDisposable
         }
     }
 
-    internal string[] Lines(int width, int height)
+    public string[] Lines(int width, int height)
     {
         lock (_terminal.Gate)
         {

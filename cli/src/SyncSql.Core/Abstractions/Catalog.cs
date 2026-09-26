@@ -31,7 +31,14 @@ public sealed record CatalogBuildRequest
     /// outright. See <see cref="LineageAnalysisOptions.DynamicSql"/>.
     /// </summary>
     public bool DynamicSql { get; init; } = true;
+
+    /// <summary>Optional synchronous observer for build phases and object-level progress.</summary>
+    public IProgress<CatalogProgress>? Progress { get; init; }
 }
+
+/// <summary>Progress within one catalog phase; totals are unknown while discovering files.</summary>
+public sealed record CatalogProgress(string Activity, int Completed = 0, int? Total = null,
+    string? Current = null, string Unit = "objects", int? Nodes = null, int? Edges = null);
 
 /// <summary>An extracted scope and its metrics history. Multiple scopes must share unique server identities.</summary>
 public sealed record CatalogInput
@@ -43,7 +50,8 @@ public sealed record CatalogInput
 /// <summary>Publishes the site's versioned manifest and compressed, content-addressed payloads.</summary>
 public interface ICatalogPublisher
 {
-    public Task PublishAsync(Catalog catalog, string manifestPath, bool prune, CancellationToken cancellationToken);
+    public Task PublishAsync(Catalog catalog, string manifestPath, bool prune, CancellationToken cancellationToken,
+        IProgress<CatalogProgress>? progress = null);
 }
 
 /// <summary>

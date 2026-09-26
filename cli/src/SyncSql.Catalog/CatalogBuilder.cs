@@ -33,6 +33,7 @@ public sealed class CatalogBuilder(
         IReadOnlyList<CatalogInput> inputs = request.Inputs.Count > 0 ? request.Inputs
             : [new CatalogInput { ObjectsRoot = request.ObjectsRoot, MetricsRoot = request.MetricsRoot }];
         HashSet<string> seenFiles = new(FileSystemPaths.Comparer);
+        request.Progress?.Report(new("Scanning files", Unit: "files"));
         foreach (CatalogInput input in inputs)
         {
             if (!Directory.Exists(input.ObjectsRoot))
@@ -47,6 +48,7 @@ public sealed class CatalogBuilder(
                 {
                     continue;
                 }
+                request.Progress?.Report(new("Scanning files", seenFiles.Count - 1, Current: file, Unit: "files", Nodes: nodes.Count));
                 CatalogNode? node = await TryLoadNodeAsync(input.ObjectsRoot, file, cancellationToken);
                 if (node is not null)
                 {
@@ -57,6 +59,8 @@ public sealed class CatalogBuilder(
             }
         }
 
+        request.Progress?.Report(new("Scanning files", seenFiles.Count, seenFiles.Count, Unit: "files", Nodes: nodes.Count));
+        request.Progress?.Report(new("Resolving identities", Nodes: nodes.Count));
         foreach (var server in nodes.GroupBy(node => node.Server, StringComparer.OrdinalIgnoreCase))
         {
             if (server.Select(node => node.Engine).OfType<DatabaseEngine>().Distinct().Count() > 1)
@@ -79,7 +83,7 @@ public sealed class CatalogBuilder(
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation("Inferring lineage edges and column references");
-        LineageInferenceResult lineage = InferLineage(nodes, nodesById, nodeIndex, new LineageAnalysisOptions { DynamicSql = request.DynamicSql }, cancellationToken);
+        LineageInferenceResult lineage = InferLineage(nodes, nodesById, nodeIndex, new LineageAnalysisOptions { DynamicSql = request.DynamicSql }, request.Progress, cancellationToken);
         List<CatalogEdge> edges = lineage.Edges;
         List<CatalogOrphanedReference> orphanedReferences = lineage.OrphanedReferences;
         if (orphanedReferences.Count > 0)
@@ -108,6 +112,8 @@ public sealed class CatalogBuilder(
         {
             for (int i = 0; i < nodes.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                request.Progress?.Report(new("Loading metrics", i, nodes.Count, nodes[i].Id));
                 List<MetricsSnapshot> metrics = [];
                 foreach (var source in metricSourcesByObject[nodes[i].Id])
                 {
@@ -127,12 +133,14 @@ public sealed class CatalogBuilder(
                     };
                 }
             }
+            request.Progress?.Report(new("Loading metrics", nodes.Count, nodes.Count));
         }
 
         List<CatalogCommit> recentChanges = [];
         List<CoChangePair> coChangePairs = [];
         if (request.RepoRoot is not null)
         {
+            request.Progress?.Report(new("Mining Git history", Current: request.RepoRoot, Unit: "commits"));
             GitHistoryMiningResult history = await gitHistoryMiner.MineAsync(new GitHistoryMiningRequest
             {
                 RepoRoot = request.RepoRoot,
@@ -158,6 +166,7 @@ public sealed class CatalogBuilder(
         }
 
         logger.LogInformation("Built {NodeCount} node(s), {EdgeCount} edge(s)", nodes.Count, edges.Count);
+        request.Progress?.Report(new("Assembling catalog", nodes.Count, nodes.Count, Nodes: nodes.Count, Edges: edges.Count));
 
         List<CatalogServer> serverDetails = [.. nodes.GroupBy(n => n.Server, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
@@ -262,7 +271,7 @@ public sealed class CatalogBuilder(
     }
 
     private LineageInferenceResult InferLineage(List<CatalogNode> nodes, IReadOnlyDictionary<string, CatalogNode> nodesById,
-        NodeIndex nodeIndex, LineageAnalysisOptions analysisOptions, CancellationToken cancellationToken)
+        NodeIndex nodeIndex, LineageAnalysisOptions analysisOptions, IProgress<CatalogProgress>? progress, CancellationToken cancellationToken)
     {
         // Index rather than a set: an edge already recorded from a dynamic reference has to be
         // upgradeable when a static one turns up for the same pair.
@@ -291,9 +300,11 @@ public sealed class CatalogBuilder(
             }
         }
 
-        foreach (CatalogNode node in nodes)
+        for (int nodeNumber = 0; nodeNumber < nodes.Count; nodeNumber++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            CatalogNode node = nodes[nodeNumber];
+            progress?.Report(new("Inferring lineage", nodeNumber, nodes.Count, node.Id, Nodes: nodes.Count, Edges: edges.Count));
             if (node.Engine is not { } engine)
             {
                 // No "-- Engine:" header (a file predating that field, or a foreign file this tool
@@ -423,6 +434,8 @@ public sealed class CatalogBuilder(
             }
         }
 
+        progress?.Report(new("Inferring lineage", nodes.Count, nodes.Count, Nodes: nodes.Count, Edges: edges.Count));
+        progress?.Report(new("Resolving column references", Total: edges.Count, Unit: "edges"));
         for (int i = 0; i < edges.Count; i++)
         {
             if (columnsByEdge.TryGetValue((edges[i].From, edges[i].To), out IReadOnlyList<string>? columns))

@@ -15,8 +15,10 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
     private const int MaxNodes = 1024;
     private const int MaxBytes = 2 * 1024 * 1024;
 
-    public async Task PublishAsync(Core.Domain.Catalog catalog, string manifestPath, bool prune, CancellationToken cancellationToken)
+    public async Task PublishAsync(Core.Domain.Catalog catalog, string manifestPath, bool prune, CancellationToken cancellationToken,
+        IProgress<CatalogProgress>? progress = null)
     {
+        progress?.Report(new("Preparing partitions", Total: catalog.Nodes.Count, Nodes: catalog.Nodes.Count, Edges: catalog.Edges.Count));
         manifestPath = Path.GetFullPath(manifestPath);
         string output = Path.GetDirectoryName(manifestPath)!;
         Directory.CreateDirectory(Path.Combine(output, "_catalog"));
@@ -30,6 +32,7 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
             foreach (CatalogNode node in scope)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(new("Preparing partitions", routes.Count, catalog.Nodes.Count, node.Id));
                 int size = JsonSerializer.SerializeToUtf8Bytes(node, SyncSqlJsonOptions.Default).Length;
                 if (chunk.Count > 0 && (chunk.Count >= MaxNodes || bytes + size > MaxBytes))
                 {
@@ -50,6 +53,8 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
             }
         }
 
+        progress?.Report(new("Preparing partitions", routes.Count, catalog.Nodes.Count));
+        progress?.Report(new("Routing references", Total: catalog.Edges.Count, Unit: "edges"));
         List<CatalogEdge>[] edges = [.. groups.Select(_ => new List<CatalogEdge>())];
         List<CatalogOrphanedReference>[] orphans = [.. groups.Select(_ => new List<CatalogOrphanedReference>())];
         List<CatalogSystemReference>[] systems = [.. groups.Select(_ => new List<CatalogSystemReference>())];
@@ -93,6 +98,7 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
         {
             cancellationToken.ThrowIfCancellationRequested();
             List<CatalogNode> nodes = groups[part];
+            progress?.Report(new("Publishing payloads", part, groups.Count, $"{nodes[0].Server}/{nodes[0].Database}", "partitions"));
             JsonArray details = [];
             JsonArray summaryNodes = [];
             foreach (CatalogNode node in nodes)
@@ -147,6 +153,8 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
             summaryBytes += size;
         }
         await FlushSummaries();
+        progress?.Report(new("Publishing payloads", groups.Count, groups.Count, Unit: "partitions"));
+        progress?.Report(new("Computing overview"));
 
         // Same six-hop, stop-after-crossing-server ranking used by the site's overview.
         var ranked = catalog.Nodes.Where(node => node.Type == "Tables" && incoming[node.Id].Count > 0)
@@ -190,9 +198,12 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
             summaries,
             partitions,
         };
+        progress?.Report(new("Writing manifest", Current: manifestPath, Total: 1, Unit: "files"));
         await WriteAtomically(manifestPath, JsonSerializer.SerializeToUtf8Bytes(manifest, SyncSqlJsonOptions.Default), cancellationToken);
+        progress?.Report(new("Writing manifest", 1, 1, manifestPath, "files"));
         if (prune)
         {
+            progress?.Report(new("Pruning old payloads", Unit: "files"));
             foreach (string file in Directory.EnumerateFiles(Path.Combine(output, "_catalog")))
             {
                 string relative = "_catalog/" + Path.GetFileName(file);
@@ -202,6 +213,7 @@ public sealed partial class CatalogPublisher : ICatalogPublisher
                 }
             }
         }
+        progress?.Report(new("Published", catalog.Nodes.Count, catalog.Nodes.Count, manifestPath, Nodes: catalog.Nodes.Count, Edges: catalog.Edges.Count));
 
         void Route<T>(List<T>[] buckets, T value, params string?[] ids)
         {
