@@ -53,6 +53,14 @@ also reduce the score. Do not exclude survivors simply to raise the score.
 
 ## CI and score policy
 
+The repository's `pre-push` hook runs the same three required mutation scopes and
+thresholds listed below after ordinary tests, coverage, lint, and type checks.
+Any mutation failure blocks the push. Core and CLI runs execute sequentially;
+allow roughly 15–25 additional minutes, depending on the machine. CLI mutation
+reports are saved in `TestResults/pre-push/<run>/mutation/<project>/reports/`;
+site reports remain in `site/reports/mutation/`. Enable the repository hook with
+`git config core.hooksPath .githooks` and use the prerequisites listed above.
+
 The [Mutation testing workflow](../.github/workflows/mutation.yml) runs every Monday
 and can be started manually with GitHub Actions. CLI projects run as separate jobs
 (at most two concurrently); each Stryker run uses two workers. Jobs have a two-hour
