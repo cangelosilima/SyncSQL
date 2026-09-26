@@ -21,17 +21,7 @@ public static class SyncSqlConfigLoader
         }
 
         await using FileStream stream = File.OpenRead(path);
-        SyncSqlConfig config;
-        try
-        {
-            config = await JsonSerializer.DeserializeAsync<SyncSqlConfig>(stream, SerializerOptions, cancellationToken)
-                ?? throw new ConfigValidationException($"Config file '{path}' is empty or 'null'.");
-        }
-        catch (JsonException ex)
-        {
-            throw new ConfigValidationException($"Config file '{path}' could not be parsed: {ex.Message}");
-        }
-
+        SyncSqlConfig config = await DeserializeAsync(stream, path, cancellationToken);
         Validate(config, path);
         string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         return config with
@@ -49,6 +39,19 @@ public static class SyncSqlConfigLoader
         })]
         };
         string? ResolvePath(string? value) => value is null ? null : Path.GetFullPath(value, directory);
+    }
+
+    private static async Task<SyncSqlConfig> DeserializeAsync(Stream stream, string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await JsonSerializer.DeserializeAsync<SyncSqlConfig>(stream, SerializerOptions, cancellationToken)
+                ?? throw new ConfigValidationException($"Config file '{path}' is empty or 'null'.");
+        }
+        catch (JsonException ex)
+        {
+            throw new ConfigValidationException($"Config file '{path}' could not be parsed: {ex.Message}");
+        }
     }
 
     private static void Validate(SyncSqlConfig config, string path)

@@ -71,6 +71,7 @@ public sealed class SystemProcessRunnerTests : IDisposable
 
         Assert.False(result.Succeeded);
         Assert.NotEqual(0, result.ExitCode);
+        Assert.False(string.IsNullOrWhiteSpace(result.StandardError));
     }
 
     [Fact]

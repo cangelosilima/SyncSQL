@@ -41,7 +41,7 @@ internal sealed class SyncSqlTerminal(TextWriter output, bool animated, Func<(in
     {
         lock (Gate)
         {
-            CatalogProgressDisplay display = new(this, log ?? (message => WriteLog(message + Environment.NewLine)));
+            CatalogProgressDisplay display = new(this, log ?? (message => WriteLog($"{message}{Environment.NewLine}")));
             _display = display;
             if (animated)
             {

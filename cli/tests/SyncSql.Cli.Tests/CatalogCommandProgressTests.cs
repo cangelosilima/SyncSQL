@@ -14,6 +14,30 @@ public sealed class CatalogCommandProgressTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task HandledBuildErrorsReturnFailureAndRestoreTerminal(bool missingDirectory)
+    {
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        var builder = Substitute.For<ICatalogBuilder>();
+        Exception failure = missingDirectory ? new DirectoryNotFoundException("Missing input") : new InvalidDataException("Invalid catalog");
+        builder.BuildAsync(Arg.Any<CatalogBuildRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<Core.Domain.Catalog>(failure));
+        ServiceCollection registrations = new();
+        registrations.AddLogging();
+        registrations.AddSingleton(builder);
+        registrations.AddSingleton(new SyncSqlTerminal(output, animated: true));
+        using ServiceProvider services = registrations.BuildServiceProvider();
+
+        int exit = await new RootCommand { CatalogCommand.Build(services) }
+            .Parse(["catalog", "build", "--objects-root", Path.GetTempPath()]).InvokeAsync();
+        Assert.Equal(1, exit);
+        Assert.Contains("Catalog Failed", output.ToString());
+        Assert.DoesNotContain("Catalog Done", output.ToString());
+        Assert.EndsWith("\e[?25h", output.ToString());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task InterruptedBuild_PreservesExceptionAndTerminalStatus(bool cancelled)
     {
         using StringWriter output = new(CultureInfo.InvariantCulture);

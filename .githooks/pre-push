@@ -90,6 +90,17 @@ try {
     Invoke-CheckedCommand npm @('run', 'lint') $sitePath
     Invoke-CheckedCommand npm @('run', 'typecheck') $sitePath
     Invoke-CheckedCommand npm @('run', 'test:coverage') $sitePath
+
+    # Match the measured scopes and thresholds required by the Quality workflow.
+    $mutationRunner = Join-Path $repoRoot 'scripts/Run-MutationTests.ps1'
+    $mutationRoot = Join-Path $coverageRoot 'mutation'
+    & $mutationRunner -Project Core -BreakAt 90 -ArtifactsPath $mutationRoot
+    & $mutationRunner -Project Cli -BreakAt 55 -ArtifactsPath $mutationRoot -Mutate @(
+        '**/Commands/SyncCommand.cs',
+        '**/Commands/CatalogCommand.cs',
+        '**/Sync/ExtractionProgressDisplay.cs'
+    )
+    Invoke-CheckedCommand npm @('run', 'test:mutation', '--', 'stryker.ci.config.mjs') $sitePath
 }
 finally {
     Write-Host "Coverage reports: $coverageRoot"
