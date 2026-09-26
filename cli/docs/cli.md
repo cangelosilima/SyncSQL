@@ -278,6 +278,47 @@ Findings are logged one per line as `path:line:column [rule-id] message`, at
 Exit code `0` if nothing at or above `--fail-on` was found; `1` otherwise (or
 if a given `--path` doesn't exist).
 
+### `syncsql parser`
+
+Open a SQL file in a read-only, keyboard-driven terminal dashboard:
+
+```bash
+syncsql parser --file ./procedure.sql
+syncsql parser --file ./package.sql --engine oracle
+syncsql parser --file ./procedure.sql --plain
+# From the repository, without installing:
+dotnet run --project cli/src/SyncSql.Cli -- parser --file ./procedure.sql
+```
+
+SQL Server is the default dialect. Use `--engine oracle` for PL/SQL; the
+command uses the existing ScriptDom and ANTLR grammars and lineage analyzers.
+No database connection or server configuration is required.
+
+The dashboard has seven views: syntax tree, tokens (including comments and
+whitespace), referenced objects, alias bindings, column references,
+diagnostics, and full source. Select a syntax node or token to see its SQL
+and line/column location in the right pane. Objects include static/dynamic
+origin information. References are inferred from the script, without catalog
+resolution; syntax errors leave a partial tree available for inspection.
+
+| Key | Action |
+| --- | --- |
+| Tab / Shift+Tab, Left / Right | Switch views |
+| 1–7 | Jump to a view |
+| Up / Down or k / j | Select a piece |
+| Home / End | Select first / last piece |
+| /, then Enter | Filter piece names and descriptions |
+| Esc while filtering | Clear filter |
+| PageUp / PageDown | Scroll the detail/source pane |
+| h / l | Pan the detail pane horizontally |
+| q / Esc / Ctrl+C | Exit |
+
+Use a terminal of at least 70 columns by 12 rows. Resizing redraws the
+dashboard. `--plain`, redirected input/output, or `TERM=dumb` prints all views
+as text without interactive controls. Exit code is 1 for parse errors or an
+unreadable file and 0 for a clean parse, including an empty file. The input
+file is never modified.
+
 ## Configuration
 
 `syncsql` reads the exact same `config/servers.json` schema as the
