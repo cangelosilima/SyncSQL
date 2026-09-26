@@ -21,6 +21,12 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
 {
     private readonly ILogger<OracleLineageAnalyzer> _logger;
     private readonly Func<PlSqlParser, PlSqlParser.Sql_scriptContext> _parse;
+    private PredictionCaches? _idleCache;
+    internal const int MaxCachedScripts = 16;
+    internal const int MaxCachedCharacters = 1024 * 1024;
+    internal const int MaxCachedStates = 2048;
+    internal const int MaxCachedConfigurations = 250_000;
+    internal const int MaxCachedContexts = 16_384;
 
     public OracleLineageAnalyzer(ILogger<OracleLineageAnalyzer> logger)
         : this(logger, parser => parser.sql_script()) { }
@@ -39,14 +45,32 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
     /// Nested scans have a shared count budget and depth/size bounds.
     /// </summary>
     public LineageAnalysisResult Analyze(string ddl, LineageAnalysisOptions? options = null)
-        => AnalyzeCore(ddl, options ?? LineageAnalysisOptions.Default, 0, new DynamicBudget());
+    {
+        // Lease the one idle cache exclusively. Concurrent callers get independent caches;
+        // neither interpreters, token streams nor trees are retained between calls.
+        PredictionCaches cache = Interlocked.Exchange(ref _idleCache, null) ?? new();
+        bool completed = false;
+        try
+        {
+            LineageAnalysisResult result = AnalyzeCore(ddl, options ?? LineageAnalysisOptions.Default, 0, new DynamicBudget(), cache);
+            completed = true;
+            return result;
+        }
+        finally
+        {
+            if (completed && cache.CanReuse())
+            {
+                Interlocked.CompareExchange(ref _idleCache, cache, null);
+            }
+        }
+    }
 
     private sealed class DynamicBudget
     {
         public int Remaining { get; set; } = 64;
     }
 
-    private LineageAnalysisResult AnalyzeCore(string ddl, LineageAnalysisOptions options, int depth, DynamicBudget budget)
+    private LineageAnalysisResult AnalyzeCore(string ddl, LineageAnalysisOptions options, int depth, DynamicBudget budget, PredictionCaches cache)
     {
         if (string.IsNullOrWhiteSpace(ddl))
         {
@@ -55,14 +79,16 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
 
         try
         {
+            cache.Scripts++;
+            cache.Characters += ddl.Length;
             AntlrInputStream inputStream = new(ddl);
-            PlSqlLexer lexer = new LocalCacheLexer(inputStream);
+            PlSqlLexer lexer = new LocalCacheLexer(inputStream, cache);
             CollectingErrorListener errorListener = new();
             lexer.RemoveErrorListeners();
             lexer.AddErrorListener(errorListener);
 
             CommonTokenStream tokenStream = new(lexer);
-            PlSqlParser parser = new LocalCacheParser(tokenStream);
+            PlSqlParser parser = new LocalCacheParser(tokenStream, cache);
             parser.RemoveErrorListeners();
             parser.AddErrorListener(errorListener);
 
@@ -75,7 +101,7 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
 
             PlSqlLineageVisitor visitor = new(options.DynamicSql ? sql =>
                 depth < 4 && sql.Length <= 65536 && budget.Remaining-- > 0
-                    ? AnalyzeCore(sql.EndsWith(';') ? sql : sql + ";", options, depth + 1, budget)
+                    ? AnalyzeCore(sql.EndsWith(';') ? sql : sql + ";", options, depth + 1, budget, cache)
                     : LineageAnalysisResult.Empty : null);
             visitor.Visit(tree);
 
@@ -88,27 +114,67 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            cache.Failed = true;
             _logger.LogWarning("PL/SQL parsing failed (skipping lineage for this object): {Message}", ex.Message);
             return LineageAnalysisResult.Empty;
         }
     }
 
-    // Generated recognizers use process-wide prediction caches by default. Diverse catalog
-    // DDL keeps growing those caches even after its parse trees have been collected.
-    // Keep both the DFA and its context cache local to this parse, including dynamic SQL.
+    // A cold PL/SQL DFA is expensive to construct. Reuse it briefly, with independent limits
+    // on lifetime, input volume, states, configurations and shared prediction contexts.
+    // Limits govern retention BETWEEN objects; a single complex parse can still exceed them.
+    private sealed class PredictionCaches
+    {
+        public DFA[]? Lexer { get; set; }
+        public DFA[]? Parser { get; set; }
+        public PredictionContextCache LexerContexts { get; } = new();
+        public PredictionContextCache ParserContexts { get; } = new();
+        public int Scripts { get; set; }
+        public long Characters { get; set; }
+        public bool Failed { get; set; }
+
+        public bool CanReuse()
+        {
+            if (Failed || Scripts >= MaxCachedScripts || Characters >= MaxCachedCharacters
+                || LexerContexts.Count + ParserContexts.Count > MaxCachedContexts)
+            {
+                return false;
+            }
+            int states = 0;
+            long configurations = 0;
+            foreach (DFA decision in (Lexer ?? []).Concat(Parser ?? []))
+            {
+                states += decision.states.Count;
+                if (states > MaxCachedStates)
+                {
+                    return false;
+                }
+                foreach (DFAState state in decision.states.Keys)
+                {
+                    configurations += state.configSet.Count;
+                    if (configurations > MaxCachedConfigurations)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
     private sealed class LocalCacheLexer : PlSqlLexer
     {
-        public LocalCacheLexer(ICharStream input) : base(input)
+        public LocalCacheLexer(ICharStream input, PredictionCaches cache) : base(input)
         {
-            Interpreter = new LexerATNSimulator(this, Atn, CreateDecisionCache(Atn), new PredictionContextCache());
+            Interpreter = new LexerATNSimulator(this, Atn, cache.Lexer ??= CreateDecisionCache(Atn), cache.LexerContexts);
         }
     }
 
     private sealed class LocalCacheParser : PlSqlParser
     {
-        public LocalCacheParser(ITokenStream input) : base(input)
+        public LocalCacheParser(ITokenStream input, PredictionCaches cache) : base(input)
         {
-            Interpreter = new ParserATNSimulator(this, Atn, CreateDecisionCache(Atn), new PredictionContextCache());
+            Interpreter = new ParserATNSimulator(this, Atn, cache.Parser ??= CreateDecisionCache(Atn), cache.ParserContexts);
         }
     }
 

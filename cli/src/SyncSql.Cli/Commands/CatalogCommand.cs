@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SyncSql.Cli.Composition;
+using SyncSql.Cli.Sync;
 using SyncSql.Core.Abstractions;
 using SyncSql.Core.Serialization;
 
@@ -83,6 +84,8 @@ internal static class CatalogCommand
         {
             ILogger logger = services.GetLogger(nameof(CatalogCommand));
             ICatalogBuilder catalogBuilder = services.GetRequiredService<ICatalogBuilder>();
+            SyncSqlTerminal terminal = services.GetService<SyncSqlTerminal>() ?? new(TextWriter.Null, animated: false);
+            await using CatalogProgressDisplay progress = terminal.StartCatalog(message => logger.LogInformation("{Progress}", message));
 
             try
             {
@@ -110,6 +113,7 @@ internal static class CatalogCommand
                     MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
                     MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
                     DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
+                    Progress = progress,
                 };
 
                 Core.Domain.Catalog catalog = await catalogBuilder.BuildAsync(request, cancellationToken);
@@ -118,7 +122,8 @@ internal static class CatalogCommand
                 {
                     Directory.CreateDirectory(outputDirectory);
                 }
-                await services.GetRequiredService<ICatalogPublisher>().PublishAsync(catalog, outputPath, parseResult.GetValue(pruneOption), cancellationToken);
+                await services.GetRequiredService<ICatalogPublisher>().PublishAsync(catalog, outputPath, parseResult.GetValue(pruneOption), cancellationToken, progress);
+                progress.Complete();
 
                 logger.LogInformation(
                     "Wrote consolidated catalog ({NodeCount} node(s), {EdgeCount} edge(s)) -> {Path}",
@@ -127,13 +132,25 @@ internal static class CatalogCommand
             }
             catch (DirectoryNotFoundException ex)
             {
+                progress.Complete("Failed");
                 logger.LogError("{Message}", ex.Message);
                 return 1;
             }
             catch (InvalidDataException ex)
             {
+                progress.Complete("Failed");
                 logger.LogError("{Message}", ex.Message);
                 return 1;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                progress.Complete("Cancelled");
+                throw;
+            }
+            catch
+            {
+                progress.Complete("Failed");
+                throw;
             }
         });
 

@@ -1,6 +1,8 @@
 ﻿using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using NSubstitute;
+using SyncSql.Core.Abstractions;
 using SyncSql.Core.Domain;
 
 namespace SyncSql.Catalog.Tests;
@@ -25,7 +27,15 @@ public sealed class CatalogPublisherTests : IDisposable
         };
         CatalogPublisher publisher = new();
         string manifestPath = Path.Combine(_root, "catalog.json");
-        await publisher.PublishAsync(catalog, manifestPath, false, CancellationToken.None);
+        List<CatalogProgress> updates = [];
+        var progress = Substitute.For<IProgress<CatalogProgress>>();
+        progress.When(observer => observer.Report(Arg.Any<CatalogProgress>()))
+            .Do(call => updates.Add(call.Arg<CatalogProgress>()));
+        await publisher.PublishAsync(catalog, manifestPath, false, CancellationToken.None, progress);
+        Assert.Contains(updates, update => update.Activity == "Publishing payloads" && update.Completed == 0 && update.Total == 3);
+        Assert.Contains(updates, update => update.Activity == "Publishing payloads" && update.Completed == 3 && update.Total == 3);
+        Assert.Equal("Published", updates[^1].Activity);
+        Assert.Equal(manifestPath, updates[^1].Current);
         JsonNode manifest = JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))!;
         var partitions = manifest["partitions"]!.AsArray();
         Assert.Equal(3, partitions.Count);
@@ -57,7 +67,8 @@ public sealed class CatalogPublisherTests : IDisposable
         await publisher.PublishAsync(catalog, manifestPath, false, CancellationToken.None);
         Assert.True(File.Exists(stale));
         string before = await File.ReadAllTextAsync(manifestPath);
-        await publisher.PublishAsync(catalog, manifestPath, true, CancellationToken.None);
+        await publisher.PublishAsync(catalog, manifestPath, true, CancellationToken.None, progress);
+        Assert.Contains(updates, update => update.Activity == "Pruning old payloads");
         Assert.Equal(before, await File.ReadAllTextAsync(manifestPath));
         Assert.False(File.Exists(stale));
         Assert.True(File.Exists(notes));

@@ -1,6 +1,6 @@
 {
   "Version": 1,
-  "Calibration": "Initial Windows x64 Release run, .NET 10.0.11 / SDK 10.0.203. Allocation ceilings include cross-platform headroom; runtime ceilings are coarse safeguards for shared CI runners. Oracle allocation totals reflect current parser churn, not resident RAM.",
+  "Calibration": "Windows x64 Release, .NET 10.0.11 / SDK 10.0.203. Oracle ceilings tightened after bounded prediction-cache reuse: measured 366/1450 MiB for 16/64-node builds and 461 MiB per parser batch. Allocation ceilings retain at least 2x headroom; runtime ceilings are coarse shared-CI safeguards. These are cumulative allocations, not resident RAM.",
   "Benchmarks": [
     {
       "FullName": "SyncSql.Benchmarks.CatalogBenchmarks.Build(Engine: MsSql, NodeCount: 16)",
@@ -14,13 +14,13 @@
     },
     {
       "FullName": "SyncSql.Benchmarks.CatalogBenchmarks.Build(Engine: Oracle, NodeCount: 16)",
-      "MaxMeanMilliseconds": 15000,
-      "MaxAllocatedBytes": 6500000000
+      "MaxMeanMilliseconds": 3000,
+      "MaxAllocatedBytes": 800000000
     },
     {
       "FullName": "SyncSql.Benchmarks.CatalogBenchmarks.Build(Engine: Oracle, NodeCount: 64)",
-      "MaxMeanMilliseconds": 60000,
-      "MaxAllocatedBytes": 26000000000
+      "MaxMeanMilliseconds": 10000,
+      "MaxAllocatedBytes": 3200000000
     },
     {
       "FullName": "SyncSql.Benchmarks.ParserBenchmarks.AnalyzeBatch(Engine: MsSql)",
@@ -29,8 +29,8 @@
     },
     {
       "FullName": "SyncSql.Benchmarks.ParserBenchmarks.AnalyzeBatch(Engine: Oracle)",
-      "MaxMeanMilliseconds": 15000,
-      "MaxAllocatedBytes": 6500000000
+      "MaxMeanMilliseconds": 3000,
+      "MaxAllocatedBytes": 1200000000
     },
     {
       "FullName": "SyncSql.Benchmarks.SyntheticRetentionBenchmarks.BuildAndSampleRetention(NodeCount: 64)",

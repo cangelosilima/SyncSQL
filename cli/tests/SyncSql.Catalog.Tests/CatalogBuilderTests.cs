@@ -10,6 +10,33 @@ namespace SyncSql.Catalog.Tests;
 public sealed class CatalogBuilderTests : IDisposable
 {
     [Fact]
+    public async Task BuildAsync_ReportsCurrentObjectBeforeAnalysisAndIncludesSkippedObjectsInTotals()
+    {
+        WriteObjectFile("SQL", "App", "Views", "dbo", "Orders", "SELECT Id FROM dbo.Missing;");
+        WriteObjectFile("SQL", "App", "Views", "dbo", "Empty", "");
+        List<CatalogProgress> updates = [];
+        var progress = Substitute.For<IProgress<CatalogProgress>>();
+        progress.When(observer => observer.Report(Arg.Any<CatalogProgress>()))
+            .Do(call => updates.Add(call.Arg<CatalogProgress>()));
+        _mssqlAnalyzer.Analyze(Arg.Any<string>(), Arg.Any<LineageAnalysisOptions?>()).Returns(call =>
+        {
+            Assert.Equal("Inferring lineage", updates[^1].Activity);
+            Assert.Contains("Orders", updates[^1].Current);
+            Assert.True(updates[^1].Completed < updates[^1].Total);
+            return LineageAnalysisResult.Empty;
+        });
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest
+        {
+            ObjectsRoot = _objectsRoot,
+            Progress = progress,
+        }, CancellationToken.None);
+        Assert.Contains(updates, update => update.Activity == "Scanning files" && update.Total is null);
+        Assert.Contains(updates, update => update.Activity == "Inferring lineage" && update.Completed == 2 && update.Total == 2);
+        Assert.Equal(catalog.Nodes.Count, updates[^1].Nodes);
+        Assert.Equal(catalog.Edges.Count, updates[^1].Edges);
+    }
+
+    [Fact]
     public async Task BuildAsync_OverlappingInputsReadEachExportOnce()
     {
         WriteObjectFile("SQL", "App", "Tables", "dbo", "Orders", "CREATE TABLE dbo.Orders (Id int);");
@@ -633,10 +660,12 @@ public sealed class CatalogBuilderTests : IDisposable
         MetricsSnapshot snapshot = new() { CapturedAt = FixedNow, RowCount = 42 };
         _metricsHistoryStore.LoadHistoryAsync("metrics-root", ordersId, Arg.Any<CancellationToken>()).Returns([snapshot]);
 
+        var progress = Substitute.For<IProgress<CatalogProgress>>();
         CatalogBuilder builder = CreateBuilder();
         Core.Domain.Catalog catalog = await builder.BuildAsync(
-            new CatalogBuildRequest { ObjectsRoot = _objectsRoot, MetricsRoot = "metrics-root" }, CancellationToken.None);
+            new CatalogBuildRequest { ObjectsRoot = _objectsRoot, MetricsRoot = "metrics-root", Progress = progress }, CancellationToken.None);
 
+        progress.Received().Report(Arg.Is<CatalogProgress>(value => value.Activity == "Loading metrics" && value.Completed == 1 && value.Total == 1));
         Assert.Single(catalog.Nodes[0].Metrics);
         Assert.Equal(42, catalog.Nodes[0].Metrics[0].RowCount);
     }
@@ -672,7 +701,7 @@ public sealed class CatalogBuilderTests : IDisposable
 
         CatalogBuilder builder = CreateBuilder();
         Core.Domain.Catalog catalog = await builder.BuildAsync(
-            new CatalogBuildRequest { ObjectsRoot = _objectsRoot, RepoRoot = "repo-root" }, CancellationToken.None);
+            new CatalogBuildRequest { ObjectsRoot = _objectsRoot, RepoRoot = "repo-root", Progress = Substitute.For<IProgress<CatalogProgress>>() }, CancellationToken.None);
 
         Assert.Single(catalog.RecentChanges);
         Assert.Single(catalog.CoChangePairs);
