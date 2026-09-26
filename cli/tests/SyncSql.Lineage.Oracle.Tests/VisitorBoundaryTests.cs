@@ -18,7 +18,7 @@ public sealed class VisitorBoundaryTests
     [Fact]
     public void Visitor_HandlesIncompleteTableRoutineAndExpressionNodes()
     {
-        var visitor = new PlSqlLineageVisitor();
+        var visitor = new PlSqlLineageVisitor(sql => new OracleLineageAnalyzer(NullLogger<OracleLineageAnalyzer>.Instance).Analyze(sql));
         visitor.VisitTableview_name(new PlSqlParser.Tableview_nameContext(null, 0));
         visitor.VisitRoutine_name(new PlSqlParser.Routine_nameContext(null, 0));
         visitor.VisitGeneral_element(new PlSqlParser.General_elementContext(null, 0));
@@ -75,7 +75,7 @@ public sealed class VisitorBoundaryTests
     [Fact]
     public void GeneralElements_HandleFlatAndParenthesizedGrammarAlternatives()
     {
-        var visitor = new PlSqlLineageVisitor();
+        var visitor = new PlSqlLineageVisitor(sql => new OracleLineageAnalyzer(NullLogger<OracleLineageAnalyzer>.Instance).Analyze(sql));
         var flat = new PlSqlParser.General_elementContext(null, 0);
         foreach (string part in new[] { "app", "pkg", "run()" }) { flat.AddChild(Parser(part).general_element_part()); }
         visitor.VisitGeneral_element(flat);

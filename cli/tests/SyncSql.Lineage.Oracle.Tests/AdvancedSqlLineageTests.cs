@@ -171,10 +171,8 @@ public sealed class AdvancedSqlLineageTests
         Assert.DoesNotContain(result.ObjectRefs, r => r.Schema == "customer" || r.Name == "id");
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Analyze_ExecuteImmediate_RespectsDynamicSqlOption(bool dynamicSql)
+    [Fact]
+    public void Analyze_ExecuteImmediate_PreservesStaticAndDynamicReferences()
     {
         LineageAnalysisResult result = _analyzer.Analyze("""
             CREATE OR REPLACE PROCEDURE app.refresh_report(p_id NUMBER) AS
@@ -182,10 +180,10 @@ public sealed class AdvancedSqlLineageTests
                 INSERT INTO app.audit_log (id) VALUES (p_id);
                 EXECUTE IMMEDIATE 'DELETE FROM archive.orders WHERE order_id = :id' USING p_id;
             END;
-            """, new LineageAnalysisOptions { DynamicSql = dynamicSql });
+            """);
 
         Assert.Contains(new ObjectRef("app", "audit_log"), result.ObjectRefs);
-        Assert.Equal(dynamicSql, result.ObjectRefs.Any(r =>
-            r is { Schema: "archive", Name: "orders", Origin: ReferenceOrigin.Dynamic }));
+        Assert.Contains(result.ObjectRefs, r =>
+            r is { Schema: "archive", Name: "orders", Origin: ReferenceOrigin.Dynamic });
     }
 }

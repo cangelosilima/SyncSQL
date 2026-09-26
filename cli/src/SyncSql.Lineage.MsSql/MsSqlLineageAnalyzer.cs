@@ -56,7 +56,7 @@ public sealed class MsSqlLineageAnalyzer(ILogger<MsSqlLineageAnalyzer> logger) :
                     context.SourceObjectId, errors.Count, errors[0].Line, errors[0].Column, errors[0].Message);
             }
 
-            TSqlLineageVisitor visitor = new(context.DynamicSql, context.ServiceBrokerGuid);
+            TSqlLineageVisitor visitor = new(context.ServiceBrokerGuid);
             fragment.Accept(visitor);
 
             return new LineageAnalysisResult

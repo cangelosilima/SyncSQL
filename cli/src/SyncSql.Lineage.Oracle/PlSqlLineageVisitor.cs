@@ -12,7 +12,7 @@ namespace SyncSql.Lineage.Oracle;
 /// VisitChildren(context) - so every override here that still wants its subtree walked must explicitly
 /// call VisitChildren(context) itself, or traversal silently stops there.
 /// </summary>
-internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? analyzeDynamic = null) : PlSqlParserBaseVisitor<object?>
+internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult> analyzeDynamic) : PlSqlParserBaseVisitor<object?>
 {
     public List<ObjectRef> ObjectRefs { get; } = [];
     public Dictionary<string, ObjectRef> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -247,7 +247,7 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
 
     private void AnalyzeDynamicExpression(PlSqlParser.ExpressionContext? expression)
     {
-        if (analyzeDynamic is null || EvaluateLiteralExpression(expression) is not { } sql)
+        if (EvaluateLiteralExpression(expression) is not { } sql)
         {
             return;
         }

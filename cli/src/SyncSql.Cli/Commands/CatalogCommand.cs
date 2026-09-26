@@ -57,10 +57,6 @@ internal static class CatalogCommand
         {
             Description = "Override the metrics history root for all inputs. Default: each input's metrics/ directory when present.",
         };
-        Option<bool> noDynamicSqlOption = new("--no-dynamic-sql")
-        {
-            Description = "Skip recovering references from SQL built as a string at runtime (OPENQUERY, EXEC of a string, a variable assembled then executed). Those references are tagged `dynamic` in catalog.json rather than mixed in with the rest, so the default is to collect them.",
-        };
 
         Option<bool> pruneOption = new("--prune") { Description = "Remove unreferenced hashed payloads after publishing the manifest. Use only in a dedicated catalog directory." };
 
@@ -76,7 +72,6 @@ internal static class CatalogCommand
             maxHistoryCallsOption,
             maxCoChangeOption,
             metricsRootOption,
-            noDynamicSqlOption,
             pruneOption,
         };
 
@@ -112,7 +107,6 @@ internal static class CatalogCommand
                     MaxHistoryContentCalls = parseResult.GetValue(maxHistoryCallsOption),
                     MaxCoChangeCommitSize = parseResult.GetValue(maxCoChangeOption),
                     MetricsRoot = ToFullPathOrNull(parseResult.GetValue(metricsRootOption)),
-                    DynamicSql = !parseResult.GetValue(noDynamicSqlOption),
                     Progress = progress,
                 };
 

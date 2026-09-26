@@ -61,10 +61,6 @@ public sealed class DynamicSqlLineageTests
         Assert.Contains(result.ColumnRefs, c => c.Column == "order_id"
             && result.Aliases.TryGetValue(c.AliasOrTable, out var target)
             && target is { Schema: "app", Name: "orders", Server: "remote", Origin: ReferenceOrigin.Dynamic });
-
-        var disabled = _analyzer.Analyze($"BEGIN {statement}; END;", new LineageAnalysisOptions { DynamicSql = false });
-        Assert.DoesNotContain(disabled.ObjectRefs, r => r.Origin == ReferenceOrigin.Dynamic);
-        Assert.DoesNotContain(disabled.ColumnRefs, c => c.Column == "order_id");
     }
 
     [Fact]
@@ -102,10 +98,9 @@ public sealed class DynamicSqlLineageTests
     }
 
     [Fact]
-    public void StaticOpenFor_RemainsStaticWhenDynamicSqlIsDisabled()
+    public void StaticOpenFor_RemainsStatic()
     {
-        var result = _analyzer.Analyze("BEGIN OPEN result_cursor FOR SELECT o.order_id FROM app.orders o; END;",
-            new LineageAnalysisOptions { DynamicSql = false });
+        var result = _analyzer.Analyze("BEGIN OPEN result_cursor FOR SELECT o.order_id FROM app.orders o; END;");
         Assert.Contains(new ObjectRef("app", "orders"), result.ObjectRefs);
         Assert.Contains(new ColumnRef("o", "order_id"), result.ColumnRefs);
     }

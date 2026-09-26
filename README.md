@@ -204,7 +204,6 @@ syncsql catalog build [--output-root] [--objects-root <path>] [--output <path>]
                        [--repo-root] [--path-prefix] [--history-limit]
                        [--max-versions-per-object] [--max-history-content-calls]
                        [--max-co-change-commit-size] [--metrics-root]
-                       [--no-dynamic-sql]
 syncsql metrics update [--output-root] [--snapshot-root <path>] [--history-root <path>]
                         [--history-limit]
 syncsql lint [--output-root] [--path <file-or-dir>...] [--config <sql-style.json>] [--fail-on warning|error]
@@ -1088,7 +1087,7 @@ Object references retain database links, and qualified column references keep
 their alias bindings within each dynamic statement. Variables, function-built
 strings and concatenations containing unknown values are not evaluated.
 
-`syncsql catalog build --no-dynamic-sql` turns the whole thing off.
+Dynamic SQL investigation always runs during catalog builds.
 
 ### System objects
 

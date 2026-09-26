@@ -83,7 +83,7 @@ public sealed class CatalogBuilder(
         Dictionary<string, CatalogNode> nodesById = nodes.ToDictionary(n => n.Id, StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation("Inferring lineage edges and column references");
-        LineageInferenceResult lineage = InferLineage(nodes, nodesById, nodeIndex, new LineageAnalysisOptions { DynamicSql = request.DynamicSql }, request.Progress, cancellationToken);
+        LineageInferenceResult lineage = InferLineage(nodes, nodesById, nodeIndex, LineageAnalysisOptions.Default, request.Progress, cancellationToken);
         List<CatalogEdge> edges = lineage.Edges;
         List<CatalogOrphanedReference> orphanedReferences = lineage.OrphanedReferences;
         if (orphanedReferences.Count > 0)

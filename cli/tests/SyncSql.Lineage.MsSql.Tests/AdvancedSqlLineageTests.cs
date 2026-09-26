@@ -55,14 +55,15 @@ public sealed class AdvancedSqlLineageTests
     }
 
     [Fact]
-    public void Analyze_DynamicSqlDisabled_PreservesStaticHalfOfMixedBatch()
+    public void Analyze_MixedBatch_PreservesStaticAndDynamicReferences()
     {
         LineageAnalysisResult result = _analyzer.Analyze("""
             SELECT o.OrderId FROM dbo.Orders o;
             EXEC (N'SELECT * FROM archive.Orders');
-            """, new LineageAnalysisOptions { DynamicSql = false });
+            """);
 
-        Assert.Equal(new ObjectRef("dbo", "Orders"), Assert.Single(result.ObjectRefs));
+        Assert.Contains(new ObjectRef("dbo", "Orders"), result.ObjectRefs);
+        Assert.Contains(result.ObjectRefs, r => r is { Schema: "archive", Name: "Orders", Origin: ReferenceOrigin.Dynamic });
     }
 
     [Fact]
