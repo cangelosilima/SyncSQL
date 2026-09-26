@@ -50,7 +50,7 @@ public sealed class AdvancedSqlLineageTests
         Assert.Contains(new ColumnRef("s", "order_id"), result.ColumnRefs);
     }
 
-    [Fact(Skip = "Known gap: PlSqlLineageVisitor does not visit CREATE SYNONYM targets.")]
+    [Fact]
     public void Analyze_SynonymDefinition_ReferencesRemoteTarget()
     {
         LineageAnalysisResult result = _analyzer.Analyze("""

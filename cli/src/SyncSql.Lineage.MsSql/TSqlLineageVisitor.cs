@@ -83,6 +83,11 @@ internal sealed class TSqlLineageVisitor(bool dynamicSql = true, Guid? serviceBr
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
+    public override void Visit(CreateSynonymStatement node)
+    {
+        if (FromSchemaObjectName(node.ForName) is { } target) { ObjectRefs.Add(target); }
+    }
+
     private void AddBrokerReference(TSqlFragment? fragment, string type)
     {
         string? name = fragment switch

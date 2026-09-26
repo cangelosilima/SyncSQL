@@ -98,7 +98,7 @@ public sealed class AdvancedSqlLineageTests
         Assert.Contains(new ColumnRef("s", "OrderId"), result.ColumnRefs);
     }
 
-    [Fact(Skip = "Known gap: TSqlLineageVisitor does not visit CREATE SYNONYM targets.")]
+    [Fact]
     public void Analyze_SynonymDefinition_ReferencesCrossDatabaseTarget()
     {
         LineageAnalysisResult result = _analyzer.Analyze("""
@@ -107,6 +107,16 @@ public sealed class AdvancedSqlLineageTests
 
         Assert.Contains(new ObjectRef("dbo", "Orders") { Database = "SalesDb" }, result.ObjectRefs);
         Assert.DoesNotContain(result.ObjectRefs, r => r.Name == "CurrentOrders");
+    }
+
+    [Theory]
+    [InlineData("CREATE SYNONYM dbo.CurrentOrders FOR [REMOTE].[SalesDb].[sales].[Order Items];", "REMOTE", "SalesDb", "sales", "Order Items")]
+    [InlineData("CREATE SYNONYM dbo.CurrentOrders FOR dbo.Orders;", null, null, "dbo", "Orders")]
+    [InlineData("CREATE SYNONYM dbo.CurrentOrders FOR Orders;", null, null, null, "Orders")]
+    public void Analyze_SynonymDefinition_PreservesTargetQualifiers(string sql, string? server, string? database, string? schema, string name)
+    {
+        var result = _analyzer.Analyze(sql);
+        Assert.Equal(new ObjectRef(schema, name) { Server = server, Database = database }, Assert.Single(result.ObjectRefs));
     }
 
     [Fact]

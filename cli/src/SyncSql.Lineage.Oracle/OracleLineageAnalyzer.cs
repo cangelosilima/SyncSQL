@@ -96,7 +96,8 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
 
             if (errorListener.Errors.Count > 0)
             {
-                _logger.LogWarning("PL/SQL parse produced {Count} error(s) (continuing with the partial tree): {Message}", errorListener.Errors.Count, errorListener.Errors[0]);
+                _logger.LogWarning("[{ObjectId}] PL/SQL parse produced {Count} error(s) (continuing with the partial tree): {Message}",
+                    options.SourceObjectId, errorListener.Errors.Count, errorListener.Errors[0]);
             }
 
             PlSqlLineageVisitor visitor = new(options.DynamicSql ? sql =>
@@ -115,7 +116,7 @@ public sealed class OracleLineageAnalyzer : ILineageAnalyzer
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             cache.Failed = true;
-            _logger.LogWarning("PL/SQL parsing failed (skipping lineage for this object): {Message}", ex.Message);
+            _logger.LogWarning("[{ObjectId}] PL/SQL parsing failed (skipping lineage for this object): {Message}", options.SourceObjectId, ex.Message);
             return LineageAnalysisResult.Empty;
         }
     }

@@ -218,6 +218,27 @@ internal sealed class PlSqlLineageVisitor(Func<string, LineageAnalysisResult>? a
         return VisitChildren(context);
     }
 
+    public override object? VisitCreate_synonym(PlSqlParser.Create_synonymContext context)
+    {
+        // schema_name also occurs on the synonym declaration and, in the private
+        // form, before a database link. Only the schema between FOR and its target
+        // belongs to the referenced object.
+        if (context.schema_object_name() is { } target && context.FOR() is { } forToken)
+        {
+            PlSqlParser.Schema_nameContext? owner = context.schema_name().FirstOrDefault(schema =>
+                schema.Start.TokenIndex > forToken.Symbol.TokenIndex && schema.Stop.TokenIndex < target.Start.TokenIndex);
+            string? link = GetLinkName(context.link_name());
+            if (context.AT_SIGN() is { } atToken)
+            {
+                PlSqlParser.Schema_nameContext? linkPrefix = context.schema_name().FirstOrDefault(schema =>
+                    schema.Start.TokenIndex > atToken.Symbol.TokenIndex);
+                if (linkPrefix is not null) { link = $"{GetIdentifierText(linkPrefix)}.{link}"; }
+            }
+            ObjectRefs.Add(new ObjectRef(owner is null ? null : GetIdentifierText(owner), GetIdentifierText(target)) { Server = link });
+        }
+        return null;
+    }
+
     public override object? VisitOpen_for_statement(PlSqlParser.Open_for_statementContext context)
     {
         AnalyzeDynamicExpression(context.expression());

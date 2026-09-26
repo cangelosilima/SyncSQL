@@ -1,11 +1,14 @@
 # Vendored grammar
 
 `PlSqlLexer.g4`, `PlSqlParser.g4`, `PlSqlLexerBase.cs`, and `PlSqlParserBase.cs` in this folder are
-vendored, unmodified, from [antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s `sql/plsql`
+vendored from [antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s `sql/plsql`
 grammar (`PlSqlParser.g4`'s own header: Copyright (c) 2009-2011 Alexandre Porcelli, 2015-2019 Ivan
 Kochurkin (Positive Technologies), 2017-2018 Mark Adams; licensed under the
 [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0), the full text of which is
 in `LICENSE.txt` beside this file).
+
+Local grammar changes: `create_synonym` accepts Oracle's optional `EDITIONABLE`
+and `NONEDITIONABLE` clauses before `PUBLIC SYNONYM` or `SYNONYM`.
 
 The C# lexer, parser, and visitor under `../Generated/` were generated from these files with ANTLR
 4.13.1 and are committed so every build compiles the same reviewed parser without invoking Java or
