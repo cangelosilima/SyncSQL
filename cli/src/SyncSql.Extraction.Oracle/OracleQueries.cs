@@ -13,30 +13,39 @@ internal static class OracleQueries
         ORDER BY o.OWNER
         """;
 
+    // Nested storage and IOT auxiliary tables are emitted with their parent table's DDL.
+    // SYS_YOID<n>$ types are internal XML object identifiers, not standalone user types.
+    // Apply these GET_DDL eligibility checks even when default exclusions are disabled.
+    private const string StandaloneDdlObjects = """
+          AND (o.object_type <> 'TABLE' OR EXISTS (
+              SELECT 1 FROM ALL_ALL_TABLES t
+              WHERE t.owner = o.owner AND t.table_name = o.object_name
+                AND t.nested = 'NO' AND (t.iot_type IS NULL OR t.iot_type = 'IOT')))
+          AND (o.object_type NOT IN ('TYPE', 'TYPE BODY')
+               OR NOT REGEXP_LIKE(o.object_name, '^SYS_YOID[0-9]+\$$', 'c'))
+        """;
+
     public const string ObjectList = """
         SELECT object_name AS ObjectName
-        FROM ALL_OBJECTS
+        FROM ALL_OBJECTS o
         WHERE owner = :owner
           AND object_type = :objType
           AND generated = 'N'
           AND temporary = 'N'
-        ORDER BY object_name
-        """;
+        """ + "\n" + StandaloneDdlObjects + "\nORDER BY object_name";
 
     public const string ApplicationObjectList = """
-        SELECT object_name AS ObjectName FROM ALL_OBJECTS
+        SELECT object_name AS ObjectName FROM ALL_OBJECTS o
         WHERE owner = :owner AND object_type = :objType
           AND generated = 'N' AND temporary = 'N'
           AND oracle_maintained = 'N' AND secondary = 'N'
-        ORDER BY object_name
-        """;
+        """ + "\n" + StandaloneDdlObjects + "\nORDER BY object_name";
 
     public const string LegacyApplicationObjectList = """
-        SELECT object_name AS ObjectName FROM ALL_OBJECTS
+        SELECT object_name AS ObjectName FROM ALL_OBJECTS o
         WHERE owner = :owner AND object_type = :objType
           AND generated = 'N' AND temporary = 'N' AND secondary = 'N'
-        ORDER BY object_name
-        """;
+        """ + "\n" + StandaloneDdlObjects + "\nORDER BY object_name";
 
     public const string DatabaseLinks = "SELECT OWNER, DB_LINK, USERNAME, HOST FROM ALL_DB_LINKS ORDER BY OWNER, DB_LINK";
     public const string AllDatabaseLinks = "SELECT OWNER, DB_LINK, USERNAME, HOST FROM DBA_DB_LINKS ORDER BY OWNER, DB_LINK";
