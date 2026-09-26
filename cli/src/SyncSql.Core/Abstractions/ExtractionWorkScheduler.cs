@@ -10,11 +10,17 @@ public sealed class ExtractionWorkScheduler
     private readonly Dictionary<DatabaseEngine, int> _active = [];
     private int _running;
     private int _nextEngine;
+    private readonly TaskScheduler _taskScheduler;
 
-    public ExtractionWorkScheduler(int maxParallelism)
+    public ExtractionWorkScheduler(int maxParallelism) : this(maxParallelism, TaskScheduler.Default)
+    {
+    }
+
+    internal ExtractionWorkScheduler(int maxParallelism, TaskScheduler taskScheduler)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxParallelism, 1);
         MaxParallelism = maxParallelism;
+        _taskScheduler = taskScheduler;
     }
 
     public int MaxParallelism { get; }
@@ -88,7 +94,7 @@ public sealed class ExtractionWorkScheduler
             _running++;
             _nextEngine = (selected + 1) % engines.Length;
             ExtractionWorkContext context = new(this, engine, item.Token);
-            _ = Task.Run(async () =>
+            _ = Task.Factory.StartNew(async () =>
             {
                 try { await item.ExecuteAsync(context); }
                 finally
@@ -99,7 +105,7 @@ public sealed class ExtractionWorkScheduler
                         Dispatch();
                     }
                 }
-            }, CancellationToken.None);
+            }, CancellationToken.None, TaskCreationOptions.DenyChildAttach, _taskScheduler).Unwrap();
         }
     }
 

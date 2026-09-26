@@ -160,6 +160,72 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  cli-mutation:
+    name: CLI mutation (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: Core
+            minimum: 90
+            mutate: []
+          - project: Cli
+            minimum: 55
+            mutate:
+              - '**/Commands/SyncCommand.cs'
+              - '**/Commands/CatalogCommand.cs'
+              - '**/Sync/ExtractionProgressDisplay.cs'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Enforce measured mutation baseline
+        shell: pwsh
+        env:
+          MUTATION_PROJECT: ${{ matrix.project }}
+          MUTATION_MINIMUM: ${{ matrix.minimum }}
+          MUTATION_PATTERNS: ${{ toJSON(matrix.mutate) }}
+        run: |
+          $patterns = @(ConvertFrom-Json $env:MUTATION_PATTERNS)
+          ./scripts/Run-MutationTests.ps1 -Project $env:MUTATION_PROJECT -BreakAt ([int]$env:MUTATION_MINIMUM) -Mutate $patterns -ArtifactsPath TestResults/quality-mutation
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-mutation-cli-${{ matrix.project }}
+          path: TestResults/quality-mutation/
+          if-no-files-found: error
+          retention-days: 14
+
+  site-mutation:
+    name: Site reachability mutation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Enforce reachability mutation baseline
+        run: npm run test:mutation -- stryker.ci.config.mjs
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-mutation-site
+          path: site/reports/mutation/
+          if-no-files-found: error
+          retention-days: 14
+
   cli-performance:
     name: CLI performance budgets
     runs-on: ubuntu-latest
@@ -308,7 +374,7 @@ jobs:
   quality-gate:
     name: Quality gate
     if: always()
-    needs: [vulnerabilities, codeql, cli-style, cli-coverage, cli-performance, site-style, site-coverage, workflow-lint, coverage-badges]
+    needs: [vulnerabilities, codeql, cli-style, cli-coverage, cli-mutation, cli-performance, site-style, site-coverage, site-mutation, workflow-lint, coverage-badges]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -343,7 +409,7 @@ jobs:
 
   quality-comment:
     name: Comment quality results
-    needs: [vulnerabilities, codeql, cli-style, cli-coverage, cli-performance, site-style, site-coverage, workflow-lint, coverage-badges, quality-gate]
+    needs: [vulnerabilities, codeql, cli-style, cli-coverage, cli-mutation, cli-performance, site-style, site-coverage, site-mutation, workflow-lint, coverage-badges, quality-gate]
     # Fork PR tokens are read-only; keep their checks running without attempting
     # to elevate permissions or making a missing comment fail their gate.
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -368,9 +434,11 @@ jobs:
             | CodeQL | ${{ needs.codeql.result }} |
             | CLI lint and format | ${{ needs.cli-style.result }} |
             | CLI tests and coverage | ${{ needs.cli-coverage.result }} |
+            | CLI mutation (Core ≥90%, selected command files ≥55%) | ${{ needs.cli-mutation.result }} |
             | CLI performance budgets | ${{ needs.cli-performance.result }} |
             | Site lint and format | ${{ needs.site-style.result }} |
             | Site tests and coverage | ${{ needs.site-coverage.result }} |
+            | Site reachability mutation (100%) | ${{ needs.site-mutation.result }} |
             | Workflow lint | ${{ needs.workflow-lint.result }} |
             | Coverage badge data | ${{ needs.coverage-badges.result }} |
 

@@ -1,0 +1,10 @@
+{
+  "stryker-config": {
+    "mutation-level": "Standard",
+    "reporters": ["progress", "html", "json"],
+    "concurrency": 2,
+    "thresholds": { "high": 80, "low": 60, "break": 0 },
+    "break-on-initial-test-failure": true,
+    "mutate": ["**/*.cs", "!**/obj/**", "!**/bin/**", "!**/Generated/**"]
+  }
+}
