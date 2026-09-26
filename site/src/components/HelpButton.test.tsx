@@ -40,6 +40,8 @@ describe('HelpButton', () => {
     await user.click(screen.getByRole('button', { name: 'Help: History' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).toBeNull()
   })

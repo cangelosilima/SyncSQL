@@ -38,6 +38,24 @@ const nodes: Node[] = [
     style: { width: 220, height: 56, border: '2px dashed #4488ff' },
   },
 ]
+it('exports default node styling without canvas measurements and wraps a long type legend', () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+  document.documentElement.removeAttribute('style')
+  const types = [
+    'A'.repeat(120),
+    'Long first object type',
+    'Long second object type',
+    'Long third object type',
+    'Long fourth object type',
+  ]
+  const bare = types.map((objectType, i) => ({ id: String(i), data: { objectType }, position: { x: 0, y: i * 50 } }))
+  const svg = buildLineageGraphSvg(bare, [{ id: 'missing', source: '0', target: 'missing' }])
+  expect(svg.markup).toContain('Segoe UI')
+  expect(svg.markup).toContain('stroke="#999"')
+  expect(svg.markup).toContain('<title>0</title>')
+  expect(svg.markup).not.toContain('marker-end=')
+  expect(svg.height).toBeGreaterThan(500)
+})
 
 it('preserves curved dynamic edges, type borders, focus, theme and complete wrapped names', () => {
   const svg = buildLineageGraphSvg(nodes, [

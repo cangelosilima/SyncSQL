@@ -44,7 +44,7 @@ function resolveColor(value: string): string {
 function borderColorOf(style: Record<string, unknown> | undefined): string {
   const border = String(style?.border ?? '1px solid #999')
   const parts = border.trim().split(/\s+/)
-  return resolveColor(parts[parts.length - 1] ?? '#999')
+  return resolveColor(parts[parts.length - 1])
 }
 
 function nodeLabel(node: Node): string {
@@ -273,7 +273,7 @@ export function buildLineageGraphSvg(rawNodes: Node[], rawEdges: Edge[]): GraphS
         targetPosition: Position.Left,
       })
       // Include Bezier control points so reverse edges and cycles are not clipped.
-      const points = path.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)?.map(Number) ?? []
+      const points = path.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)!.map(Number)
       for (let i = 0; i < points.length; i += 2) bounds.push({ x: points[i], y: points[i + 1], width: 0, height: 0 })
       const labelWidth = measure(e.label ?? '', 10) + 6
       if (e.label) bounds.push({ x: midX - labelWidth / 2, y: midY - 9, width: labelWidth, height: 18 })
@@ -363,7 +363,7 @@ export async function downloadPng(svg: GraphSvg, filename: string) {
       size: Number(text.getAttribute('font-size')),
       font: text.getAttribute('font-family')!,
       color: text.getAttribute('fill') || '#302d28',
-      value: text.textContent ?? '',
+      value: text.textContent!,
       align: text.getAttribute('text-anchor') === 'middle' ? ('center' as const) : ('left' as const),
     }
     text.remove()

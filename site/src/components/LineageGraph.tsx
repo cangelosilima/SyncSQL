@@ -276,7 +276,7 @@ export default function LineageGraph({
             <ul className="related-list lineage-bundle-list">
               {openBundle.memberIds.map((id) => (
                 <li key={id}>
-                  <Link to={`/object/${id}`}>{index.byId.get(id)?.qualifiedName ?? id}</Link>
+                  <Link to={`/object/${id}`}>{index.byId.get(id)!.qualifiedName}</Link>
                   {onNodeActivate && (
                     <button type="button" className="breadcrumb-link" onClick={() => activateNode(id)}>
                       Focus

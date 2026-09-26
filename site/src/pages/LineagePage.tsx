@@ -171,7 +171,7 @@ export default function LineagePage() {
   // that token up front instead is what used to break every filter added
   // while navigating; see the tokens initializer.)
   function clearFocus() {
-    const node = currentFocus ? index?.byId.get(currentFocus) : undefined
+    const node = index?.byId.get(currentFocus)
     if (node && !tokens.some((t) => t.attribute === 'name' && t.values.includes(node.qualifiedName))) {
       setTokens([...tokens, { id: newTokenId(), attribute: 'name', operator: 'is', values: [node.qualifiedName] }])
     }
@@ -568,14 +568,13 @@ function SelectionBreakdown({
   onNarrow,
 }: {
   nodes: CatalogNode[]
-  onNarrow?: (attribute: 'server' | 'database' | 'type', value: string) => void
+  onNarrow: (attribute: 'server' | 'database' | 'type', value: string) => void
 }) {
   return (
     <div className="lineage-warning selection-breakdown">
       <p>
         <strong>{nodes.length} objects</strong> match this selection - too many to draw as one graph, and unreadable if
-        we did. Here is what they are
-        {onNarrow ? '; pick a row to narrow the filter, or drill into a single object from the Explorer.' : '.'}
+        we did. Here is what they are; pick a row to narrow the filter, or drill into a single object from the Explorer.
       </p>
       <div className="selection-breakdown-axes">
         {BREAKDOWN_AXES.map(({ by, attribute, label }) => {
@@ -586,27 +585,18 @@ function SelectionBreakdown({
             <div key={by} className="selection-breakdown-axis">
               <h4>{label}</h4>
               <ul>
-                {shown.map((group) =>
-                  onNarrow ? (
-                    <li key={group.key}>
-                      <button
-                        type="button"
-                        className="selection-breakdown-row"
-                        onClick={() => onNarrow(attribute, group.key)}
-                      >
-                        <span className="selection-breakdown-name">{group.key}</span>
-                        <span className="selection-breakdown-count">{group.nodes.length}</span>
-                      </button>
-                    </li>
-                  ) : (
-                    <li key={group.key}>
-                      <span className="selection-breakdown-row selection-breakdown-row--static">
-                        <span className="selection-breakdown-name">{group.key}</span>
-                        <span className="selection-breakdown-count">{group.nodes.length}</span>
-                      </span>
-                    </li>
-                  ),
-                )}
+                {shown.map((group) => (
+                  <li key={group.key}>
+                    <button
+                      type="button"
+                      className="selection-breakdown-row"
+                      onClick={() => onNarrow(attribute, group.key)}
+                    >
+                      <span className="selection-breakdown-name">{group.key}</span>
+                      <span className="selection-breakdown-count">{group.nodes.length}</span>
+                    </button>
+                  </li>
+                ))}
                 {rest > 0 && (
                   <li className="muted selection-breakdown-rest">
                     +{rest} more {by}

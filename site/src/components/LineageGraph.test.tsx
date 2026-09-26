@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
@@ -6,10 +6,10 @@ import type { Edge, Node } from '@xyflow/react'
 import LineageGraph from './LineageGraph'
 import { buildIndex } from '../lib/catalog'
 import { makeCatalog, makeEdge, makeNode } from '../test/fixtures'
-import { buildLineageGraphSvg, downloadSvg } from '../lib/graphExport'
+import { buildLineageGraphSvg, downloadPng, downloadSvg } from '../lib/graphExport'
 import type { CatalogIndex } from '../lib/catalog'
 
-const graph = vi.hoisted(() => ({ nodes: [] as Node[], edges: [] as Edge[] }))
+const graph = vi.hoisted(() => ({ nodes: [] as Node[], edges: [] as Edge[], fitView: vi.fn() }))
 const context = vi.hoisted(() => ({ index: null as CatalogIndex | null }))
 vi.mock('@xyflow/react', () => ({
   ReactFlow: ({
@@ -17,12 +17,16 @@ vi.mock('@xyflow/react', () => ({
     edges,
     onNodeClick,
     onEdgeClick,
+    onNodeDoubleClick,
+    onPaneClick,
     children,
   }: {
     nodes: Node[]
     edges: Edge[]
     onNodeClick: (e: unknown, node: Node) => void
     onEdgeClick: (e: unknown, edge: Edge) => void
+    onNodeDoubleClick: (e: unknown, node: Node) => void
+    onPaneClick: () => void
     children: ReactNode
   }) => {
     graph.nodes = nodes
@@ -30,7 +34,11 @@ vi.mock('@xyflow/react', () => ({
     return (
       <div>
         {nodes.map((node) => (
-          <button key={node.id} onClick={() => onNodeClick(null, node)}>
+          <button
+            key={node.id}
+            onClick={() => onNodeClick(null, node)}
+            onDoubleClick={() => onNodeDoubleClick(null, node)}
+          >
             Node {node.id}
           </button>
         ))}
@@ -40,6 +48,8 @@ vi.mock('@xyflow/react', () => ({
           </button>
         ))}
         {children}
+        <button onClick={onPaneClick}>Pane</button>
+        <button onClick={() => onEdgeClick(null, { id: 'none', source: 'a', target: 'b' })}>No evidence</button>
       </div>
     )
   },
@@ -47,7 +57,7 @@ vi.mock('@xyflow/react', () => ({
   Controls: () => null,
   MiniMap: () => null,
   Panel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  useReactFlow: () => ({ getNodes: () => graph.nodes, getEdges: () => graph.edges }),
+  useReactFlow: () => ({ getNodes: () => graph.nodes, getEdges: () => graph.edges, fitView: graph.fitView }),
 }))
 vi.mock('../lib/CatalogContext', () => ({ useCatalog: () => context }))
 vi.mock('../lib/graphExport', () => ({
@@ -64,6 +74,133 @@ describe('graph integration retained in inspector layout', () => {
         edges: [makeEdge('a', 'b', ['Id', 'Total', 'Tax', 'Notes'])],
       }),
     )
+  })
+  it('handles absent catalogs and empty selections', () => {
+    const saved = context.index
+    context.index = null
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <LineageGraph nodeIds={[]} />
+      </MemoryRouter>,
+    )
+    expect(container).toBeEmptyDOMElement()
+    context.index = saved
+    rerender(
+      <MemoryRouter>
+        <LineageGraph nodeIds={[]} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('No lineage relationships found for this selection.')).toBeVisible()
+  })
+  it('groups both directions, suppresses internal bundle edges, and focuses a member', () => {
+    const ids = ['root', 'a', 'b', 'c', 'end', 'x', 'y', 'start']
+    context.index = buildIndex(
+      makeCatalog({
+        nodes: ids.map((id) => makeNode({ id })),
+        edges: [
+          makeEdge('root', 'a'),
+          makeEdge('root', 'b'),
+          makeEdge('root', 'c'),
+          makeEdge('a', 'b'),
+          makeEdge('a', 'a'),
+          makeEdge('a', 'end'),
+          makeEdge('b', 'end'),
+          makeEdge('c', 'end'),
+          makeEdge('x', 'root'),
+          makeEdge('y', 'root'),
+          makeEdge('start', 'x'),
+          makeEdge('start', 'y'),
+        ],
+      }),
+    )
+    const focus = vi.fn()
+    render(
+      <MemoryRouter>
+        <LineageGraph nodeIds={ids} focusId="root" groupIntermediate onNodeActivate={focus} />
+      </MemoryRouter>,
+    )
+    const bundles = graph.nodes.filter((node) => node.id.startsWith('__bundle__'))
+    expect(bundles).toHaveLength(2)
+    const incoming = bundles.find((node) => node.id.includes('incoming'))!
+    expect(incoming.data.label).toContain('Dependents')
+    fireEvent.click(screen.getByRole('button', { name: `Node ${incoming.id}` }))
+    expect(screen.getAllByRole('link')).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Focus' })[0])
+    expect(focus).toHaveBeenCalledWith('x')
+    expect(graph.edges.find((edge) => edge.source === edge.target)?.data?.referenceCount).toBe(1)
+  })
+  it('labels dangling edge evidence by its recorded identifiers', () => {
+    context.index = buildIndex(
+      makeCatalog({ nodes: [makeNode({ id: 'present' })], edges: [makeEdge('missing', 'target', ['Id'])] }),
+    )
+    render(
+      <MemoryRouter>
+        <LineageGraph nodeIds={['missing', 'target', 'present']} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Edge missing->target' }))
+    expect(screen.getByText('missing', { selector: 'span' })).toBeVisible()
+    expect(screen.getByText('target', { selector: 'span' })).toBeVisible()
+  })
+  it('renders link ownership and connector labels, dynamic edges, and dismisses column evidence', () => {
+    context.index = buildIndex(
+      makeCatalog({
+        nodes: [
+          makeNode({ id: 'a', type: 'DatabaseLinks' }),
+          makeNode({ id: 'b', type: 'LinkedServers' }),
+          makeNode({ id: 'outside' }),
+        ],
+        edges: [
+          { ...makeEdge('a', 'b', ['Id']), dynamic: true },
+          { ...makeEdge('b', 'a'), dynamic: true },
+          makeEdge('a', 'outside'),
+          makeEdge('outside', 'a'),
+        ],
+      }),
+    )
+    render(
+      <MemoryRouter>
+        <LineageGraph nodeIds={['a', 'b']} connectorIds={['a']} />
+      </MemoryRouter>,
+    )
+    expect(graph.nodes[0].data.label).toContain('(on SRV1 / AppDb) (connecting object)')
+    expect(graph.nodes[1].data.label).toContain('(on SRV1)')
+    expect(graph.edges.find((edge) => edge.source === 'b')?.label).toBe('dynamic')
+    fireEvent.click(screen.getByRole('button', { name: 'No evidence' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edge b->a' }))
+    const edge = screen.getByRole('button', { name: 'Edge a->b' })
+    fireEvent.click(edge)
+    expect(screen.getByText('references 1 column:')).toBeVisible()
+    fireEvent.click(edge)
+    expect(screen.queryByText('references 1 column:')).not.toBeInTheDocument()
+    fireEvent.click(edge)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(edge)
+    fireEvent.click(screen.getByRole('button', { name: 'Pane' }))
+    expect(screen.queryByText('references 1 column:')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Node b' }))
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'Node a' }))
+  })
+  it.each([true, false])('fits graphs with reduced motion=%s and reports failed PNG exports', async (matches) => {
+    vi.stubGlobal('matchMedia', () => ({ matches }))
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return 1
+    })
+    render(
+      <MemoryRouter>
+        <LineageGraph nodeIds={['a', 'b']} />
+      </MemoryRouter>,
+    )
+    act(() => frames.forEach((frame) => frame(0)))
+    expect(graph.fitView).toHaveBeenLastCalledWith({ padding: 0.15, duration: matches ? 0 : 250 })
+    vi.mocked(downloadPng).mockRejectedValueOnce(new Error('failed'))
+    fireEvent.click(screen.getByRole('button', { name: 'Export PNG' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Graph export failed')
+    fireEvent.click(screen.getByRole('button', { name: 'Export PNG' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    vi.unstubAllGlobals()
   })
   it('reports complete edge evidence and clears it on focus change while retaining drill actions', () => {
     const inspect = vi.fn(),
@@ -136,6 +273,11 @@ describe('graph integration retained in inspector layout', () => {
     }
     fireEvent.click(screen.getByRole('button', { name: `Node ${bundle.id}` }))
     expect(screen.getAllByRole('link')).toHaveLength(3)
+    fireEvent.doubleClick(screen.getByRole('button', { name: `Node ${bundle.id}` }))
+    fireEvent.click(screen.getByRole('button', { name: `Node ${bundle.id}` }))
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: `Node ${bundle.id}` }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     view.rerender(
       <MemoryRouter>
         <LineageGraph nodeIds={ids} focusId="root" maxNodes={60} groupIntermediate={false} />

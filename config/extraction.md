@@ -75,6 +75,13 @@ SyncSQL into a full system-database exporter: existing supported-type and native
 query restrictions still apply, including SQL Server's `is_ms_shipped = 0` and
 Oracle's `generated = 'N'` / `temporary = 'N'` conditions.
 
+Oracle discovery also excludes nested-table storage, IOT overflow/mapping tables,
+and internal types matching `SYS_YOID<digits>$` before requesting standalone DDL.
+These eligibility checks apply with either setting of `useDefaultExclusions`.
+Nested storage and IOT auxiliary definitions belong to the parent table's DDL;
+ordinary heap tables, object tables and primary IOT tables remain eligible.
+See [Oracle's table DDL extraction example](https://docs.oracle.com/en/database/oracle/oracle-database/12.2/admin/managing-schema-objects.html).
+
 This flag affects extraction. It does not filter files that are already present
 when `catalog build` reads an export directory. Re-extract into a clean output
 directory to measure the reduced catalog scope without stale files. Fewer objects

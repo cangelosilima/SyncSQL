@@ -118,7 +118,7 @@ export function retainConnectingPaths(
     let id: string | null = match
     while (id !== null && !kept.has(id)) {
       kept.add(id)
-      id = parent.get(id) ?? null
+      id = parent.get(id)!
     }
   }
   return ids.filter((id) => kept.has(id))

@@ -113,7 +113,7 @@ async function writeCapability(available, details) {
   await mkdir(path.dirname(capabilityPath), { recursive: true })
   const filterGenerator = available
     ? { available: true, model: details.manifest.model, version: 1 }
-    : { available: false, reason: details.reason ?? REASON.packaging, version: 1 }
+    : { available: false, reason: details.reason, version: 1 }
   await writeFile(capabilityPath, `${JSON.stringify({ filterGenerator }, null, 2)}\n`, 'utf8')
 }
 
