@@ -86,6 +86,73 @@ public sealed class CatalogBuilderTests : IDisposable
         _mssqlAnalyzer.Received(1).Analyze("second synonym", Arg.Any<LineageAnalysisOptions?>());
     }
 
+    [Theory]
+    [InlineData(DatabaseEngine.MsSql, false, "Orders")]
+    [InlineData(DatabaseEngine.MsSql, true, "Orders")]
+    [InlineData(DatabaseEngine.Oracle, false, "Orders")]
+    [InlineData(DatabaseEngine.Oracle, true, "Orders")]
+    [InlineData(DatabaseEngine.MsSql, false, "Missing")]
+    [InlineData(DatabaseEngine.Oracle, false, "Missing")]
+    [InlineData(DatabaseEngine.MsSql, false, "Alias")]
+    [InlineData(DatabaseEngine.Oracle, false, "Alias")]
+    public async Task BuildAsync_SynonymReachedThroughLinkPreservesTargetColumnsAndRoute(DatabaseEngine engine, bool dynamic, string destination)
+    {
+        _lineageAnalyzerResolver.Resolve(engine).Returns(_mssqlAnalyzer);
+        if (engine == DatabaseEngine.MsSql)
+        {
+            WriteObjectFile("SQL", "_ServerLevel", "LinkedServers", null, "LINK", LinkedServerDdl("LINK", "REMOTE", "App"));
+        }
+        else
+        {
+            WriteObjectFile("SQL", "App", "DatabaseLinks", "dbo", "LINK", "CREATE DATABASE LINK LINK USING 'REMOTE';", engine);
+        }
+        WriteObjectFile("SQL", "App", "Views", "dbo", "Caller", "consumer", engine);
+        WriteObjectFile("REMOTE", "App", "Synonyms", "dbo", "Alias", "first synonym", engine);
+        WriteObjectFile("REMOTE", "App", "Synonyms", "dbo", "Alias2", "second synonym", engine);
+        WriteObjectFile("REMOTE", "App", "Tables", "dbo", "Orders", "target", engine,
+            [new ExtractedColumn("Id", "int", null)]);
+        _mssqlAnalyzer.Analyze("first synonym", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", "Alias2")],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        _mssqlAnalyzer.Analyze("second synonym", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [new ObjectRef("dbo", destination)],
+            Aliases = new Dictionary<string, ObjectRef>(),
+            ColumnRefs = [],
+        });
+        ObjectRef alias = new("dbo", "Alias") { Server = "LINK", Database = "App", Origin = dynamic ? ReferenceOrigin.Dynamic : ReferenceOrigin.Static };
+        _mssqlAnalyzer.Analyze("consumer", Arg.Any<LineageAnalysisOptions?>()).Returns(new LineageAnalysisResult
+        {
+            ObjectRefs = [alias],
+            Aliases = new Dictionary<string, ObjectRef> { ["s"] = alias },
+            ColumnRefs = [new ColumnRef("s", "Id"), new ColumnRef("s", "Missing")],
+        });
+
+        var catalog = await CreateBuilder().BuildAsync(new CatalogBuildRequest { ObjectsRoot = _objectsRoot }, CancellationToken.None);
+        string caller = catalog.Nodes.Single(n => n.Name == "Caller").Id;
+        string synonym = catalog.Nodes.Single(n => n.Name == "Alias").Id;
+        string target = catalog.Nodes.Single(n => n.Name == "Orders").Id;
+        string link = catalog.Nodes.Single(n => n.Name == "LINK").Id;
+        Assert.Contains(catalog.Edges, e => e.From == caller && e.To == link && e.Dynamic == dynamic);
+        Assert.Contains(catalog.Edges, e => e.From == link && e.To == synonym && e.Dynamic == dynamic);
+        CatalogLinkedServerReference route = Assert.Single(catalog.LinkedServerReferences);
+        Assert.Equal((caller, link, synonym, dynamic), (route.From, route.LinkedServer, route.To, route.Dynamic));
+        if (destination == "Orders")
+        {
+            CatalogEdge usage = Assert.Single(catalog.Edges, e => e.From == caller && e.To == target);
+            Assert.Equal(dynamic, usage.Dynamic);
+            Assert.Equal(["Id"], usage.Columns);
+        }
+        else
+        {
+            Assert.DoesNotContain(catalog.Edges, e => e.From == caller && e.To == target);
+        }
+        Assert.DoesNotContain(catalog.OrphanedReferences, r => r.From == caller);
+    }
+
     [Fact]
     public async Task BuildAsync_SynonymTargetAcrossLinkedServerAttributesConsumerToRemoteObject()
     {
