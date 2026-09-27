@@ -20,7 +20,8 @@
     <!-- Shared package identity/versioning for every project in this solution. -->
     <Authors>SyncSQL</Authors>
     <Company>SyncSQL</Company>
-    <Version>1.0.0</Version>
+    <!-- Release workflows supply the tag's CalVer; local builds use today's UTC date. -->
+    <Version Condition="'$(Version)' == ''">$([System.DateTime]::UtcNow.ToString('yyyy.M.d'))-dev</Version>
     <RepositoryUrl>https://github.com/cangelosilima/SyncSQL</RepositoryUrl>
   </PropertyGroup>
 
