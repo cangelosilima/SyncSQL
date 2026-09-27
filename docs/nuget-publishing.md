@@ -1,65 +1,80 @@
 # Publishing NuGet packages
 
-The grammar and CLI have independent releases on nuget.org:
+The grammar and CLI publish independently when relevant changes are merged into
+`main`. Each workflow tests and packages its component, publishes it to nuget.org,
+and creates a GitHub release with generated notes and the `.nupkg` attached.
 
-| Package | Workflow | Release tag |
+| Package | Workflow | Example generated release tag |
 | --- | --- | --- |
-| `SyncSql.Grammar.PlSql` | `grammar-publish-nuget.yml` | `grammar-v2026.9.26` |
-| `SyncSql.Cli` (.NET tool, command `syncsql`) | `cli-publish-nuget.yml` | `cli-v2026.9.26` |
+| `SyncSql.Grammar.PlSql` | `grammar-publish-nuget.yml` | `grammar-v2026.9.26.42` |
+| `SyncSql.Cli` (.NET tool, command `syncsql`) | `cli-publish-nuget.yml` | `cli-v2026.9.26.57` |
 
-The version comes from the tag, overriding the development version in
-`cli/Directory.Build.props`. Releases use **CalVer `YYYY.M.D[.REV]`**: the release
-date with no leading zeros on the month or day. For another release on the same
-date, append an incrementing revision, starting at `.1` (for example,
-`cli-v2026.9.26.1`). Revisions range from 1 to 65534 for .NET assembly compatibility.
-Each package has its own revision sequence. Invalid calendar dates are rejected.
-Prereleases such as `grammar-v2026.9.26-rc.1` are supported; build metadata is not.
-Local builds default to the current UTC date followed by `-dev`.
-Publishing the CLI does not require publishing
-the grammar first: the tool bundles the grammar assembly through its existing
-project reference. The standalone grammar targets .NET Standard 2.0 and declares
-its ANTLR runtime dependency.
+## CalVer
+
+Versions use **`YYYY.M.D.BUILD`**, without leading zeros. The date is the tested
+main commit's UTC committer date, and BUILD is the workflow's run number. Each
+workflow has its own sequence; validation runs can leave gaps. BUILD must be
+between 1 and 65534 for .NET assembly compatibility.
+
+The date and run number stay the same when a failed run is rerun, even on another
+day. The generated version overrides `cli/Directory.Build.props`; local builds
+default to the current UTC date followed by `-dev`.
+
+Publishing the CLI does not require publishing the grammar first: the tool
+bundles the grammar assembly through its project reference. The standalone
+grammar targets .NET Standard 2.0 and declares its ANTLR runtime dependency.
 
 ## One-time setup
 
-1. Merge the workflows and package changes into the repository.
-2. Add the Actions repository secret `NUGET_USER`, containing the NuGet profile
-   username (not an email address) used to publish.
-3. In nuget.org, configure two
+Before merging the workflows:
+
+1. Set the Actions repository secret `NUGET_USER` to the NuGet profile username
+   (currently `this.programmer`, not an email address).
+2. In nuget.org, configure two
    [trusted publishing policies](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)
-   for repository owner `cangelosilima`, repository `SyncSQL`. Set the workflow
-   filenames to `grammar-publish-nuget.yml` and `cli-publish-nuget.yml`, respectively.
-   Leave environment empty; these workflows do not use GitHub environments.
-   Scope each policy to its corresponding package ID and permit publishing new
-   packages as well as new versions if the package has not yet been published.
-   The publishing account must own existing package IDs.
+   for owner `cangelosilima`, repository `SyncSQL`. Use workflow filenames
+   `grammar-publish-nuget.yml` and `cli-publish-nuget.yml`.
+   Leave environment empty; the workflows do not use GitHub environments.
+   Scope each policy to its package ID and permit new packages as well as new
+   versions for the first publication. The account must own existing package IDs.
+3. Allow these workflows to create release tags and GitHub releases. The publish
+   job requests `contents: write` and `id-token: write`.
 
 No long-lived NuGet API key is stored. The publish job obtains a temporary key
-with GitHub OIDC after the package job succeeds, then uploads the tested artifact.
+with GitHub OIDC after the package job succeeds.
 
-## Release
+## Release and recovery
 
-From the reviewed commit to release, push only the desired tag:
+Merge the reviewed changes into `main`; do not create tags manually. Only
+`push` events on `refs/heads/main` may publish. Tag pushes, pull requests,
+other branches, and manual workflow runs cannot publish or create releases.
+Protect `main` with the repository's required reviews and checks to ensure
+its push events come from approved merges.
 
-```bash
-git tag grammar-v2026.9.26
-git push origin grammar-v2026.9.26
+The CLI workflow watches CLI, grammar, SDK, and publishing-automation changes.
+The grammar workflow watches grammar sources, its project, relevant Oracle
+lineage/Core sources and tests, shared build settings, SDK, and its publishing
+automation. A CLI-only change does not publish a new grammar package.
 
-# Independently, when ready to release the CLI:
-git tag cli-v2026.9.26
-git push origin cli-v2026.9.26
-```
+For each selected package, the workflow:
 
-Each workflow runs tests, builds its package, and uploads a downloadable workflow
-artifact before publishing. The CLI also installs the packed tool locally and
-runs `syncsql --help`. Pull requests validate both packages without publishing.
+1. Runs tests, builds the package, and uploads a workflow artifact.
+2. For the CLI, installs the packed tool and runs `syncsql --help`.
+3. Reserves the generated tag at the exact tested main commit.
+4. Publishes that package to NuGet.
+5. Creates a draft GitHub release with generated notes, attaches the package,
+   then publishes the release.
 
-For a manual dry run, run either workflow with **publish** unchecked. Branch runs
-use the current UTC date with `-ci.RUN_NUMBER.RUN_ATTEMPT`; selecting a matching
-release tag validates that exact version.
-For a manual publication, select an existing matching release tag and check
-**publish**. Branches and malformed versions cannot publish. Reruns skip versions
-already on NuGet; use a new tag/version to release changed content.
+Rerun a failed workflow to recover. It reuses its version and tag, skips an
+already-published NuGet version, and finishes an incomplete GitHub release.
+An existing tag pointing to another commit is rejected and never moved.
+A failure before NuGet publication can leave a reserved tag; a failure during
+asset upload can leave a draft release. Neither triggers another publishing run.
+
+Pull requests and manual runs only validate, with versions suffixed
+`-ci.RUN_ATTEMPT`. Use **Run workflow** for a dry run; there is no manual publish
+option. GitHub releases for the two packages do not replace each other as the
+repository's latest release.
 
 ## Consume
 

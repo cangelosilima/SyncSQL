@@ -11,7 +11,8 @@ dotnet add package SyncSql.Grammar.PlSql
 ```
 
 The package includes the ANTLR runtime dependency and the upstream license and
-notice. It is released independently of the CLI using `grammar-v*` tags; see
+notice. Merges into `main` release it independently of the CLI, automatically
+creating `grammar-v*` tags and GitHub releases; see
 [NuGet publishing](../docs/nuget-publishing.md) for setup and release instructions.
 
 ## Java-free build design

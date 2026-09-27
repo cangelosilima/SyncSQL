@@ -62,14 +62,14 @@ driver.
 
 ### Building and installing from source
 
-Maintainers publish to nuget.org with independent `cli-v*` release tags. See
+Merges into `main` publish to nuget.org and create independent `cli-v*` GitHub releases. See
 [NuGet publishing](../../docs/nuget-publishing.md) for authentication setup and
 the separate grammar release workflow.
 
 ```bash
 cd cli
 dotnet pack src/SyncSql.Cli -c Release
-dotnet tool install --global --add-source ./nupkg SyncSql.Cli
+dotnet tool install --global --add-source ./nupkg --prerelease SyncSql.Cli
 ```
 
 #### Build prerequisites

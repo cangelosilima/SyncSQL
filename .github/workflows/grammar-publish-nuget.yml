@@ -2,19 +2,29 @@ name: Publish SyncSql.Grammar.PlSql to NuGet
 
 on:
   push:
-    tags: ['grammar-v*']
-  pull_request:
+    branches: [main]
     paths:
-      - 'cli/**'
       - 'grammar/**'
+      - 'cli/src/SyncSql.Grammar.PlSql/**'
+      - 'cli/src/SyncSql.Lineage.Oracle/**'
+      - 'cli/src/SyncSql.Core/**'
+      - 'cli/tests/SyncSql.Lineage.Oracle.Tests/**'
+      - 'cli/Directory.Build.props'
       - 'global.json'
       - '.github/workflows/grammar-publish-nuget.yml'
+      - '.github/scripts/nuget-release*.cjs'
+  pull_request:
+    paths:
+      - 'grammar/**'
+      - 'cli/src/SyncSql.Grammar.PlSql/**'
+      - 'cli/src/SyncSql.Lineage.Oracle/**'
+      - 'cli/src/SyncSql.Core/**'
+      - 'cli/tests/SyncSql.Lineage.Oracle.Tests/**'
+      - 'cli/Directory.Build.props'
+      - 'global.json'
+      - '.github/workflows/grammar-publish-nuget.yml'
+      - '.github/scripts/nuget-release*.cjs'
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the selected release tag to NuGet (otherwise only validate)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -27,32 +37,32 @@ jobs:
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Resolve and validate version
+      - name: Test release automation
+        run: node --test .github/scripts/nuget-release.test.cjs
+      - name: Resolve CalVer
+        id: version
         shell: pwsh
-        env:
-          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
         run: |
-          $version = [DateTime]::UtcNow.ToString('yyyy.M.d', [Globalization.CultureInfo]::InvariantCulture) + "-ci.$env:GITHUB_RUN_NUMBER.$env:GITHUB_RUN_ATTEMPT"
-          if ($env:GITHUB_REF -like 'refs/tags/grammar-v*') {
-            $version = $env:GITHUB_REF_NAME.Substring('grammar-v'.Length)
-            if ($version -cnotmatch '^(?<year>[1-9][0-9]{3})\.(?<month>[1-9]|1[0-2])\.(?<day>[1-9]|[12][0-9]|3[01])(\.(?<revision>[1-9][0-9]{0,4}))?(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$') {
-              throw "Invalid release version: $version. Use grammar-vYYYY.M.D[.REV] with an optional prerelease suffix."
-            }
-            if ([int]$Matches.day -gt [DateTime]::DaysInMonth([int]$Matches.year, [int]$Matches.month)) {
-              throw "Invalid calendar date in release version: $version."
-            }
-            if ($Matches.revision -and [int]$Matches.revision -gt 65534) {
-              throw 'The same-day revision must be between 1 and 65534 for .NET assembly version compatibility.'
-            }
-          } elseif ($env:PUBLISH -eq 'true') {
-            throw 'Publishing requires selecting an existing grammar-v* tag.'
+          $timestamp = git show -s --format=%cI $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read the build commit date.' }
+          $date = [DateTimeOffset]::Parse($timestamp, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime
+          $revision = [int]$env:GITHUB_RUN_NUMBER
+          if ($revision -lt 1 -or $revision -gt 65534) { throw 'Run number must be between 1 and 65534 for .NET assembly compatibility.' }
+          $version = $date.ToString('yyyy.M.d', [Globalization.CultureInfo]::InvariantCulture) + ".$revision"
+          if ($env:GITHUB_EVENT_NAME -ne 'push' -or $env:GITHUB_REF -ne 'refs/heads/main') {
+            $version += "-ci.$env:GITHUB_RUN_ATTEMPT"
           }
           "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=grammar-v$version" >> $env:GITHUB_OUTPUT
       - name: Test
         run: dotnet test cli/tests/SyncSql.Lineage.Oracle.Tests/SyncSql.Lineage.Oracle.Tests.csproj --configuration Release -p:ContinuousIntegrationBuild=true
       - name: Pack
@@ -68,20 +78,31 @@ jobs:
 
   publish:
     needs: package
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write
       id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.package.outputs.tag }}
+      PACKAGE_VERSION: ${{ needs.package.outputs.version }}
+      PACKAGE_ID: SyncSql.Grammar.PlSql
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - uses: actions/download-artifact@v4
         with:
           name: SyncSql.Grammar.PlSql-nuget
           path: artifacts
+      - name: Reserve release tag at the tested main commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { reserveTag } = require('./.github/scripts/nuget-release.cjs');
+            await reserveTag({ github, context, tag: process.env.RELEASE_TAG });
       - name: Authenticate to NuGet
         uses: NuGet/login@v1
         id: login
@@ -91,6 +112,15 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: >-
-          dotnet nuget push "artifacts/SyncSql.Grammar.PlSql.*.nupkg"
+          dotnet nuget push "artifacts/SyncSql.Grammar.PlSql.$PACKAGE_VERSION.nupkg"
           --source https://api.nuget.org/v3/index.json
           --api-key "$NUGET_API_KEY" --skip-duplicate
+      - name: Create GitHub release with the published package
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { publishRelease } = require('./.github/scripts/nuget-release.cjs');
+            await publishRelease({
+              github, context, tag: process.env.RELEASE_TAG,
+              packageId: process.env.PACKAGE_ID, version: process.env.PACKAGE_VERSION
+            });
