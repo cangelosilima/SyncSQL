@@ -120,3 +120,31 @@ test('replaces an incomplete asset before publishing a recovered draft', async (
   await publishRelease(f);
   assert.deepEqual(f.calls.map(([name]) => name), ['tag', 'delete', 'upload', 'publish']);
 });
+
+test('concurrent publishers reuse a tag and release created by their peer', async () => {
+  const f = fixture();
+  f.github.rest.git.createRef = async args => {
+    f.state.tag = { object: { type: 'commit', sha: args.sha } };
+    throw Object.assign(new Error('Already exists'), { status: 422 });
+  };
+  f.github.rest.repos.createRelease = async () => {
+    f.state.release = { id: 7, draft: false };
+    throw Object.assign(new Error('Already exists'), { status: 422 });
+  };
+  await reserveTag(f);
+  await publishRelease(f);
+  assert.deepEqual(f.calls.map(([name]) => name), ['upload']);
+});
+
+test('uploads Windows assets alongside the existing NuGet asset, idempotently', async () => {
+  const f = fixture();
+  await reserveTag(f);
+  await publishRelease(f);
+  const filenames = ['syncsql-2026.9.26.42-win-x64.zip', 'syncsql.2026.9.26.42.nupkg', 'syncsql-2026.9.26.42-win-x64.zip.sha256'];
+  for (const name of filenames) fs.writeFileSync(path.join(artifacts, name), name);
+  await publishRelease({ ...f, filenames });
+  assert.equal(f.state.assets.length, 4);
+  const calls = f.calls.length;
+  await publishRelease({ ...f, filenames });
+  assert.equal(f.calls.length, calls);
+});

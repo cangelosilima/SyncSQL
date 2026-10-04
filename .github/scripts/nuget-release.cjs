@@ -24,9 +24,13 @@ async function reserveTag(options) {
   const { github, context, tag } = options;
   requireMainPush(context);
   if (!await findTag(options)) {
-    await github.rest.git.createRef({
-      ...context.repo, ref: `refs/tags/${tag}`, sha: context.sha
-    });
+    try {
+      await github.rest.git.createRef({
+        ...context.repo, ref: `refs/tags/${tag}`, sha: context.sha
+      });
+    } catch (error) {
+      if (error.status !== 422 || !await findTag(options)) throw error;
+    }
   }
 }
 
@@ -34,31 +38,38 @@ async function publishRelease(options) {
   const { github, context, tag, packageId, version, artifacts = 'artifacts' } = options;
   requireMainPush(context);
   if (!await findTag(options)) throw new Error('The release tag must be reserved before publishing.');
-  const name = `${packageId}.${version}.nupkg`;
-  const data = fs.readFileSync(path.join(artifacts, name));
+  const filenames = options.filenames || [`${packageId}.${version}.nupkg`];
   let release;
   try {
     ({ data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag }));
   } catch (error) {
     if (error.status !== 404) throw error;
-    ({ data: release } = await github.rest.repos.createRelease({
-      ...context.repo, tag_name: tag, target_commitish: context.sha,
-      name: `${packageId} ${version}`, draft: true, prerelease: false,
-      generate_release_notes: true
-    }));
+    try {
+      ({ data: release } = await github.rest.repos.createRelease({
+        ...context.repo, tag_name: tag, target_commitish: context.sha,
+        name: `${packageId} ${version}`, draft: true, prerelease: false,
+        generate_release_notes: true
+      }));
+    } catch (createError) {
+      if (createError.status !== 422) throw createError;
+      ({ data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag }));
+    }
   }
   const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
     ...context.repo, release_id: release.id, per_page: 100
   });
-  const asset = assets.find(item => item.name === name);
-  if (asset && asset.state !== 'uploaded') {
-    await github.rest.repos.deleteReleaseAsset({ ...context.repo, asset_id: asset.id });
-  }
-  if (!asset || asset.state !== 'uploaded') {
-    await github.rest.repos.uploadReleaseAsset({
-      ...context.repo, release_id: release.id, name, data,
-      headers: { 'content-type': 'application/octet-stream', 'content-length': data.length }
-    });
+  for (const name of filenames) {
+    const data = fs.readFileSync(path.join(artifacts, name));
+    const asset = assets.find(item => item.name === name);
+    if (asset && asset.state !== 'uploaded') {
+      await github.rest.repos.deleteReleaseAsset({ ...context.repo, asset_id: asset.id });
+    }
+    if (!asset || asset.state !== 'uploaded') {
+      await github.rest.repos.uploadReleaseAsset({
+        ...context.repo, release_id: release.id, name, data,
+        headers: { 'content-type': 'application/octet-stream', 'content-length': data.length }
+      });
+    }
   }
   if (release.draft) {
     await github.rest.repos.updateRelease({

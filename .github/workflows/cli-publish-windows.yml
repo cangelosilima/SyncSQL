@@ -1,0 +1,166 @@
+name: Publish Windows CLI packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+      commit:
+        type: string
+        required: true
+      publish:
+        type: boolean
+        required: true
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Use the caller version
+        id: version
+        shell: pwsh
+        env:
+          CALLER_VERSION: ${{ inputs.version }}
+        run: |
+          # Validation NuGet versions have a CI suffix; Windows manifests use stable CalVer.
+          $version = $env:CALLER_VERSION.Split('-')[0]
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Test package generation
+        run: node --test .github/scripts/windows-package.test.cjs
+      - name: Publish self-contained CLI
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dotnet publish cli/src/SyncSql.Cli/SyncSql.Cli.csproj -c Release -r win-x64 --self-contained true -p:WindowsStandalone=true -p:Version=$env:VERSION -p:ContinuousIntegrationBuild=true -o artifacts/publish
+          if ($LASTEXITCODE) { throw 'dotnet publish failed' }
+          New-Item artifacts/publish/licenses/plsql -ItemType Directory -Force | Out-Null
+          Copy-Item grammar/src/SyncSql.Grammar.PlSql/Grammar/NOTICE.md, grammar/src/SyncSql.Grammar.PlSql/Grammar/LICENSE.txt artifacts/publish/licenses/plsql
+          & artifacts/publish/syncsql.exe --help
+          if ($LASTEXITCODE) { throw 'CLI smoke test failed' }
+          Compress-Archive artifacts/publish/* "artifacts/syncsql-$env:VERSION-win-x64.zip"
+          node .github/scripts/windows-package.cjs $env:VERSION "artifacts/syncsql-$env:VERSION-win-x64.zip" artifacts/packages
+          if ($LASTEXITCODE) { throw 'Manifest generation failed' }
+      - name: Pack Chocolatey package
+        shell: pwsh
+        run: |
+          choco pack artifacts/packages/chocolatey/syncsql.nuspec --outputdirectory artifacts
+          if ($LASTEXITCODE) { throw 'Chocolatey pack failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: syncsql-windows
+          path: |
+            artifacts/*.zip
+            artifacts/*.nupkg
+            artifacts/packages
+          if-no-files-found: error
+
+  release:
+    needs: package
+    if: inputs.publish && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: syncsql-windows
+          path: artifacts
+      - name: Prepare checksum asset
+        shell: pwsh
+        run: Copy-Item artifacts/packages/*.sha256 artifacts
+      - name: Publish release assets
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          PACKAGE_VERSION: ${{ needs.package.outputs.version }}
+        with:
+          script: |
+            const { reserveTag, publishRelease } = require('./.github/scripts/nuget-release.cjs');
+            const version = process.env.PACKAGE_VERSION;
+            await reserveTag({ github, context, tag: process.env.RELEASE_TAG });
+            await publishRelease({
+              github, context, tag: process.env.RELEASE_TAG,
+              packageId: 'SyncSql.Cli', version,
+              filenames: [
+                `syncsql-${version}-win-x64.zip`,
+                `syncsql.${version}.nupkg`,
+                `syncsql-${version}-win-x64.zip.sha256`
+              ]
+            });
+
+  chocolatey:
+    needs: [package, release]
+    runs-on: windows-latest
+    environment: windows-packages
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: syncsql-windows
+          path: artifacts
+      - name: Submit to Chocolatey
+        shell: pwsh
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          if (-not $env:CHOCO_API_KEY) { throw 'Configure CHOCO_API_KEY in the windows-packages environment.' }
+          choco push "artifacts/syncsql.${{ needs.package.outputs.version }}.nupkg" --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
+          if ($LASTEXITCODE) { throw 'Chocolatey submission failed' }
+
+  winget:
+    needs: [package, release]
+    runs-on: windows-latest
+    environment: windows-packages
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: syncsql-windows
+          path: artifacts
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+      - name: Submit WinGet manifests
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if (-not $env:WINGET_TOKEN) { throw 'Configure WINGET_TOKEN in the windows-packages environment.' }
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          ./wingetcreate.exe submit artifacts/packages/winget/manifests/c/cangelosilima/SyncSQL/${{ needs.package.outputs.version }} --token $env:WINGET_TOKEN
+          if ($LASTEXITCODE) { throw 'WinGet submission failed' }
+
+  verify-community-install:
+    needs: [package, chocolatey, winget]
+    uses: ./.github/workflows/cli-verify-community-install.yml
+    with:
+      version: ${{ needs.package.outputs.version }}
+      commit: ${{ inputs.commit }}

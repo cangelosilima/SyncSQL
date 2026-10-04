@@ -9,6 +9,10 @@ on:
       - 'global.json'
       - '.github/workflows/cli-publish-nuget.yml'
       - '.github/scripts/nuget-release*.cjs'
+      - '.github/scripts/windows-package*.cjs'
+      - '.github/workflows/cli-publish-windows.yml'
+      - '.github/scripts/*-cli-install.ps1'
+      - '.github/scripts/prepare-winget.ps1'
   pull_request:
     paths:
       - 'cli/**'
@@ -16,6 +20,10 @@ on:
       - 'global.json'
       - '.github/workflows/cli-publish-nuget.yml'
       - '.github/scripts/nuget-release*.cjs'
+      - '.github/scripts/windows-package*.cjs'
+      - '.github/workflows/cli-publish-windows.yml'
+      - '.github/scripts/*-cli-install.ps1'
+      - '.github/scripts/prepare-winget.ps1'
   workflow_dispatch:
 
 permissions:
@@ -120,3 +128,68 @@ jobs:
               github, context, tag: process.env.RELEASE_TAG,
               packageId: process.env.PACKAGE_ID, version: process.env.PACKAGE_VERSION
             });
+
+  windows:
+    needs: package
+    uses: ./.github/workflows/cli-publish-windows.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      version: ${{ needs.package.outputs.version }}
+      tag: ${{ needs.package.outputs.tag }}
+      commit: ${{ github.sha }}
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  verify-nuget-install:
+    needs: [package, publish]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Wait for the published NuGet version
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          $url = "https://api.nuget.org/v3-flatcontainer/syncsql.cli/$env:VERSION/syncsql.cli.$env:VERSION.nupkg"
+          $visible = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+            try {
+              Invoke-WebRequest $url -Method Head -TimeoutSec 30 | Out-Null
+              $visible = $true
+              break
+            } catch {
+              Write-Host "NuGet version not available yet (attempt $attempt/20)."
+              if ($attempt -lt 20) { Start-Sleep -Seconds 30 }
+            }
+          }
+          if (-not $visible) { throw 'Published package did not become available on nuget.org.' }
+      - name: Install from nuget.org
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP 'install-nuget.config'
+          '<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>' | Set-Content $config
+          dotnet tool install --global SyncSql.Cli --version $env:VERSION --configfile $config --no-cache
+          if ($LASTEXITCODE) { throw 'Published dotnet tool installation failed.' }
+          Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dotnet/tools' >> $env:GITHUB_PATH
+      - name: Verify installed command and version
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: ./.github/scripts/assert-cli-install.ps1 -Version $env:VERSION
+      - name: Uninstall the tool
+        shell: pwsh
+        run: |
+          dotnet tool uninstall --global SyncSql.Cli
+          if ($LASTEXITCODE) { throw 'dotnet tool uninstall failed.' }
+          if (Get-Command syncsql -CommandType Application -ErrorAction SilentlyContinue) { throw 'syncsql is still on PATH after uninstall.' }

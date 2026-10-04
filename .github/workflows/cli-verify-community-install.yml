@@ -1,0 +1,94 @@
+name: Verify public Windows package installation
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      commit:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published stable CLI version accepted into both community catalogs
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [chocolatey, winget]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Validate requested version
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:VERSION -notmatch '^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,5})?$') {
+            throw 'Specify a stable CalVer YYYY.M.D[.REV].'
+          }
+      - name: Install from the Chocolatey community catalog
+        if: matrix.manager == 'chocolatey'
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $installed = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+            choco install syncsql --version $env:VERSION --source https://community.chocolatey.org/api/v2/ --yes --no-progress
+            if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+            Write-Host "Chocolatey public installation failed (attempt $attempt/20); awaiting moderation or retrying a transient failure."
+            if ($attempt -lt 20) { Start-Sleep -Seconds 30 }
+          }
+          if (-not $installed) { throw 'Exact-version installation from Chocolatey failed. Once moderation completes, rerun this verification job.' }
+          Join-Path $env:ChocolateyInstall 'bin' >> $env:GITHUB_PATH
+      - name: Prepare WinGet
+        if: matrix.manager == 'winget'
+        shell: pwsh
+        run: ./.github/scripts/prepare-winget.ps1
+      - name: Install from the WinGet community catalog
+        if: matrix.manager == 'winget'
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $installed = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+            winget source update --name winget --disable-interactivity
+            if ($LASTEXITCODE -eq 0) {
+              winget install --id cangelosilima.SyncSQL --exact --version $env:VERSION --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+              if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+            }
+            Write-Host "WinGet public installation failed (attempt $attempt/20); awaiting catalog approval/indexing or retrying a transient failure."
+            if ($attempt -lt 20) { Start-Sleep -Seconds 30 }
+          }
+          if (-not $installed) { throw 'Exact-version installation from WinGet failed. Once the catalog contains this version, rerun this verification job.' }
+      - name: Verify installed command and version
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ./.github/scripts/assert-cli-install.ps1 -Version $env:VERSION
+      - name: Uninstall and check removal
+        shell: pwsh
+        env:
+          MANAGER: ${{ matrix.manager }}
+        run: |
+          if ($env:MANAGER -eq 'chocolatey') {
+            choco uninstall syncsql --yes --no-progress
+          } else {
+            winget uninstall --id cangelosilima.SyncSQL --exact --disable-interactivity
+          }
+          if ($LASTEXITCODE) { throw 'Package uninstall failed.' }
+          if (Get-Command syncsql -CommandType Application -ErrorAction SilentlyContinue) { throw 'syncsql is still on PATH after uninstall.' }

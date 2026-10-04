@@ -42,6 +42,10 @@ Windows authentication can instead use the identity running the CLI.
 
 ## Install
 
+Windows x64 releases also have a Chocolatey and WinGet packaging flow with
+the .NET runtime included. See [Windows package releases](../../docs/windows-packaging.md)
+for installation commands, registry availability and maintainer setup.
+
 `syncsql` is published as a [dotnet global tool](https://learn.microsoft.com/dotnet/core/tools/global-tools).
 
 ```bash
