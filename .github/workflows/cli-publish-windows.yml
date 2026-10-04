@@ -116,74 +116,8 @@ jobs:
               ]
             });
 
-  verify-windows-install:
-    needs: [package, release]
-    runs-on: windows-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        manager: [chocolatey, winget]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: syncsql-windows
-          path: artifacts
-      - name: Install published Chocolatey package
-        if: matrix.manager == 'chocolatey'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.tag }}
-          VERSION: ${{ needs.package.outputs.version }}
-        run: |
-          New-Item -ItemType Directory released-package | Out-Null
-          gh release download $env:RELEASE_TAG --pattern "syncsql.$env:VERSION.nupkg" --dir released-package
-          if ($LASTEXITCODE) { throw 'Published Chocolatey package download failed.' }
-          choco install syncsql --version $env:VERSION --source "$PWD/released-package" --yes --no-progress
-          if ($LASTEXITCODE) { throw 'Chocolatey installation failed.' }
-          Join-Path $env:ChocolateyInstall 'bin' >> $env:GITHUB_PATH
-      - name: Prepare WinGet
-        if: matrix.manager == 'winget'
-        shell: pwsh
-        run: ./.github/scripts/prepare-winget.ps1
-      - name: Install published ZIP through WinGet
-        if: matrix.manager == 'winget'
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.package.outputs.version }}
-        run: |
-          $manifest = "artifacts/packages/winget/manifests/c/cangelosilima/SyncSQL/$env:VERSION"
-          winget validate --manifest $manifest
-          if ($LASTEXITCODE) { throw 'WinGet manifest validation failed.' }
-          winget settings --enable LocalManifestFiles
-          if ($LASTEXITCODE) { throw 'Enabling local manifests failed.' }
-          winget install --manifest $manifest --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
-          if ($LASTEXITCODE) { throw 'WinGet installation failed.' }
-      - name: Verify installed command and version
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.package.outputs.version }}
-        run: ./.github/scripts/assert-cli-install.ps1 -Version $env:VERSION
-      - name: Uninstall the package
-        shell: pwsh
-        env:
-          MANAGER: ${{ matrix.manager }}
-        run: |
-          if ($env:MANAGER -eq 'chocolatey') {
-            choco uninstall syncsql --yes --no-progress
-          } else {
-            winget uninstall --id cangelosilima.SyncSQL --exact --disable-interactivity
-          }
-          if ($LASTEXITCODE) { throw 'Package uninstall failed.' }
-          if (Get-Command syncsql -CommandType Application -ErrorAction SilentlyContinue) { throw 'syncsql is still on PATH after uninstall.' }
-
   chocolatey:
-    needs: [package, release, verify-windows-install]
+    needs: [package, release]
     runs-on: windows-latest
     environment: windows-packages
     timeout-minutes: 10
@@ -202,7 +136,7 @@ jobs:
           if ($LASTEXITCODE) { throw 'Chocolatey submission failed' }
 
   winget:
-    needs: [package, release, verify-windows-install]
+    needs: [package, release]
     runs-on: windows-latest
     environment: windows-packages
     timeout-minutes: 10
@@ -223,3 +157,10 @@ jobs:
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
           ./wingetcreate.exe submit artifacts/packages/winget/manifests/c/cangelosilima/SyncSQL/${{ needs.package.outputs.version }} --token $env:WINGET_TOKEN
           if ($LASTEXITCODE) { throw 'WinGet submission failed' }
+
+  verify-community-install:
+    needs: [package, chocolatey, winget]
+    uses: ./.github/workflows/cli-verify-community-install.yml
+    with:
+      version: ${{ needs.package.outputs.version }}
+      commit: ${{ inputs.commit }}

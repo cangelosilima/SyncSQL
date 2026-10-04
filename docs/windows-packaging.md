@@ -40,19 +40,25 @@ macOS) install that exact version with `dotnet tool install --global` from
 nuget.org. The check waits up to ten minutes for NuGet propagation, then runs
 `syncsql --version`, `syncsql --help`, and uninstall, checking command removal.
 
-After GitHub release publication, two separate Windows runners install using
-Chocolatey and WinGet. Chocolatey downloads the published `.nupkg` from the
-release into a local feed; WinGet uses the submitted local manifests. Both
-package managers download and verify the real public release ZIP. Each checks
-the installed version, command discovery on PATH, help, and removal. Community
-submissions wait for both checks to pass. These checks exercise installation
-without waiting for community moderation, which can take longer than a CI run.
+After Chocolatey and WinGet submissions succeed, two separate Windows runners
+install the exact published version directly from their public catalogs:
+Chocolatey uses `https://community.chocolatey.org/api/v2/`; WinGet uses
+`--source winget` with the package ID and version. No local feeds, local
+manifests or release-asset fallback are used by these installation checks.
+Each checks the installed version, command discovery on PATH, help, and removal.
+
+Windows catalog installation retries up to twenty times, thirty seconds apart.
+Community moderation may take longer than this window. If the exact version
+remains unavailable, the verification job fails with a message to rerun after
+approval; registry submission jobs remain successful. No older version is used
+to make the test pass.
 
 Once both community catalogs accept a version, run **Verify public Windows
 package installation** (`cli-verify-community-install.yml`) with that version.
 It installs directly from the public Chocolatey and WinGet catalogs on two
 fresh runners, verifies the version and help, and tests uninstall. No workflow
-publishes from this manual verification run.
+publishes from this manual verification run. The release workflow also calls
+this same verification workflow automatically after registry submission.
 
 ```powershell
 choco install syncsql -y
@@ -80,11 +86,9 @@ choco pack artifacts/windows/packages/chocolatey/syncsql.nuspec --outputdirector
 winget validate artifacts/windows/packages/winget/manifests/c/cangelosilima/SyncSQL/2026.10.3
 ```
 
-Before the initial submission, test installation, upgrade and removal in a
-disposable Windows x64 machine using the public release URL. For a local
-Chocolatey package, install with `choco install syncsql --source <package-directory>`.
-For WinGet, enable local manifests and use `winget install --manifest <version-directory>`.
-These installations still download the published release ZIP.
+Before marking a release verified, require its public-source installation jobs
+to pass. Local packaging and manifest validation alone do not verify that the
+release is installable from the public catalogs.
 
 The manifests follow [WinGet's manifest format](https://learn.microsoft.com/windows/package-manager/package/manifest)
 and submissions use [Microsoft's WingetCreate](https://github.com/microsoft/winget-create).

@@ -1,6 +1,14 @@
 name: Verify public Windows package installation
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      commit:
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       version:
@@ -14,13 +22,15 @@ permissions:
 jobs:
   install:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         manager: [chocolatey, winget]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
       - name: Validate requested version
         shell: pwsh
         env:
@@ -35,8 +45,14 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          choco install syncsql --version $env:VERSION --source https://community.chocolatey.org/api/v2/ --yes --no-progress
-          if ($LASTEXITCODE) { throw 'Community Chocolatey installation failed. Confirm moderation has completed.' }
+          $installed = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+            choco install syncsql --version $env:VERSION --source https://community.chocolatey.org/api/v2/ --yes --no-progress
+            if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+            Write-Host "Chocolatey public installation failed (attempt $attempt/20); awaiting moderation or retrying a transient failure."
+            if ($attempt -lt 20) { Start-Sleep -Seconds 30 }
+          }
+          if (-not $installed) { throw 'Exact-version installation from Chocolatey failed. Once moderation completes, rerun this verification job.' }
           Join-Path $env:ChocolateyInstall 'bin' >> $env:GITHUB_PATH
       - name: Prepare WinGet
         if: matrix.manager == 'winget'
@@ -48,10 +64,17 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          winget source update --name winget --disable-interactivity
-          if ($LASTEXITCODE) { throw 'WinGet source refresh failed.' }
-          winget install --id cangelosilima.SyncSQL --exact --version $env:VERSION --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
-          if ($LASTEXITCODE) { throw 'Community WinGet installation failed. Confirm the manifest PR has merged and the index has updated.' }
+          $installed = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+            winget source update --name winget --disable-interactivity
+            if ($LASTEXITCODE -eq 0) {
+              winget install --id cangelosilima.SyncSQL --exact --version $env:VERSION --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+              if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+            }
+            Write-Host "WinGet public installation failed (attempt $attempt/20); awaiting catalog approval/indexing or retrying a transient failure."
+            if ($attempt -lt 20) { Start-Sleep -Seconds 30 }
+          }
+          if (-not $installed) { throw 'Exact-version installation from WinGet failed. Once the catalog contains this version, rerun this verification job.' }
       - name: Verify installed command and version
         shell: pwsh
         env:
