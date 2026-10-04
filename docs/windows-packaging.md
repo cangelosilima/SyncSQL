@@ -35,6 +35,25 @@ the failed registry job; do not rebuild the release.
 
 ## Install after registry acceptance
 
+After the NuGet publish job succeeds, three fresh runners (Linux, Windows and
+macOS) install that exact version with `dotnet tool install --global` from
+nuget.org. The check waits up to ten minutes for NuGet propagation, then runs
+`syncsql --version`, `syncsql --help`, and uninstall, checking command removal.
+
+After GitHub release publication, two separate Windows runners install using
+Chocolatey and WinGet. Chocolatey downloads the published `.nupkg` from the
+release into a local feed; WinGet uses the submitted local manifests. Both
+package managers download and verify the real public release ZIP. Each checks
+the installed version, command discovery on PATH, help, and removal. Community
+submissions wait for both checks to pass. These checks exercise installation
+without waiting for community moderation, which can take longer than a CI run.
+
+Once both community catalogs accept a version, run **Verify public Windows
+package installation** (`cli-verify-community-install.yml`) with that version.
+It installs directly from the public Chocolatey and WinGet catalogs on two
+fresh runners, verifies the version and help, and tests uninstall. No workflow
+publishes from this manual verification run.
+
 ```powershell
 choco install syncsql -y
 choco upgrade syncsql -y

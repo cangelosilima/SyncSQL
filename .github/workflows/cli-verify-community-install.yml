@@ -1,0 +1,71 @@
+name: Verify public Windows package installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published stable CLI version accepted into both community catalogs
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [chocolatey, winget]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate requested version
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:VERSION -notmatch '^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,5})?$') {
+            throw 'Specify a stable CalVer YYYY.M.D[.REV].'
+          }
+      - name: Install from the Chocolatey community catalog
+        if: matrix.manager == 'chocolatey'
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          choco install syncsql --version $env:VERSION --source https://community.chocolatey.org/api/v2/ --yes --no-progress
+          if ($LASTEXITCODE) { throw 'Community Chocolatey installation failed. Confirm moderation has completed.' }
+          Join-Path $env:ChocolateyInstall 'bin' >> $env:GITHUB_PATH
+      - name: Prepare WinGet
+        if: matrix.manager == 'winget'
+        shell: pwsh
+        run: ./.github/scripts/prepare-winget.ps1
+      - name: Install from the WinGet community catalog
+        if: matrix.manager == 'winget'
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          winget source update --name winget --disable-interactivity
+          if ($LASTEXITCODE) { throw 'WinGet source refresh failed.' }
+          winget install --id cangelosilima.SyncSQL --exact --version $env:VERSION --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE) { throw 'Community WinGet installation failed. Confirm the manifest PR has merged and the index has updated.' }
+      - name: Verify installed command and version
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ./.github/scripts/assert-cli-install.ps1 -Version $env:VERSION
+      - name: Uninstall and check removal
+        shell: pwsh
+        env:
+          MANAGER: ${{ matrix.manager }}
+        run: |
+          if ($env:MANAGER -eq 'chocolatey') {
+            choco uninstall syncsql --yes --no-progress
+          } else {
+            winget uninstall --id cangelosilima.SyncSQL --exact --disable-interactivity
+          }
+          if ($LASTEXITCODE) { throw 'Package uninstall failed.' }
+          if (Get-Command syncsql -CommandType Application -ErrorAction SilentlyContinue) { throw 'syncsql is still on PATH after uninstall.' }
