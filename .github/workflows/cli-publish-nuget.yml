@@ -13,6 +13,7 @@ on:
       - '.github/workflows/cli-publish-windows.yml'
       - '.github/scripts/*-cli-install.ps1'
       - '.github/scripts/prepare-winget.ps1'
+      - '.github/scripts/install-nuget-tool*.ps1'
   pull_request:
     paths:
       - 'cli/**'
@@ -24,6 +25,7 @@ on:
       - '.github/workflows/cli-publish-windows.yml'
       - '.github/scripts/*-cli-install.ps1'
       - '.github/scripts/prepare-winget.ps1'
+      - '.github/scripts/install-nuget-tool*.ps1'
   workflow_dispatch:
 
 permissions:
@@ -47,6 +49,9 @@ jobs:
           global-json-file: global.json
       - name: Test release automation
         run: node --test .github/scripts/nuget-release.test.cjs
+      - name: Test public-install retry behavior
+        shell: pwsh
+        run: ./.github/scripts/install-nuget-tool.test.ps1
       - name: Resolve CalVer
         id: version
         shell: pwsh
@@ -154,33 +159,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Wait for the published NuGet version
+      - name: Install the exact public version, retrying until the feed is ready
         shell: pwsh
         env:
           VERSION: ${{ needs.package.outputs.version }}
         run: |
-          $url = "https://api.nuget.org/v3-flatcontainer/syncsql.cli/$env:VERSION/syncsql.cli.$env:VERSION.nupkg"
-          $visible = $false
-          for ($attempt = 1; $attempt -le 20; $attempt++) {
-            try {
-              Invoke-WebRequest $url -Method Head -TimeoutSec 30 | Out-Null
-              $visible = $true
-              break
-            } catch {
-              Write-Host "NuGet version not available yet (attempt $attempt/20)."
-              if ($attempt -lt 20) { Start-Sleep -Seconds 30 }
-            }
-          }
-          if (-not $visible) { throw 'Published package did not become available on nuget.org.' }
-      - name: Install from nuget.org
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.package.outputs.version }}
-        run: |
-          $config = Join-Path $env:RUNNER_TEMP 'install-nuget.config'
-          '<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>' | Set-Content $config
-          dotnet tool install --global SyncSql.Cli --version $env:VERSION --configfile $config --no-cache
-          if ($LASTEXITCODE) { throw 'Published dotnet tool installation failed.' }
+          ./.github/scripts/install-nuget-tool.ps1 -Version $env:VERSION
           Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dotnet/tools' >> $env:GITHUB_PATH
       - name: Verify installed command and version
         shell: pwsh

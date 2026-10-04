@@ -81,6 +81,12 @@ its NuGet publish job. Chocolatey and WinGet use the CLI version, release tag
 and tested commit. See [Windows package releases](windows-packaging.md) for
 registry credentials, validation and installation commands.
 
+After CLI publication, fresh Linux, Windows and macOS runners install the exact
+version directly from nuget.org. Each runner retries `dotnet tool install` up to
+20 times with 30 seconds between attempts, then verifies the command, version,
+help output and uninstall. Package download availability can precede feed lookup
+availability, so the actual installation determines readiness.
+
 ## Consume
 
 ```bash
