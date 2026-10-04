@@ -136,6 +136,9 @@ in `site/src/help/` and are bundled with the site.
 
 ![Explorer page guide](docs/screenshots/help-panel.png)
 
+CLI installation: [.NET global tool](cli/docs/cli.md#install) or
+[Windows Chocolatey / WinGet release flow](docs/windows-packaging.md).
+
 ## How it works
 
 ```mermaid

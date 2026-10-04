@@ -9,6 +9,8 @@ on:
       - 'global.json'
       - '.github/workflows/cli-publish-nuget.yml'
       - '.github/scripts/nuget-release*.cjs'
+      - '.github/scripts/windows-package*.cjs'
+      - '.github/workflows/cli-publish-windows.yml'
   pull_request:
     paths:
       - 'cli/**'
@@ -16,6 +18,8 @@ on:
       - 'global.json'
       - '.github/workflows/cli-publish-nuget.yml'
       - '.github/scripts/nuget-release*.cjs'
+      - '.github/scripts/windows-package*.cjs'
+      - '.github/workflows/cli-publish-windows.yml'
   workflow_dispatch:
 
 permissions:
@@ -120,3 +124,15 @@ jobs:
               github, context, tag: process.env.RELEASE_TAG,
               packageId: process.env.PACKAGE_ID, version: process.env.PACKAGE_VERSION
             });
+
+  windows:
+    needs: package
+    uses: ./.github/workflows/cli-publish-windows.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      version: ${{ needs.package.outputs.version }}
+      tag: ${{ needs.package.outputs.tag }}
+      commit: ${{ github.sha }}
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

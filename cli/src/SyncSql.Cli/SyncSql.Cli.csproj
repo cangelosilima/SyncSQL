@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\SyncSql.Core\SyncSql.Core.csproj" />
@@ -43,5 +43,10 @@
     <None Include="../../../grammar/src/SyncSql.Grammar.PlSql/Grammar/NOTICE.md" Pack="true" PackagePath="licenses/plsql/NOTICE.md" />
     <None Include="../../../grammar/src/SyncSql.Grammar.PlSql/Grammar/LICENSE.txt" Pack="true" PackagePath="licenses/plsql/LICENSE.txt" />
   </ItemGroup>
+
+  <PropertyGroup Condition="'$(WindowsStandalone)' == 'true'">
+    <PackAsTool>false</PackAsTool>
+    <AssemblyName>syncsql</AssemblyName>
+  </PropertyGroup>
 
 </Project>

@@ -76,6 +76,11 @@ Pull requests and manual runs only validate, with versions suffixed
 option. GitHub releases for the two packages do not replace each other as the
 repository's latest release.
 
+The CLI workflow also calls the reusable Windows packaging workflow alongside
+its NuGet publish job. Chocolatey and WinGet use the CLI version, release tag
+and tested commit. See [Windows package releases](windows-packaging.md) for
+registry credentials, validation and installation commands.
+
 ## Consume
 
 ```bash
